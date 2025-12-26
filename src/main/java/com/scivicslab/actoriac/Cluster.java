@@ -34,12 +34,16 @@ import java.util.Map;
  * for each node in specified groups. It provides methods to execute commands
  * across groups of nodes concurrently using the actor model.</p>
  *
+ * <p>Supports optional HashiCorp Vault integration for secure secret management.</p>
+ *
  * @author devteam@scivics-lab.com
  */
 public class Cluster {
 
     private final ActorSystem actorSystem;
     private InventoryParser.Inventory inventory;
+    private VaultConfigParser.VaultPaths vaultPaths;
+    private final VaultClient vaultClient;
     private final Map<String, ActorRef<Node>> nodeActors = new HashMap<>();
 
     /**
@@ -48,7 +52,18 @@ public class Cluster {
      * @param actorSystem the actor system to use for creating node actors
      */
     public Cluster(ActorSystem actorSystem) {
+        this(actorSystem, null);
+    }
+
+    /**
+     * Constructs a Cluster with the specified actor system and Vault client.
+     *
+     * @param actorSystem the actor system to use for creating node actors
+     * @param vaultClient the Vault client for secret management (can be null)
+     */
+    public Cluster(ActorSystem actorSystem, VaultClient vaultClient) {
         this.actorSystem = actorSystem;
+        this.vaultClient = vaultClient;
     }
 
     /**
@@ -62,14 +77,30 @@ public class Cluster {
     }
 
     /**
+     * Loads a vault-config.ini file from an input stream.
+     *
+     * <p>This method is only effective if a VaultClient was provided during construction.</p>
+     *
+     * @param vaultConfigStream the input stream containing the vault-config.ini file
+     * @throws IOException if reading the vault config fails
+     */
+    public void loadVaultConfig(InputStream vaultConfigStream) throws IOException {
+        this.vaultPaths = VaultConfigParser.parse(vaultConfigStream);
+    }
+
+    /**
      * Creates node actors for all hosts in the specified group.
      *
      * <p>This method reads the group from the inventory, applies global and
      * group-specific variables, and creates an ActorRef&lt;Node&gt; for each host.</p>
      *
+     * <p>If Vault integration is configured, this method will fetch SSH keys and
+     * sudo passwords from Vault based on the vault-config.ini settings.</p>
+     *
      * @param groupName the name of the group from the inventory file
      * @return the list of created node actors
      * @throws IllegalStateException if inventory has not been loaded
+     * @throws RuntimeException if Vault secret retrieval fails
      */
     public List<ActorRef<Node>> createNodesForGroup(String groupName) {
         if (inventory == null) {
@@ -95,7 +126,37 @@ public class Cluster {
             int port = Integer.parseInt(effectiveVars.getOrDefault("ansible_port", "22"));
             String identityFile = effectiveVars.get("ansible_ssh_private_key_file");
 
-            Node node = new Node(hostname, user, port, identityFile);
+            // Fetch secrets from Vault if configured
+            String sshKeyContent = null;
+            String sudoPassword = null;
+
+            if (vaultClient != null && vaultPaths != null) {
+                Map<String, String> vaultPathsForHost = vaultPaths.getPathsForHost(hostname, groupName);
+
+                // Fetch SSH key from Vault
+                String sshKeyPath = vaultPathsForHost.get("ssh_key_path");
+                if (sshKeyPath != null) {
+                    try {
+                        sshKeyContent = vaultClient.readSecret(sshKeyPath);
+                    } catch (VaultClient.VaultException e) {
+                        throw new RuntimeException(
+                            "Failed to read SSH key from Vault for host " + hostname + ": " + e.getMessage(), e);
+                    }
+                }
+
+                // Fetch sudo password from Vault
+                String sudoPasswordPath = vaultPathsForHost.get("sudo_password_path");
+                if (sudoPasswordPath != null) {
+                    try {
+                        sudoPassword = vaultClient.readSecret(sudoPasswordPath);
+                    } catch (VaultClient.VaultException e) {
+                        throw new RuntimeException(
+                            "Failed to read sudo password from Vault for host " + hostname + ": " + e.getMessage(), e);
+                    }
+                }
+            }
+
+            Node node = new Node(hostname, user, port, identityFile, sshKeyContent, sudoPassword);
             ActorRef<Node> nodeActor = actorSystem.actorOf(
                 "node-" + hostname.replace(".", "-"),
                 node
