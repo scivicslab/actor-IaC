@@ -54,7 +54,7 @@ System.out.println("Exit code: " + cmdResult.getExitCode());
 
 #### Level 1: Pure POJO (No Actor Framework)
 
-POJOs work independently without ActorSystem. Direct synchronous execution.
+**No `ActorSystem`, no `ActorRef`** - POJOs work as plain Java objects. Direct synchronous execution.
 
 ```java
 // Create cluster using Builder pattern
@@ -78,7 +78,7 @@ for (Node node : nodes) {
 
 #### Level 2: Actor-Based (Concurrent Execution)
 
-Convert POJOs to actors for asynchronous, concurrent execution.
+**Using `ActorSystem` + `ActorRef`** - Convert POJOs to actors for asynchronous, concurrent execution.
 
 ```java
 // Create cluster and Node POJOs (same as Level 1)
