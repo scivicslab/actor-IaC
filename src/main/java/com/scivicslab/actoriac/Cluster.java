@@ -33,6 +33,29 @@ import java.util.Map;
  *
  * <p>Supports optional HashiCorp Vault integration for secure secret management.</p>
  *
+ * <h2>Usage Examples</h2>
+ *
+ * <h3>Using Builder Pattern (Recommended)</h3>
+ * <pre>{@code
+ * // Simple inventory loading
+ * Cluster cluster = new Cluster.Builder()
+ *     .withInventory(new FileInputStream("inventory.ini"))
+ *     .build();
+ *
+ * // With Vault integration
+ * VaultClient vaultClient = new VaultClient(vaultConfig);
+ * Cluster cluster = new Cluster.Builder()
+ *     .withInventory(new FileInputStream("inventory.ini"))
+ *     .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
+ *     .build();
+ * }</pre>
+ *
+ * <h3>Legacy Constructor Pattern</h3>
+ * <pre>{@code
+ * Cluster cluster = new Cluster();
+ * cluster.loadInventory(new FileInputStream("inventory.ini"));
+ * }</pre>
+ *
  * @author devteam@scivics-lab.com
  */
 public class Cluster {
@@ -42,7 +65,63 @@ public class Cluster {
     private final VaultClient vaultClient;
 
     /**
+     * Builder for creating Cluster instances with fluent API.
+     *
+     * <p>This is the recommended way to create Cluster instances.</p>
+     *
+     * <h3>Example:</h3>
+     * <pre>{@code
+     * Cluster cluster = new Cluster.Builder()
+     *     .withInventory(new FileInputStream("inventory.ini"))
+     *     .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
+     *     .build();
+     * }</pre>
+     */
+    public static class Builder {
+        private InventoryParser.Inventory inventory;
+        private VaultConfigParser.VaultPaths vaultPaths;
+        private VaultClient vaultClient;
+
+        /**
+         * Loads an Ansible inventory file.
+         *
+         * @param inventoryStream the input stream containing the inventory file
+         * @return this builder for method chaining
+         * @throws IOException if reading the inventory fails
+         */
+        public Builder withInventory(InputStream inventoryStream) throws IOException {
+            this.inventory = InventoryParser.parse(inventoryStream);
+            return this;
+        }
+
+        /**
+         * Loads a vault-config.ini file and associates a VaultClient.
+         *
+         * @param vaultConfigStream the input stream containing the vault-config.ini file
+         * @param vaultClient the Vault client for secret management
+         * @return this builder for method chaining
+         * @throws IOException if reading the vault config fails
+         */
+        public Builder withVaultConfig(InputStream vaultConfigStream, VaultClient vaultClient) throws IOException {
+            this.vaultPaths = VaultConfigParser.parse(vaultConfigStream);
+            this.vaultClient = vaultClient;
+            return this;
+        }
+
+        /**
+         * Builds the Cluster instance.
+         *
+         * @return a new Cluster instance with the configured settings
+         */
+        public Cluster build() {
+            return new Cluster(inventory, vaultPaths, vaultClient);
+        }
+    }
+
+    /**
      * Constructs a Cluster without Vault integration.
+     *
+     * <p><strong>Note:</strong> Consider using {@link Builder} for a more fluent API.</p>
      */
     public Cluster() {
         this(null);
@@ -51,9 +130,24 @@ public class Cluster {
     /**
      * Constructs a Cluster with optional Vault client.
      *
+     * <p><strong>Note:</strong> Consider using {@link Builder} for a more fluent API.</p>
+     *
      * @param vaultClient the Vault client for secret management (can be null)
      */
     public Cluster(VaultClient vaultClient) {
+        this.vaultClient = vaultClient;
+    }
+
+    /**
+     * Private constructor used by Builder.
+     *
+     * @param inventory the parsed inventory
+     * @param vaultPaths the parsed Vault configuration paths
+     * @param vaultClient the Vault client for secret management (can be null)
+     */
+    private Cluster(InventoryParser.Inventory inventory, VaultConfigParser.VaultPaths vaultPaths, VaultClient vaultClient) {
+        this.inventory = inventory;
+        this.vaultPaths = vaultPaths;
         this.vaultClient = vaultClient;
     }
 

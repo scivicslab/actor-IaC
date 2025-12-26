@@ -44,10 +44,6 @@ public class ClusterExample {
         System.out.println("=== actor-IaC Cluster Example ===\n");
 
         try {
-            // Create a cluster (POJO, no ActorSystem dependency)
-            Cluster cluster = new Cluster();
-            System.out.println("Created cluster");
-
             // Load inventory file
             InputStream inventoryStream = ClusterExample.class
                 .getResourceAsStream("/example-inventory.ini");
@@ -58,8 +54,11 @@ public class ClusterExample {
                 return;
             }
 
-            cluster.loadInventory(inventoryStream);
-            System.out.println("Loaded inventory file");
+            // Create cluster using Builder pattern (POJO, no ActorSystem dependency)
+            Cluster cluster = new Cluster.Builder()
+                .withInventory(inventoryStream)
+                .build();
+            System.out.println("Created cluster and loaded inventory");
             System.out.println("Available groups: " +
                 cluster.getInventory().getAllGroups().keySet());
 

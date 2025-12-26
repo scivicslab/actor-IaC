@@ -52,13 +52,13 @@ System.out.println("Exit code: " + cmdResult.getExitCode());
 
 **Important:** Cluster is a POJO and does not depend on ActorSystem. It creates Node objects, and the caller is responsible for converting them to actors if needed.
 
-```java
-// Create cluster (POJO, no ActorSystem dependency)
-Cluster cluster = new Cluster();
+#### Using Builder Pattern (Recommended)
 
-// Load inventory
-InputStream inventory = new FileInputStream("inventory.ini");
-cluster.loadInventory(inventory);
+```java
+// Create cluster using Builder pattern
+Cluster cluster = new Cluster.Builder()
+    .withInventory(new FileInputStream("inventory.ini"))
+    .build();
 
 // Create Node objects for a group
 List<Node> nodes = cluster.createNodesForGroup("webservers");
@@ -81,6 +81,21 @@ List<CompletableFuture<Node.CommandResult>> futures = webservers.stream()
     .toList();
 
 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+```
+
+#### Legacy Constructor Pattern
+
+```java
+// Create cluster
+Cluster cluster = new Cluster();
+
+// Load inventory
+cluster.loadInventory(new FileInputStream("inventory.ini"));
+
+// Create Node objects for a group
+List<Node> nodes = cluster.createNodesForGroup("webservers");
+
+// Convert to actors...
 ```
 
 ### Inventory File Format
@@ -200,6 +215,8 @@ vault kv put secret/sudo/iacuser/password value="MySudoPassword"
 
 ### Usage Example with Vault
 
+#### Using Builder Pattern (Recommended)
+
 ```java
 // Initialize Vault client
 VaultConfig vaultConfig = new VaultConfig(
@@ -208,12 +225,11 @@ VaultConfig vaultConfig = new VaultConfig(
 );
 VaultClient vaultClient = new VaultClient(vaultConfig);
 
-// Create cluster with Vault integration (POJO)
-Cluster cluster = new Cluster(vaultClient);
-
-// Load inventory and vault configuration
-cluster.loadInventory(new FileInputStream("inventory.ini"));
-cluster.loadVaultConfig(new FileInputStream("vault-config.ini"));
+// Create cluster with Vault integration using Builder
+Cluster cluster = new Cluster.Builder()
+    .withInventory(new FileInputStream("inventory.ini"))
+    .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
+    .build();
 
 // Create Node objects (automatically fetches secrets from Vault)
 List<Node> nodes = cluster.createNodesForGroup("webservers");
@@ -236,6 +252,19 @@ CompletableFuture<Node.CommandResult> result = webservers.get(0).ask(node -> {
 Node.CommandResult cmdResult = result.get();
 System.out.println("Exit code: " + cmdResult.getExitCode());
 System.out.println("Output: " + cmdResult.getStdout());
+```
+
+#### Legacy Constructor Pattern
+
+```java
+// Create cluster with Vault
+Cluster cluster = new Cluster(vaultClient);
+
+// Load inventory and vault configuration
+cluster.loadInventory(new FileInputStream("inventory.ini"));
+cluster.loadVaultConfig(new FileInputStream("vault-config.ini"));
+
+// Create Node objects...
 ```
 
 ### Security Best Practices

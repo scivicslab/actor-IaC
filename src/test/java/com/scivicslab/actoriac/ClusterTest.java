@@ -181,4 +181,50 @@ class ClusterTest {
         assertEquals("testuser", db2.getUser(), "db2 should use global user");
         assertEquals(22, db2.getPort(), "db2 should use global port");
     }
+
+    @Test
+    @DisplayName("Should create cluster using Builder pattern")
+    void testBuilderPattern() throws IOException {
+        InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
+
+        Cluster cluster = new Cluster.Builder()
+            .withInventory(input)
+            .build();
+
+        assertNotNull(cluster.getInventory(), "Inventory should be loaded via Builder");
+
+        List<Node> webservers = cluster.createNodesForGroup("webservers");
+        assertEquals(2, webservers.size(), "Should create 2 webserver nodes via Builder");
+    }
+
+    @Test
+    @DisplayName("Should create cluster with Vault using Builder pattern")
+    void testBuilderPatternWithVault() throws IOException {
+        // Note: This test uses null VaultClient as we don't have a real Vault server
+        // In production, you would pass a real VaultClient instance
+        InputStream inventoryInput = getClass().getResourceAsStream("/test-inventory.ini");
+
+        Cluster cluster = new Cluster.Builder()
+            .withInventory(inventoryInput)
+            .build();
+
+        assertNotNull(cluster.getInventory(), "Inventory should be loaded");
+        assertNull(cluster.getVaultClient(), "VaultClient should be null when not configured");
+    }
+
+    @Test
+    @DisplayName("Builder should support method chaining")
+    void testBuilderMethodChaining() throws IOException {
+        InputStream inventoryInput = getClass().getResourceAsStream("/test-inventory.ini");
+
+        // Method chaining should work
+        Cluster.Builder builder = new Cluster.Builder();
+        Cluster.Builder sameBuilder = builder.withInventory(inventoryInput);
+
+        assertSame(builder, sameBuilder, "withInventory() should return same builder instance");
+
+        Cluster cluster = sameBuilder.build();
+        assertNotNull(cluster, "Builder should create cluster");
+        assertNotNull(cluster.getInventory(), "Inventory should be loaded");
+    }
 }
