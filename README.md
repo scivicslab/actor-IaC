@@ -50,9 +50,11 @@ System.out.println("Exit code: " + cmdResult.getExitCode());
 
 `Cluster` - A pure POJO that manages multiple nodes based on Ansible inventory files.
 
-**Important:** Cluster is a POJO and does not depend on ActorSystem. It creates Node objects, and the caller is responsible for converting them to actors if needed.
+**POJO-actor Design Philosophy**: Following POJO-actor principles, there are three ways to use actor-IaC:
 
-#### Using Builder Pattern (Recommended)
+#### Level 1: Pure POJO (No Actor Framework)
+
+POJOs work independently without ActorSystem. Direct synchronous execution.
 
 ```java
 // Create cluster using Builder pattern
@@ -60,18 +62,41 @@ Cluster cluster = new Cluster.Builder()
     .withInventory(new FileInputStream("inventory.ini"))
     .build();
 
-// Create Node objects for a group
+// Create Node POJOs
 List<Node> nodes = cluster.createNodesForGroup("webservers");
 
-// Convert Node objects to actors (caller's responsibility)
+// Use POJOs directly - synchronous, sequential execution
+for (Node node : nodes) {
+    try {
+        Node.CommandResult result = node.executeCommand("uptime");
+        System.out.println(node.getHostname() + ": " + result.getStdout());
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+```
+
+#### Level 2: Actor-Based (Concurrent Execution)
+
+Convert POJOs to actors for asynchronous, concurrent execution.
+
+```java
+// Create cluster and Node POJOs (same as Level 1)
+Cluster cluster = new Cluster.Builder()
+    .withInventory(new FileInputStream("inventory.ini"))
+    .build();
+
+List<Node> nodes = cluster.createNodesForGroup("webservers");
+
+// Convert Node POJOs to actors
 ActorSystem system = new ActorSystem("iac", 4);
-List<ActorRef<Node>> webservers = nodes.stream()
+List<ActorRef<Node>> actors = nodes.stream()
     .map(node -> system.actorOf("node-" + node.getHostname(), node))
     .toList();
 
-// Execute commands on all node actors concurrently
-List<CompletableFuture<Node.CommandResult>> futures = webservers.stream()
-    .map(nodeActor -> nodeActor.ask(node -> {
+// Execute concurrently using actor model
+List<CompletableFuture<Node.CommandResult>> futures = actors.stream()
+    .map(actor -> actor.ask(node -> {
         try {
             return node.executeCommand("uptime");
         } catch (IOException e) {
@@ -81,21 +106,31 @@ List<CompletableFuture<Node.CommandResult>> futures = webservers.stream()
     .toList();
 
 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+// Process results
+for (int i = 0; i < futures.size(); i++) {
+    Node.CommandResult result = futures.get(i).get();
+    System.out.println(result.getStdout());
+}
+
+system.terminate();
 ```
 
-#### Legacy Constructor Pattern
+#### Level 3: Workflow (XML/YAML/JSON)
 
-```java
-// Create cluster
-Cluster cluster = new Cluster();
+*Coming soon in future milestone* - Define infrastructure operations declaratively.
 
-// Load inventory
-cluster.loadInventory(new FileInputStream("inventory.ini"));
-
-// Create Node objects for a group
-List<Node> nodes = cluster.createNodesForGroup("webservers");
-
-// Convert to actors...
+```yaml
+# Example workflow definition (future feature)
+workflow:
+  name: deploy-webservers
+  steps:
+    - cluster:
+        inventory: inventory.ini
+        group: webservers
+    - execute:
+        command: uptime
+        parallel: true
 ```
 
 ### Inventory File Format
