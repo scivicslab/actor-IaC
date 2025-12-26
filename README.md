@@ -46,26 +46,38 @@ System.out.println("Output: " + cmdResult.getStdout());
 System.out.println("Exit code: " + cmdResult.getExitCode());
 ```
 
-### Cluster Actor
+### Cluster
 
-`ActorRef<Cluster>` - Manages multiple nodes based on Ansible inventory files.
+`Cluster` - A pure POJO that manages multiple nodes based on Ansible inventory files.
+
+**Important:** Cluster is a POJO and does not depend on ActorSystem. It creates Node objects, and the caller is responsible for converting them to actors if needed.
 
 ```java
-ActorSystem system = new ActorSystem("iac", 4);
-Cluster cluster = new Cluster(system);
+// Create cluster (POJO, no ActorSystem dependency)
+Cluster cluster = new Cluster();
 
 // Load inventory
 InputStream inventory = new FileInputStream("inventory.ini");
 cluster.loadInventory(inventory);
 
-// Create node actors for a group
-List<ActorRef<Node>> webservers = cluster.createNodesForGroup("webservers");
+// Create Node objects for a group
+List<Node> nodes = cluster.createNodesForGroup("webservers");
 
-// Execute commands on all nodes concurrently
+// Convert Node objects to actors (caller's responsibility)
+ActorSystem system = new ActorSystem("iac", 4);
+List<ActorRef<Node>> webservers = nodes.stream()
+    .map(node -> system.actorOf("node-" + node.getHostname(), node))
+    .toList();
+
+// Execute commands on all node actors concurrently
 List<CompletableFuture<Node.CommandResult>> futures = webservers.stream()
-    .map(nodeActor -> nodeActor.ask(node ->
-        node.executeCommand("uptime")
-    ))
+    .map(nodeActor -> nodeActor.ask(node -> {
+        try {
+            return node.executeCommand("uptime");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }))
     .toList();
 
 CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
@@ -196,21 +208,30 @@ VaultConfig vaultConfig = new VaultConfig(
 );
 VaultClient vaultClient = new VaultClient(vaultConfig);
 
-// Create cluster with Vault integration
-ActorSystem system = new ActorSystem("iac", 4);
-Cluster cluster = new Cluster(system, vaultClient);
+// Create cluster with Vault integration (POJO)
+Cluster cluster = new Cluster(vaultClient);
 
 // Load inventory and vault configuration
 cluster.loadInventory(new FileInputStream("inventory.ini"));
 cluster.loadVaultConfig(new FileInputStream("vault-config.ini"));
 
-// Create node actors (automatically fetches secrets from Vault)
-List<ActorRef<Node>> webservers = cluster.createNodesForGroup("webservers");
+// Create Node objects (automatically fetches secrets from Vault)
+List<Node> nodes = cluster.createNodesForGroup("webservers");
+
+// Convert to actors
+ActorSystem system = new ActorSystem("iac", 4);
+List<ActorRef<Node>> webservers = nodes.stream()
+    .map(node -> system.actorOf("node-" + node.getHostname(), node))
+    .toList();
 
 // Execute sudo command (uses Vault-provided password)
-CompletableFuture<Node.CommandResult> result = webservers.get(0).ask(node ->
-    node.executeSudoCommand("apt-get update")
-);
+CompletableFuture<Node.CommandResult> result = webservers.get(0).ask(node -> {
+    try {
+        return node.executeSudoCommand("apt-get update");
+    } catch (IOException e) {
+        throw new RuntimeException(e);
+    }
+});
 
 Node.CommandResult cmdResult = result.get();
 System.out.println("Exit code: " + cmdResult.getExitCode());

@@ -73,10 +73,9 @@ public class VaultExample {
             VaultClient vaultClient = new VaultClient(vaultConfig);
             System.out.println("Vault client initialized: " + vaultAddr + "\n");
 
-            // Step 2: Create actor system and cluster
-            System.out.println("Step 2: Creating actor system and cluster...");
-            ActorSystem system = new ActorSystem("vault-iac-example", 4);
-            Cluster cluster = new Cluster(system, vaultClient);
+            // Step 2: Create cluster (POJO, no ActorSystem dependency)
+            System.out.println("Step 2: Creating cluster...");
+            Cluster cluster = new Cluster(vaultClient);
             System.out.println("Cluster created with Vault integration\n");
 
             // Step 3: Load inventory and vault configuration
@@ -85,14 +84,22 @@ public class VaultExample {
             cluster.loadVaultConfig(new FileInputStream("vault-config.ini"));
             System.out.println("Configuration loaded\n");
 
-            // Step 4: Create node actors for webservers group
-            System.out.println("Step 4: Creating node actors for webservers group...");
+            // Step 4: Create Node objects for webservers group
+            System.out.println("Step 4: Creating Node objects for webservers group...");
             System.out.println("(This will fetch SSH keys and sudo passwords from Vault)");
-            List<ActorRef<Node>> webservers = cluster.createNodesForGroup("webservers");
+            List<Node> nodes = cluster.createNodesForGroup("webservers");
+            System.out.println("Created " + nodes.size() + " Node objects\n");
+
+            // Step 5: Convert Node objects to actors
+            System.out.println("Step 5: Converting Node objects to actors...");
+            ActorSystem system = new ActorSystem("vault-iac-example", 4);
+            List<ActorRef<Node>> webservers = nodes.stream()
+                    .map(node -> system.actorOf("node-" + node.getHostname().replace(".", "-"), node))
+                    .toList();
             System.out.println("Created " + webservers.size() + " node actors\n");
 
-            // Step 5: Execute a regular command
-            System.out.println("Step 5: Executing hostname command on all webservers...");
+            // Step 6: Execute a regular command
+            System.out.println("Step 6: Executing hostname command on all webservers...");
             List<CompletableFuture<Node.CommandResult>> hostnameFutures = webservers.stream()
                     .map(nodeActor -> nodeActor.ask(node -> {
                         try {
@@ -115,8 +122,8 @@ public class VaultExample {
             }
             System.out.println();
 
-            // Step 6: Execute a sudo command
-            System.out.println("Step 6: Executing sudo command (using Vault password)...");
+            // Step 7: Execute a sudo command
+            System.out.println("Step 7: Executing sudo command (using Vault password)...");
             if (!webservers.isEmpty()) {
                 ActorRef<Node> firstNode = webservers.get(0);
                 String nodeName = firstNode.ask(Node::getHostname).get();
@@ -143,8 +150,8 @@ public class VaultExample {
             }
             System.out.println();
 
-            // Step 7: Cleanup
-            System.out.println("Step 7: Cleaning up...");
+            // Step 8: Cleanup
+            System.out.println("Step 8: Cleaning up...");
 
             // Clean up temporary SSH key files
             for (ActorRef<Node> nodeActor : webservers) {

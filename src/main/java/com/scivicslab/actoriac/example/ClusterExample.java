@@ -43,13 +43,10 @@ public class ClusterExample {
     public static void main(String[] args) {
         System.out.println("=== actor-IaC Cluster Example ===\n");
 
-        // Create an ActorSystem with 4 worker threads
-        ActorSystem actorSystem = new ActorSystem("iac-system", 4);
-
         try {
-            // Create a cluster
-            Cluster cluster = new Cluster(actorSystem);
-            System.out.println("Created cluster with actor system");
+            // Create a cluster (POJO, no ActorSystem dependency)
+            Cluster cluster = new Cluster();
+            System.out.println("Created cluster");
 
             // Load inventory file
             InputStream inventoryStream = ClusterExample.class
@@ -66,10 +63,17 @@ public class ClusterExample {
             System.out.println("Available groups: " +
                 cluster.getInventory().getAllGroups().keySet());
 
-            // Create node actors for webservers group
-            List<ActorRef<Node>> webservers = cluster.createNodesForGroup("webservers");
-            System.out.println("\nCreated " + webservers.size() +
-                " node actors for webservers group");
+            // Create Node objects for webservers group
+            List<Node> nodes = cluster.createNodesForGroup("webservers");
+            System.out.println("\nCreated " + nodes.size() +
+                " Node objects for webservers group");
+
+            // Convert Node objects to actors
+            ActorSystem actorSystem = new ActorSystem("iac-system", 4);
+            List<ActorRef<Node>> webservers = nodes.stream()
+                .map(node -> actorSystem.actorOf("node-" + node.getHostname().replace(".", "-"), node))
+                .toList();
+            System.out.println("Converted to " + webservers.size() + " node actors");
 
             // Example: Execute 'hostname' command on all webservers concurrently
             System.out.println("\nExecuting 'echo hello' on all webservers...");
@@ -101,13 +105,13 @@ public class ClusterExample {
 
             System.out.println("\nCluster info: " + cluster);
 
-        } catch (Exception e) {
-            System.err.println("Error: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
             // Clean up
             actorSystem.terminate();
             System.out.println("\nActor system terminated");
+
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

@@ -17,9 +17,6 @@
 
 package com.scivicslab.actoriac;
 
-import com.scivicslab.pojoactor.ActorRef;
-import com.scivicslab.pojoactor.ActorSystem;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -30,9 +27,9 @@ import java.util.Map;
 /**
  * Manages a cluster of nodes based on an Ansible inventory file.
  *
- * <p>This class reads an Ansible inventory file and creates actor references
- * for each node in specified groups. It provides methods to execute commands
- * across groups of nodes concurrently using the actor model.</p>
+ * <p>This is a pure POJO class that reads Ansible inventory files and creates
+ * Node objects with their configuration. It does not depend on ActorSystem -
+ * the responsibility of converting Node objects to actors belongs to the caller.</p>
  *
  * <p>Supports optional HashiCorp Vault integration for secure secret management.</p>
  *
@@ -40,29 +37,23 @@ import java.util.Map;
  */
 public class Cluster {
 
-    private final ActorSystem actorSystem;
     private InventoryParser.Inventory inventory;
     private VaultConfigParser.VaultPaths vaultPaths;
     private final VaultClient vaultClient;
-    private final Map<String, ActorRef<Node>> nodeActors = new HashMap<>();
 
     /**
-     * Constructs a Cluster with the specified actor system.
-     *
-     * @param actorSystem the actor system to use for creating node actors
+     * Constructs a Cluster without Vault integration.
      */
-    public Cluster(ActorSystem actorSystem) {
-        this(actorSystem, null);
+    public Cluster() {
+        this(null);
     }
 
     /**
-     * Constructs a Cluster with the specified actor system and Vault client.
+     * Constructs a Cluster with optional Vault client.
      *
-     * @param actorSystem the actor system to use for creating node actors
      * @param vaultClient the Vault client for secret management (can be null)
      */
-    public Cluster(ActorSystem actorSystem, VaultClient vaultClient) {
-        this.actorSystem = actorSystem;
+    public Cluster(VaultClient vaultClient) {
         this.vaultClient = vaultClient;
     }
 
@@ -89,32 +80,36 @@ public class Cluster {
     }
 
     /**
-     * Creates node actors for all hosts in the specified group.
+     * Creates Node objects for all hosts in the specified group.
      *
      * <p>This method reads the group from the inventory, applies global and
-     * group-specific variables, and creates an ActorRef&lt;Node&gt; for each host.</p>
+     * group-specific variables, and creates a Node POJO for each host.</p>
      *
      * <p>If Vault integration is configured, this method will fetch SSH keys and
      * sudo passwords from Vault based on the vault-config.ini settings.</p>
      *
+     * <p>Note: This method returns plain Node objects, not actors. The caller
+     * is responsible for converting them to actors using ActorSystem.actorOf()
+     * if needed.</p>
+     *
      * @param groupName the name of the group from the inventory file
-     * @return the list of created node actors
+     * @return the list of created Node objects
      * @throws IllegalStateException if inventory has not been loaded
      * @throws RuntimeException if Vault secret retrieval fails
      */
-    public List<ActorRef<Node>> createNodesForGroup(String groupName) {
+    public List<Node> createNodesForGroup(String groupName) {
         if (inventory == null) {
             throw new IllegalStateException("Inventory not loaded. Call loadInventory() first.");
         }
 
         List<String> hosts = inventory.getHosts(groupName);
-        List<ActorRef<Node>> actors = new ArrayList<>();
+        List<Node> nodes = new ArrayList<>();
 
         // Get base variables
         Map<String, String> globalVars = inventory.getGlobalVars();
         Map<String, String> groupVars = inventory.getGroupVars(groupName);
 
-        // Create node actors
+        // Create nodes
         for (String hostname : hosts) {
             // Merge vars with priority: host vars > group vars > global vars
             Map<String, String> effectiveVars = new HashMap<>(globalVars);
@@ -157,35 +152,10 @@ public class Cluster {
             }
 
             Node node = new Node(hostname, user, port, identityFile, sshKeyContent, sudoPassword);
-            ActorRef<Node> nodeActor = actorSystem.actorOf(
-                "node-" + hostname.replace(".", "-"),
-                node
-            );
-
-            nodeActors.put(hostname, nodeActor);
-            actors.add(nodeActor);
+            nodes.add(node);
         }
 
-        return actors;
-    }
-
-    /**
-     * Gets the node actor for a specific hostname.
-     *
-     * @param hostname the hostname of the node
-     * @return the actor reference for the node, or null if not found
-     */
-    public ActorRef<Node> getNodeActor(String hostname) {
-        return nodeActors.get(hostname);
-    }
-
-    /**
-     * Gets all node actors that have been created.
-     *
-     * @return a map of hostname to node actor
-     */
-    public Map<String, ActorRef<Node>> getAllNodeActors() {
-        return new HashMap<>(nodeActors);
+        return nodes;
     }
 
     /**
@@ -198,27 +168,18 @@ public class Cluster {
     }
 
     /**
-     * Gets the actor system used by this cluster.
+     * Gets the Vault client used by this cluster.
      *
-     * @return the actor system
+     * @return the Vault client, or null if not configured
      */
-    public ActorSystem getActorSystem() {
-        return actorSystem;
-    }
-
-    /**
-     * Gets the number of nodes currently managed by this cluster.
-     *
-     * @return the node count
-     */
-    public int getNodeCount() {
-        return nodeActors.size();
+    public VaultClient getVaultClient() {
+        return vaultClient;
     }
 
     @Override
     public String toString() {
-        return String.format("Cluster{nodeCount=%d, groups=%s}",
-            nodeActors.size(),
+        return String.format("Cluster{vaultEnabled=%s, groups=%s}",
+            vaultClient != null,
             inventory != null ? inventory.getAllGroups().keySet() : "[]");
     }
 }
