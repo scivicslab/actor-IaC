@@ -17,7 +17,7 @@
 
 package com.scivicslab.actoriac.example;
 
-import com.scivicslab.actoriac.Cluster;
+import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.Node;
 import com.scivicslab.pojoactor.ActorRef;
 import com.scivicslab.pojoactor.ActorSystem;
@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Example demonstrating basic Cluster and Node usage.
+ * Example demonstrating basic NodeGroup and Node usage.
  *
  * <p>This example shows how to:
  * <ul>
@@ -54,16 +54,16 @@ public class ClusterExample {
                 return;
             }
 
-            // Create cluster using Builder pattern (POJO, no ActorSystem dependency)
-            Cluster cluster = new Cluster.Builder()
+            // Create node group using Builder pattern (POJO, no ActorSystem dependency)
+            NodeGroup nodeGroup = new NodeGroup.Builder()
                 .withInventory(inventoryStream)
                 .build();
-            System.out.println("Created cluster and loaded inventory");
+            System.out.println("Created node group and loaded inventory");
             System.out.println("Available groups: " +
-                cluster.getInventory().getAllGroups().keySet());
+                nodeGroup.getInventory().getAllGroups().keySet());
 
             // Create Node objects for webservers group
-            List<Node> nodes = cluster.createNodesForGroup("webservers");
+            List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
             System.out.println("\nCreated " + nodes.size() +
                 " Node objects for webservers group");
 
@@ -102,7 +102,7 @@ public class ClusterExample {
                 }
             }
 
-            System.out.println("\nCluster info: " + cluster);
+            System.out.println("\nNodeGroup info: " + nodeGroup);
 
             // Clean up
             actorSystem.terminate();

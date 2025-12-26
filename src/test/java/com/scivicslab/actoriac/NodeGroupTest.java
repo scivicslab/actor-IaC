@@ -31,21 +31,21 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for Cluster.
+ * Tests for NodeGroup.
  *
- * <p>Cluster is a pure POJO that creates Node objects. These tests verify
+ * <p>NodeGroup is a pure POJO that creates Node objects. These tests verify
  * the POJO behavior without requiring ActorSystem.</p>
  *
  * @author devteam@scivics-lab.com
  */
-@DisplayName("Cluster Tests")
-class ClusterTest {
+@DisplayName("NodeGroup Tests")
+class NodeGroupTest {
 
-    private Cluster cluster;
+    private NodeGroup nodeGroup;
 
     @BeforeEach
     void setUp() {
-        cluster = new Cluster();
+        nodeGroup = new NodeGroup();
     }
 
     @Test
@@ -54,18 +54,18 @@ class ClusterTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         assertNotNull(input, "Test inventory file should exist");
 
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        assertNotNull(cluster.getInventory(), "Inventory should be loaded");
+        assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded");
     }
 
     @Test
     @DisplayName("Should create nodes for webservers group")
     void testCreateNodesForWebservers() throws IOException {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        List<Node> webservers = cluster.createNodesForGroup("webservers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
 
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes");
     }
@@ -74,9 +74,9 @@ class ClusterTest {
     @DisplayName("Should create nodes for dbservers group")
     void testCreateNodesForDbservers() throws IOException {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        List<Node> dbservers = cluster.createNodesForGroup("dbservers");
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
 
         assertEquals(2, dbservers.size(), "Should create 2 dbserver nodes");
     }
@@ -85,11 +85,11 @@ class ClusterTest {
     @DisplayName("Should create nodes for multiple groups")
     void testCreateNodesForMultipleGroups() throws IOException {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        List<Node> webservers = cluster.createNodesForGroup("webservers");
-        List<Node> dbservers = cluster.createNodesForGroup("dbservers");
-        List<Node> loadbalancers = cluster.createNodesForGroup("loadbalancers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
+        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers");
 
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes");
         assertEquals(2, dbservers.size(), "Should create 2 dbserver nodes");
@@ -100,7 +100,7 @@ class ClusterTest {
     @DisplayName("Should throw exception when creating nodes without loading inventory")
     void testCreateNodesWithoutInventory() {
         assertThrows(IllegalStateException.class, () -> {
-            cluster.createNodesForGroup("webservers");
+            nodeGroup.createNodesForGroup("webservers");
         }, "Should throw IllegalStateException when inventory not loaded");
     }
 
@@ -108,9 +108,9 @@ class ClusterTest {
     @DisplayName("Should apply global variables to nodes without host-specific vars")
     void testGlobalVariablesApplied() throws Exception {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        List<Node> loadbalancers = cluster.createNodesForGroup("loadbalancers");
+        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers");
 
         // lb1 has no host-specific vars, should use global vars
         Node lb1 = loadbalancers.get(0);
@@ -119,12 +119,12 @@ class ClusterTest {
     }
 
     @Test
-    @DisplayName("Should return cluster information")
+    @DisplayName("Should return nodeGroup information")
     void testClusterToString() throws IOException {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        String clusterInfo = cluster.toString();
+        String clusterInfo = nodeGroup.toString();
         assertTrue(clusterInfo.contains("vaultEnabled=false"), "Should show Vault not enabled");
         assertTrue(clusterInfo.contains("webservers"), "Should show groups");
     }
@@ -133,9 +133,9 @@ class ClusterTest {
     @DisplayName("Should apply host-specific variables to nodes")
     void testHostSpecificVariablesApplied() throws Exception {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        List<Node> webservers = cluster.createNodesForGroup("webservers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
 
         // Find web1 and web2 by hostname
         Node web1 = webservers.stream()
@@ -159,9 +159,9 @@ class ClusterTest {
     @DisplayName("Should apply variables with correct priority")
     void testVariablePriority() throws Exception {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
-        cluster.loadInventory(input);
+        nodeGroup.loadInventory(input);
 
-        List<Node> dbservers = cluster.createNodesForGroup("dbservers");
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
 
         // Find db1 and db2 by hostname
         Node db1 = dbservers.stream()
@@ -183,33 +183,33 @@ class ClusterTest {
     }
 
     @Test
-    @DisplayName("Should create cluster using Builder pattern")
+    @DisplayName("Should create nodeGroup using Builder pattern")
     void testBuilderPattern() throws IOException {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
 
-        Cluster cluster = new Cluster.Builder()
+        NodeGroup nodeGroup = new NodeGroup.Builder()
             .withInventory(input)
             .build();
 
-        assertNotNull(cluster.getInventory(), "Inventory should be loaded via Builder");
+        assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded via Builder");
 
-        List<Node> webservers = cluster.createNodesForGroup("webservers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes via Builder");
     }
 
     @Test
-    @DisplayName("Should create cluster with Vault using Builder pattern")
+    @DisplayName("Should create nodeGroup with Vault using Builder pattern")
     void testBuilderPatternWithVault() throws IOException {
         // Note: This test uses null VaultClient as we don't have a real Vault server
         // In production, you would pass a real VaultClient instance
         InputStream inventoryInput = getClass().getResourceAsStream("/test-inventory.ini");
 
-        Cluster cluster = new Cluster.Builder()
+        NodeGroup nodeGroup = new NodeGroup.Builder()
             .withInventory(inventoryInput)
             .build();
 
-        assertNotNull(cluster.getInventory(), "Inventory should be loaded");
-        assertNull(cluster.getVaultClient(), "VaultClient should be null when not configured");
+        assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded");
+        assertNull(nodeGroup.getVaultClient(), "VaultClient should be null when not configured");
     }
 
     @Test
@@ -218,13 +218,13 @@ class ClusterTest {
         InputStream inventoryInput = getClass().getResourceAsStream("/test-inventory.ini");
 
         // Method chaining should work
-        Cluster.Builder builder = new Cluster.Builder();
-        Cluster.Builder sameBuilder = builder.withInventory(inventoryInput);
+        NodeGroup.Builder builder = new NodeGroup.Builder();
+        NodeGroup.Builder sameBuilder = builder.withInventory(inventoryInput);
 
         assertSame(builder, sameBuilder, "withInventory() should return same builder instance");
 
-        Cluster cluster = sameBuilder.build();
-        assertNotNull(cluster, "Builder should create cluster");
-        assertNotNull(cluster.getInventory(), "Inventory should be loaded");
+        NodeGroup nodeGroup = sameBuilder.build();
+        assertNotNull(nodeGroup, "Builder should create nodeGroup");
+        assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded");
     }
 }

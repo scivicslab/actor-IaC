@@ -46,9 +46,9 @@ System.out.println("Output: " + cmdResult.getStdout());
 System.out.println("Exit code: " + cmdResult.getExitCode());
 ```
 
-### Cluster
+### NodeGroup
 
-`Cluster` - A pure POJO that manages multiple nodes based on Ansible inventory files.
+`NodeGroup` - A pure POJO that manages multiple nodes based on Ansible inventory files.
 
 **POJO-actor Design Philosophy**: Following POJO-actor principles, there are three ways to use actor-IaC:
 
@@ -57,13 +57,13 @@ System.out.println("Exit code: " + cmdResult.getExitCode());
 **No `ActorSystem`, no `ActorRef`** - POJOs work as plain Java objects. Direct synchronous execution.
 
 ```java
-// Create cluster using Builder pattern
-Cluster cluster = new Cluster.Builder()
+// Create node group using Builder pattern
+NodeGroup nodeGroup = new NodeGroup.Builder()
     .withInventory(new FileInputStream("inventory.ini"))
     .build();
 
 // Create Node POJOs
-List<Node> nodes = cluster.createNodesForGroup("webservers");
+List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
 
 // Use POJOs directly - synchronous, sequential execution
 for (Node node : nodes) {
@@ -81,12 +81,12 @@ for (Node node : nodes) {
 **Using `ActorSystem` + `ActorRef`** - Convert POJOs to actors for asynchronous, concurrent execution.
 
 ```java
-// Create cluster and Node POJOs (same as Level 1)
-Cluster cluster = new Cluster.Builder()
+// Create node group and Node POJOs (same as Level 1)
+NodeGroup nodeGroup = new NodeGroup.Builder()
     .withInventory(new FileInputStream("inventory.ini"))
     .build();
 
-List<Node> nodes = cluster.createNodesForGroup("webservers");
+List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
 
 // Convert Node POJOs to actors
 ActorSystem system = new ActorSystem("iac", 4);
@@ -260,14 +260,14 @@ VaultConfig vaultConfig = new VaultConfig(
 );
 VaultClient vaultClient = new VaultClient(vaultConfig);
 
-// Create cluster with Vault integration using Builder
-Cluster cluster = new Cluster.Builder()
+// Create node group with Vault integration using Builder
+NodeGroup nodeGroup = new NodeGroup.Builder()
     .withInventory(new FileInputStream("inventory.ini"))
     .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
     .build();
 
 // Create Node objects (automatically fetches secrets from Vault)
-List<Node> nodes = cluster.createNodesForGroup("webservers");
+List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
 
 // Convert to actors
 ActorSystem system = new ActorSystem("iac", 4);
@@ -292,12 +292,12 @@ System.out.println("Output: " + cmdResult.getStdout());
 #### Legacy Constructor Pattern
 
 ```java
-// Create cluster with Vault
-Cluster cluster = new Cluster(vaultClient);
+// Create node group with Vault
+NodeGroup nodeGroup = new NodeGroup(vaultClient);
 
 // Load inventory and vault configuration
-cluster.loadInventory(new FileInputStream("inventory.ini"));
-cluster.loadVaultConfig(new FileInputStream("vault-config.ini"));
+nodeGroup.loadInventory(new FileInputStream("inventory.ini"));
+nodeGroup.loadVaultConfig(new FileInputStream("vault-config.ini"));
 
 // Create Node objects...
 ```

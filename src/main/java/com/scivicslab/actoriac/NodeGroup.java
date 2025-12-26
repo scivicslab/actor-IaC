@@ -25,10 +25,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Manages a cluster of nodes based on an Ansible inventory file.
+ * Manages a group of nodes based on an Ansible inventory file.
  *
  * <p>This is a pure POJO class that reads Ansible inventory files and creates
- * Node objects with their configuration. It does not depend on ActorSystem -
+ * Node objects for a specific group. It does not depend on ActorSystem -
  * the responsibility of converting Node objects to actors belongs to the caller.</p>
  *
  * <p>Supports optional HashiCorp Vault integration for secure secret management.</p>
@@ -38,13 +38,13 @@ import java.util.Map;
  * <h3>Using Builder Pattern (Recommended)</h3>
  * <pre>{@code
  * // Simple inventory loading
- * Cluster cluster = new Cluster.Builder()
+ * NodeGroup nodeGroup = new NodeGroup.Builder()
  *     .withInventory(new FileInputStream("inventory.ini"))
  *     .build();
  *
  * // With Vault integration
  * VaultClient vaultClient = new VaultClient(vaultConfig);
- * Cluster cluster = new Cluster.Builder()
+ * NodeGroup nodeGroup = new NodeGroup.Builder()
  *     .withInventory(new FileInputStream("inventory.ini"))
  *     .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
  *     .build();
@@ -52,26 +52,26 @@ import java.util.Map;
  *
  * <h3>Legacy Constructor Pattern</h3>
  * <pre>{@code
- * Cluster cluster = new Cluster();
- * cluster.loadInventory(new FileInputStream("inventory.ini"));
+ * NodeGroup nodeGroup = new NodeGroup();
+ * nodeGroup.loadInventory(new FileInputStream("inventory.ini"));
  * }</pre>
  *
  * @author devteam@scivics-lab.com
  */
-public class Cluster {
+public class NodeGroup {
 
     private InventoryParser.Inventory inventory;
     private VaultConfigParser.VaultPaths vaultPaths;
     private final VaultClient vaultClient;
 
     /**
-     * Builder for creating Cluster instances with fluent API.
+     * Builder for creating NodeGroup instances with fluent API.
      *
-     * <p>This is the recommended way to create Cluster instances.</p>
+     * <p>This is the recommended way to create NodeGroup instances.</p>
      *
      * <h3>Example:</h3>
      * <pre>{@code
-     * Cluster cluster = new Cluster.Builder()
+     * NodeGroup nodeGroup = new NodeGroup.Builder()
      *     .withInventory(new FileInputStream("inventory.ini"))
      *     .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
      *     .build();
@@ -109,32 +109,32 @@ public class Cluster {
         }
 
         /**
-         * Builds the Cluster instance.
+         * Builds the NodeGroup instance.
          *
-         * @return a new Cluster instance with the configured settings
+         * @return a new NodeGroup instance with the configured settings
          */
-        public Cluster build() {
-            return new Cluster(inventory, vaultPaths, vaultClient);
+        public NodeGroup build() {
+            return new NodeGroup(inventory, vaultPaths, vaultClient);
         }
     }
 
     /**
-     * Constructs a Cluster without Vault integration.
+     * Constructs a NodeGroup without Vault integration.
      *
      * <p><strong>Note:</strong> Consider using {@link Builder} for a more fluent API.</p>
      */
-    public Cluster() {
+    public NodeGroup() {
         this(null);
     }
 
     /**
-     * Constructs a Cluster with optional Vault client.
+     * Constructs a NodeGroup with optional Vault client.
      *
      * <p><strong>Note:</strong> Consider using {@link Builder} for a more fluent API.</p>
      *
      * @param vaultClient the Vault client for secret management (can be null)
      */
-    public Cluster(VaultClient vaultClient) {
+    public NodeGroup(VaultClient vaultClient) {
         this.vaultClient = vaultClient;
     }
 
@@ -145,7 +145,7 @@ public class Cluster {
      * @param vaultPaths the parsed Vault configuration paths
      * @param vaultClient the Vault client for secret management (can be null)
      */
-    private Cluster(InventoryParser.Inventory inventory, VaultConfigParser.VaultPaths vaultPaths, VaultClient vaultClient) {
+    private NodeGroup(InventoryParser.Inventory inventory, VaultConfigParser.VaultPaths vaultPaths, VaultClient vaultClient) {
         this.inventory = inventory;
         this.vaultPaths = vaultPaths;
         this.vaultClient = vaultClient;
@@ -272,7 +272,7 @@ public class Cluster {
 
     @Override
     public String toString() {
-        return String.format("Cluster{vaultEnabled=%s, groups=%s}",
+        return String.format("NodeGroup{vaultEnabled=%s, groups=%s}",
             vaultClient != null,
             inventory != null ? inventory.getAllGroups().keySet() : "[]");
     }

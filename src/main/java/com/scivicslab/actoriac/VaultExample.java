@@ -75,7 +75,7 @@ public class VaultExample {
 
             // Step 2: Create cluster using Builder pattern
             System.out.println("Step 2: Creating cluster with Builder pattern...");
-            Cluster cluster = new Cluster.Builder()
+            NodeGroup nodeGroup = new NodeGroup.Builder()
                     .withInventory(new FileInputStream("inventory.ini"))
                     .withVaultConfig(new FileInputStream("vault-config.ini"), vaultClient)
                     .build();
@@ -84,7 +84,7 @@ public class VaultExample {
             // Step 3: Create Node objects for webservers group
             System.out.println("Step 3: Creating Node objects for webservers group...");
             System.out.println("(This will fetch SSH keys and sudo passwords from Vault)");
-            List<Node> nodes = cluster.createNodesForGroup("webservers");
+            List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
             System.out.println("Created " + nodes.size() + " Node objects\n");
 
             // Step 4: Convert Node objects to actors
