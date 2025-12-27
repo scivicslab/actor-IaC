@@ -19,37 +19,49 @@ package com.scivicslab.actoriac;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.logging.Logger;
+
+import com.jcraft.jsch.ChannelExec;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
+import com.scivicslab.pojoactor.workflow.Interpreter;
+import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 /**
- * Represents a single node in the infrastructure.
+ * Represents a single node in the infrastructure that can execute workflows.
  *
- * <p>This class provides SSH-based command execution on remote nodes.
- * Each command execution creates a new SSH connection, executes the command,
- * and returns the result with stdout and stderr.</p>
+ * <p>This class extends {@link Interpreter} to combine SSH-based command execution
+ * with workflow execution capabilities. Each Node instance can:</p>
+ * <ul>
+ *   <li>Execute commands on remote nodes via SSH</li>
+ *   <li>Execute workflows defined in YAML/JSON/XML files</li>
+ *   <li>Maintain independent workflow execution state (currentState, currentRow)</li>
+ * </ul>
  *
  * <p>Supports Vault-based secret management for SSH keys and sudo passwords.</p>
  *
+ * <p><b>Design rationale:</b> Node extends Interpreter rather than composing it because:</p>
+ * <ul>
+ *   <li>Node "is a" specialized Interpreter with SSH capabilities (is-a relationship)</li>
+ *   <li>Each Node needs independent workflow execution state</li>
+ *   <li>Simplifies ActorSystem registration (only one actor per node)</li>
+ *   <li>Workflow YAML can reference "actor: node" unambiguously</li>
+ * </ul>
+ *
  * @author devteam@scivics-lab.com
  */
-public class Node {
+public class Node extends Interpreter {
 
     private final String hostname;
     private final String user;
     private final int port;
     private final String identityFile;
     private final String sshKeyContent;
+    private final String sshPassphrase;
     private final String sudoPassword;
-
-    // Temporary SSH key file (created from sshKeyContent if needed)
-    private Path tempSshKeyFile;
 
     /**
      * Constructs a Node with the specified connection parameters.
@@ -58,9 +70,10 @@ public class Node {
      * @param user the SSH username
      * @param port the SSH port (typically 22)
      * @param identityFile the path to SSH private key file (can be null)
+     * @param system the actor system for workflow execution
      */
-    public Node(String hostname, String user, int port, String identityFile) {
-        this(hostname, user, port, identityFile, null, null);
+    public Node(String hostname, String user, int port, String identityFile, IIActorSystem system) {
+        this(hostname, user, port, identityFile, null, null, null, system);
     }
 
     /**
@@ -71,15 +84,24 @@ public class Node {
      * @param port the SSH port (typically 22)
      * @param identityFile the path to SSH private key file (can be null)
      * @param sshKeyContent SSH private key content from Vault (can be null)
+     * @param sshPassphrase SSH key passphrase from Vault (can be null)
      * @param sudoPassword sudo password from Vault (can be null)
+     * @param system the actor system for workflow execution
      */
     public Node(String hostname, String user, int port, String identityFile,
-                String sshKeyContent, String sudoPassword) {
+                String sshKeyContent, String sshPassphrase, String sudoPassword, IIActorSystem system) {
+        // Initialize Interpreter fields
+        super();
+        this.system = system;
+        this.logger = Logger.getLogger("node-" + hostname);
+
+        // Initialize Node-specific fields
         this.hostname = hostname;
         this.user = user;
         this.port = port;
         this.identityFile = identityFile;
         this.sshKeyContent = sshKeyContent;
+        this.sshPassphrase = sshPassphrase;
         this.sudoPassword = sudoPassword;
     }
 
@@ -88,58 +110,120 @@ public class Node {
      *
      * @param hostname the hostname or IP address of the node
      * @param user the SSH username
+     * @param system the actor system for workflow execution
      */
-    public Node(String hostname, String user) {
-        this(hostname, user, 22, null);
+    public Node(String hostname, String user, IIActorSystem system) {
+        this(hostname, user, 22, null, system);
     }
 
     /**
-     * Executes a command on the remote node via SSH.
+     * Executes a command on the remote node via SSH using JSch.
      *
      * @param command the command to execute
      * @return the execution result containing stdout, stderr, and exit code
      * @throws IOException if SSH connection or command execution fails
      */
     public CommandResult executeCommand(String command) throws IOException {
-        List<String> sshCommand = buildSshCommand(command);
+        Session session = null;
+        ChannelExec channel = null;
 
-        ProcessBuilder pb = new ProcessBuilder(sshCommand);
-        Process process = pb.start();
-
-        // Read stdout
-        StringBuilder stdout = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                stdout.append(line).append("\n");
-            }
-        }
-
-        // Read stderr
-        StringBuilder stderr = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getErrorStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                stderr.append(line).append("\n");
-            }
-        }
-
-        // Wait for process to complete
-        int exitCode;
         try {
-            exitCode = process.waitFor();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Command execution interrupted", e);
+            // Create JSch session
+            session = createSession();
+            session.connect();
+
+            // Open exec channel
+            channel = (ChannelExec) session.openChannel("exec");
+            channel.setCommand(command);
+
+            // Get streams
+            InputStream stdout = channel.getInputStream();
+            InputStream stderr = channel.getErrStream();
+
+            // Connect channel
+            channel.connect();
+
+            // Read stdout
+            StringBuilder stdoutBuilder = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stdout))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    stdoutBuilder.append(line).append("\n");
+                }
+            }
+
+            // Read stderr
+            StringBuilder stderrBuilder = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stderr))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    stderrBuilder.append(line).append("\n");
+                }
+            }
+
+            // Wait for channel to close
+            while (!channel.isClosed()) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Command execution interrupted", e);
+                }
+            }
+
+            int exitCode = channel.getExitStatus();
+
+            return new CommandResult(
+                stdoutBuilder.toString().trim(),
+                stderrBuilder.toString().trim(),
+                exitCode
+            );
+
+        } catch (JSchException e) {
+            throw new IOException("SSH connection failed: " + e.getMessage(), e);
+        } finally {
+            if (channel != null && channel.isConnected()) {
+                channel.disconnect();
+            }
+            if (session != null && session.isConnected()) {
+                session.disconnect();
+            }
+        }
+    }
+
+    /**
+     * Creates a JSch SSH session with configured credentials.
+     *
+     * @return configured but not yet connected Session
+     * @throws JSchException if session creation fails
+     * @throws IOException if SSH key file operations fail
+     */
+    private Session createSession() throws JSchException, IOException {
+        JSch jsch = new JSch();
+
+        // Add identity (SSH key)
+        if (sshKeyContent != null && !sshKeyContent.isEmpty()) {
+            // Use SSH key from Vault
+            byte[] keyBytes = sshKeyContent.getBytes();
+            byte[] passphraseBytes = (sshPassphrase != null) ? sshPassphrase.getBytes() : null;
+            jsch.addIdentity(hostname, keyBytes, null, passphraseBytes);
+        } else if (identityFile != null) {
+            // Use SSH key from file
+            if (sshPassphrase != null && !sshPassphrase.isEmpty()) {
+                jsch.addIdentity(identityFile, sshPassphrase);
+            } else {
+                jsch.addIdentity(identityFile);
+            }
         }
 
-        return new CommandResult(
-            stdout.toString().trim(),
-            stderr.toString().trim(),
-            exitCode
-        );
+        // Create session
+        Session session = jsch.getSession(user, hostname, port);
+
+        // Disable strict host key checking (for convenience)
+        // In production, you might want to make this configurable
+        session.setConfig("StrictHostKeyChecking", "no");
+
+        return session;
     }
 
     /**
@@ -179,78 +263,12 @@ public class Node {
     }
 
     /**
-     * Builds the SSH command with appropriate options.
-     *
-     * @param command the command to execute on the remote host
-     * @return the complete SSH command as a list of strings
-     * @throws IOException if temporary SSH key file creation fails
-     */
-    private List<String> buildSshCommand(String command) throws IOException {
-        List<String> cmd = new ArrayList<>();
-        cmd.add("ssh");
-        cmd.add("-p");
-        cmd.add(String.valueOf(port));
-
-        // If we have SSH key content from Vault, create a temporary key file
-        if (sshKeyContent != null && !sshKeyContent.isEmpty()) {
-            if (tempSshKeyFile == null) {
-                tempSshKeyFile = createTempSshKeyFile(sshKeyContent);
-            }
-            cmd.add("-i");
-            cmd.add(tempSshKeyFile.toString());
-        } else if (identityFile != null) {
-            cmd.add("-i");
-            cmd.add(identityFile);
-        }
-
-        // Disable strict host key checking for simplicity
-        // In production, you might want to make this configurable
-        cmd.add("-o");
-        cmd.add("StrictHostKeyChecking=no");
-        cmd.add("-o");
-        cmd.add("UserKnownHostsFile=/dev/null");
-
-        cmd.add(user + "@" + hostname);
-        cmd.add(command);
-
-        return cmd;
-    }
-
-    /**
-     * Creates a temporary SSH key file with proper permissions.
-     *
-     * @param keyContent the SSH private key content
-     * @return Path to the temporary key file
-     * @throws IOException if file creation fails
-     */
-    private Path createTempSshKeyFile(String keyContent) throws IOException {
-        // Create temporary file with 0600 permissions (owner read/write only)
-        Path tempFile = Files.createTempFile("ssh-key-", ".pem",
-            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-
-        // Write key content to file
-        Files.writeString(tempFile, keyContent);
-
-        // Register shutdown hook to delete the file when JVM exits
-        tempFile.toFile().deleteOnExit();
-
-        return tempFile;
-    }
-
-    /**
      * Cleans up resources used by this Node.
-     * Deletes temporary SSH key file if it was created.
+     * With JSch-based implementation, sessions are closed immediately after use,
+     * so this method is a no-op but kept for API compatibility.
      */
     public void cleanup() {
-        if (tempSshKeyFile != null) {
-            try {
-                Files.deleteIfExists(tempSshKeyFile);
-                tempSshKeyFile = null;
-            } catch (IOException e) {
-                // Log error but don't throw - this is cleanup
-                System.err.println("Warning: Failed to delete temporary SSH key file: " + e.getMessage());
-            }
-        }
+        // No cleanup needed with JSch - sessions are closed in executeCommand()
     }
 
     /**

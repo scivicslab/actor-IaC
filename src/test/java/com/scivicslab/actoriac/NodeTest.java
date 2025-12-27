@@ -33,7 +33,7 @@ class NodeTest {
     @Test
     @DisplayName("Should create node with full parameters")
     void testCreateNodeWithFullParameters() {
-        Node node = new Node("example.com", "testuser", 2222, "/path/to/key");
+        Node node = new Node("example.com", "testuser", 2222, "/path/to/key", null);
 
         assertEquals("example.com", node.getHostname());
         assertEquals("testuser", node.getUser());
@@ -44,7 +44,7 @@ class NodeTest {
     @Test
     @DisplayName("Should create node with default parameters")
     void testCreateNodeWithDefaults() {
-        Node node = new Node("example.com", "testuser");
+        Node node = new Node("example.com", "testuser", null);
 
         assertEquals("example.com", node.getHostname());
         assertEquals("testuser", node.getUser());
@@ -55,7 +55,7 @@ class NodeTest {
     @Test
     @DisplayName("Should have meaningful toString")
     void testToString() {
-        Node node = new Node("example.com", "testuser", 22, null);
+        Node node = new Node("example.com", "testuser", 22, null, null);
 
         String str = node.toString();
         assertTrue(str.contains("example.com"));

@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.scivicslab.pojoactor.workflow.IIActorSystem;
+
 /**
  * Manages a group of nodes based on an Ansible inventory file.
  *
@@ -63,6 +65,7 @@ public class NodeGroup {
     private InventoryParser.Inventory inventory;
     private VaultConfigParser.VaultPaths vaultPaths;
     private final VaultClient vaultClient;
+    private EncryptedSecretConfig encryptedSecrets;
 
     /**
      * Builder for creating NodeGroup instances with fluent API.
@@ -81,6 +84,7 @@ public class NodeGroup {
         private InventoryParser.Inventory inventory;
         private VaultConfigParser.VaultPaths vaultPaths;
         private VaultClient vaultClient;
+        private EncryptedSecretConfig encryptedSecrets;
 
         /**
          * Loads an Ansible inventory file.
@@ -109,12 +113,27 @@ public class NodeGroup {
         }
 
         /**
+         * Loads an encrypted secrets file (without Vault).
+         *
+         * <p>This is an alternative to Vault for managing secrets in encrypted form.</p>
+         *
+         * @param encryptedSecretsStream the input stream containing the encrypted secrets file
+         * @param encryptionKey Base64-encoded encryption key (typically from environment variable)
+         * @return this builder for method chaining
+         * @throws IOException if reading or decrypting the secrets fails
+         */
+        public Builder withEncryptedSecrets(InputStream encryptedSecretsStream, String encryptionKey) throws IOException {
+            this.encryptedSecrets = EncryptedSecretConfig.parse(encryptedSecretsStream, encryptionKey);
+            return this;
+        }
+
+        /**
          * Builds the NodeGroup instance.
          *
          * @return a new NodeGroup instance with the configured settings
          */
         public NodeGroup build() {
-            return new NodeGroup(inventory, vaultPaths, vaultClient);
+            return new NodeGroup(inventory, vaultPaths, vaultClient, encryptedSecrets);
         }
     }
 
@@ -144,11 +163,14 @@ public class NodeGroup {
      * @param inventory the parsed inventory
      * @param vaultPaths the parsed Vault configuration paths
      * @param vaultClient the Vault client for secret management (can be null)
+     * @param encryptedSecrets the encrypted secret configuration (can be null)
      */
-    private NodeGroup(InventoryParser.Inventory inventory, VaultConfigParser.VaultPaths vaultPaths, VaultClient vaultClient) {
+    private NodeGroup(InventoryParser.Inventory inventory, VaultConfigParser.VaultPaths vaultPaths,
+                      VaultClient vaultClient, EncryptedSecretConfig encryptedSecrets) {
         this.inventory = inventory;
         this.vaultPaths = vaultPaths;
         this.vaultClient = vaultClient;
+        this.encryptedSecrets = encryptedSecrets;
     }
 
     /**
@@ -187,11 +209,12 @@ public class NodeGroup {
      * if needed.</p>
      *
      * @param groupName the name of the group from the inventory file
+     * @param system the actor system for workflow execution (required for Node's Interpreter capabilities)
      * @return the list of created Node objects
      * @throws IllegalStateException if inventory has not been loaded
      * @throws RuntimeException if Vault secret retrieval fails
      */
-    public List<Node> createNodesForGroup(String groupName) {
+    public List<Node> createNodesForGroup(String groupName, IIActorSystem system) {
         if (inventory == null) {
             throw new IllegalStateException("Inventory not loaded. Call loadInventory() first.");
         }
@@ -215,11 +238,14 @@ public class NodeGroup {
             int port = Integer.parseInt(effectiveVars.getOrDefault("ansible_port", "22"));
             String identityFile = effectiveVars.get("ansible_ssh_private_key_file");
 
-            // Fetch secrets from Vault if configured
+            // Fetch secrets from Vault or encrypted config
             String sshKeyContent = null;
+            String sshPassphrase = null;
             String sudoPassword = null;
 
+            // Priority: Vault > Encrypted Secrets
             if (vaultClient != null && vaultPaths != null) {
+                // Fetch from Vault
                 Map<String, String> vaultPathsForHost = vaultPaths.getPathsForHost(hostname, groupName);
 
                 // Fetch SSH key from Vault
@@ -233,6 +259,17 @@ public class NodeGroup {
                     }
                 }
 
+                // Fetch SSH passphrase from Vault
+                String sshPassphrasePath = vaultPathsForHost.get("ssh_passphrase_path");
+                if (sshPassphrasePath != null) {
+                    try {
+                        sshPassphrase = vaultClient.readSecret(sshPassphrasePath);
+                    } catch (VaultClient.VaultException e) {
+                        throw new RuntimeException(
+                            "Failed to read SSH passphrase from Vault for host " + hostname + ": " + e.getMessage(), e);
+                    }
+                }
+
                 // Fetch sudo password from Vault
                 String sudoPasswordPath = vaultPathsForHost.get("sudo_password_path");
                 if (sudoPasswordPath != null) {
@@ -243,9 +280,16 @@ public class NodeGroup {
                             "Failed to read sudo password from Vault for host " + hostname + ": " + e.getMessage(), e);
                     }
                 }
+            } else if (encryptedSecrets != null) {
+                // Fetch from encrypted secrets
+                Map<String, String> secrets = encryptedSecrets.getSecretsForHost(hostname, groupName);
+
+                sshKeyContent = secrets.get("ssh_key");
+                sshPassphrase = secrets.get("ssh_passphrase");
+                sudoPassword = secrets.get("sudo_password");
             }
 
-            Node node = new Node(hostname, user, port, identityFile, sshKeyContent, sudoPassword);
+            Node node = new Node(hostname, user, port, identityFile, sshKeyContent, sshPassphrase, sudoPassword, system);
             nodes.add(node);
         }
 

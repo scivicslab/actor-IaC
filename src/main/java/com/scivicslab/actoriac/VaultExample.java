@@ -18,7 +18,7 @@
 package com.scivicslab.actoriac;
 
 import com.scivicslab.pojoactor.ActorRef;
-import com.scivicslab.pojoactor.ActorSystem;
+import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 import java.io.FileInputStream;
 import java.util.List;
@@ -81,22 +81,26 @@ public class VaultExample {
                     .build();
             System.out.println("Cluster created with inventory and Vault configuration loaded\n");
 
-            // Step 3: Create Node objects for webservers group
-            System.out.println("Step 3: Creating Node objects for webservers group...");
+            // Step 3: Create actor system (using IIActorSystem for workflow support)
+            System.out.println("Step 3: Creating actor system...");
+            IIActorSystem system = new IIActorSystem("vault-iac-example");
+            System.out.println("Actor system created\n");
+
+            // Step 4: Create Node objects for webservers group
+            System.out.println("Step 4: Creating Node objects for webservers group...");
             System.out.println("(This will fetch SSH keys and sudo passwords from Vault)");
-            List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
+            List<Node> nodes = nodeGroup.createNodesForGroup("webservers", system);
             System.out.println("Created " + nodes.size() + " Node objects\n");
 
-            // Step 4: Convert Node objects to actors
-            System.out.println("Step 4: Converting Node objects to actors...");
-            ActorSystem system = new ActorSystem("vault-iac-example", 4);
+            // Step 5: Convert Node objects to actors
+            System.out.println("Step 5: Converting Node objects to actors...");
             List<ActorRef<Node>> webservers = nodes.stream()
                     .map(node -> system.actorOf("node-" + node.getHostname().replace(".", "-"), node))
                     .toList();
             System.out.println("Created " + webservers.size() + " node actors\n");
 
-            // Step 5: Execute a regular command
-            System.out.println("Step 5: Executing hostname command on all webservers...");
+            // Step 6: Execute a regular command
+            System.out.println("Step 6: Executing hostname command on all webservers...");
             List<CompletableFuture<Node.CommandResult>> hostnameFutures = webservers.stream()
                     .map(nodeActor -> nodeActor.ask(node -> {
                         try {
@@ -119,8 +123,8 @@ public class VaultExample {
             }
             System.out.println();
 
-            // Step 6: Execute a sudo command
-            System.out.println("Step 6: Executing sudo command (using Vault password)...");
+            // Step 7: Execute a sudo command
+            System.out.println("Step 7: Executing sudo command (using Vault password)...");
             if (!webservers.isEmpty()) {
                 ActorRef<Node> firstNode = webservers.get(0);
                 String nodeName = firstNode.ask(Node::getHostname).get();
@@ -147,8 +151,8 @@ public class VaultExample {
             }
             System.out.println();
 
-            // Step 7: Cleanup
-            System.out.println("Step 7: Cleaning up...");
+            // Step 8: Cleanup
+            System.out.println("Step 8: Cleaning up...");
 
             // Clean up temporary SSH key files
             for (ActorRef<Node> nodeActor : webservers) {

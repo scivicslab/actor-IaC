@@ -65,7 +65,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
 
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes");
     }
@@ -76,7 +76,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers", null);
 
         assertEquals(2, dbservers.size(), "Should create 2 dbserver nodes");
     }
@@ -87,9 +87,9 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
-        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
-        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers", null);
+        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers", null);
 
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes");
         assertEquals(2, dbservers.size(), "Should create 2 dbserver nodes");
@@ -100,7 +100,7 @@ class NodeGroupTest {
     @DisplayName("Should throw exception when creating nodes without loading inventory")
     void testCreateNodesWithoutInventory() {
         assertThrows(IllegalStateException.class, () -> {
-            nodeGroup.createNodesForGroup("webservers");
+            nodeGroup.createNodesForGroup("webservers", null);
         }, "Should throw IllegalStateException when inventory not loaded");
     }
 
@@ -110,7 +110,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers");
+        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers", null);
 
         // lb1 has no host-specific vars, should use global vars
         Node lb1 = loadbalancers.get(0);
@@ -135,7 +135,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
 
         // Find web1 and web2 by hostname
         Node web1 = webservers.stream()
@@ -161,7 +161,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers", null);
 
         // Find db1 and db2 by hostname
         Node db1 = dbservers.stream()
@@ -193,7 +193,7 @@ class NodeGroupTest {
 
         assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded via Builder");
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes via Builder");
     }
 

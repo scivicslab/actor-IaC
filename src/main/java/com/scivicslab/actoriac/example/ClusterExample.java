@@ -20,7 +20,7 @@ package com.scivicslab.actoriac.example;
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.Node;
 import com.scivicslab.pojoactor.ActorRef;
-import com.scivicslab.pojoactor.ActorSystem;
+import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 import java.io.InputStream;
 import java.util.List;
@@ -62,13 +62,16 @@ public class ClusterExample {
             System.out.println("Available groups: " +
                 nodeGroup.getInventory().getAllGroups().keySet());
 
+            // Create actor system (using IIActorSystem for workflow support)
+            IIActorSystem actorSystem = new IIActorSystem("iac-system");
+
             // Create Node objects for webservers group
-            List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
+            // Note: Nodes now extend Interpreter and can execute workflows
+            List<Node> nodes = nodeGroup.createNodesForGroup("webservers", actorSystem);
             System.out.println("\nCreated " + nodes.size() +
                 " Node objects for webservers group");
 
             // Convert Node objects to actors
-            ActorSystem actorSystem = new ActorSystem("iac-system", 4);
             List<ActorRef<Node>> webservers = nodes.stream()
                 .map(node -> actorSystem.actorOf("node-" + node.getHostname().replace(".", "-"), node))
                 .toList();
