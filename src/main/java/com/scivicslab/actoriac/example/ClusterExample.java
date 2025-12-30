@@ -19,7 +19,7 @@ package com.scivicslab.actoriac.example;
 
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.Node;
-import com.scivicslab.pojoactor.ActorRef;
+import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 import java.io.InputStream;

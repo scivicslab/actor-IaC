@@ -23,7 +23,7 @@ import java.util.logging.Logger;
 
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.NodeGroupIIAR;
-import com.scivicslab.pojoactor.ActionResult;
+import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 /**
