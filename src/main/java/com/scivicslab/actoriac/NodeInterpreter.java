@@ -1,0 +1,126 @@
+/*
+ * Copyright 2025 devteam@scivics-lab.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package com.scivicslab.actoriac;
+
+import java.io.IOException;
+
+import com.scivicslab.pojoactor.workflow.IIActorSystem;
+import com.scivicslab.pojoactor.workflow.Interpreter;
+
+/**
+ * Level 3 wrapper that adds workflow capabilities to a Node POJO.
+ *
+ * <p>This class extends {@link Interpreter} to provide workflow execution
+ * capabilities while delegating SSH operations to a wrapped {@link Node} instance.</p>
+ *
+ * <p>This demonstrates the three-level architecture of actor-IaC:</p>
+ * <ul>
+ * <li><strong>Level 1 (POJO):</strong> {@link Node} - pure POJO with SSH functionality</li>
+ * <li><strong>Level 2 (Actor):</strong> ActorRef&lt;Node&gt; - actor wrapper for concurrent execution</li>
+ * <li><strong>Level 3 (Workflow):</strong> NodeInterpreter - workflow capabilities + IIActorRef wrapper</li>
+ * </ul>
+ *
+ * <p><strong>Design principle:</strong> Node remains a pure POJO, independent of ActorSystem.
+ * NodeInterpreter wraps Node to add workflow capabilities without modifying the Node class.</p>
+ *
+ * @author devteam@scivics-lab.com
+ */
+public class NodeInterpreter extends Interpreter {
+
+    /**
+     * The wrapped Node POJO that handles actual SSH operations.
+     */
+    private final Node node;
+
+    /**
+     * Constructs a NodeInterpreter that wraps the specified Node.
+     *
+     * @param node the {@link Node} instance to wrap
+     * @param system the actor system for workflow execution
+     */
+    public NodeInterpreter(Node node, IIActorSystem system) {
+        super();
+        this.node = node;
+        this.system = system;
+    }
+
+    /**
+     * Executes a command on the remote node via SSH.
+     *
+     * <p>Delegates to the wrapped {@link Node#executeCommand(String)} method.</p>
+     *
+     * @param command the command to execute
+     * @return the result of the command execution
+     * @throws IOException if SSH connection fails
+     */
+    public Node.CommandResult executeCommand(String command) throws IOException {
+        return node.executeCommand(command);
+    }
+
+    /**
+     * Executes a command with sudo privileges on the remote node.
+     *
+     * <p>Delegates to the wrapped {@link Node#executeSudoCommand(String)} method.
+     * Requires SUDO_PASSWORD environment variable to be set.</p>
+     *
+     * @param command the command to execute with sudo
+     * @return the result of the command execution
+     * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set
+     */
+    public Node.CommandResult executeSudoCommand(String command) throws IOException {
+        return node.executeSudoCommand(command);
+    }
+
+    /**
+     * Gets the hostname of the node.
+     *
+     * @return the hostname
+     */
+    public String getHostname() {
+        return node.getHostname();
+    }
+
+    /**
+     * Gets the username for SSH connections.
+     *
+     * @return the username
+     */
+    public String getUser() {
+        return node.getUser();
+    }
+
+    /**
+     * Gets the SSH port.
+     *
+     * @return the SSH port number
+     */
+    public int getPort() {
+        return node.getPort();
+    }
+
+    /**
+     * Gets the wrapped Node instance.
+     *
+     * <p>This allows direct access to the underlying POJO when needed.</p>
+     *
+     * @return the wrapped Node
+     */
+    public Node getNode() {
+        return node;
+    }
+}

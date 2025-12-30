@@ -17,9 +17,6 @@
 
 package com.scivicslab.actoriac;
 
-import com.scivicslab.pojoactor.ActorRef;
-import com.scivicslab.pojoactor.ActorSystem;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -65,7 +62,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
 
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes");
     }
@@ -76,7 +73,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers", null);
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
 
         assertEquals(2, dbservers.size(), "Should create 2 dbserver nodes");
     }
@@ -87,9 +84,9 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
-        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers", null);
-        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers", null);
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
+        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers");
 
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes");
         assertEquals(2, dbservers.size(), "Should create 2 dbserver nodes");
@@ -100,7 +97,7 @@ class NodeGroupTest {
     @DisplayName("Should throw exception when creating nodes without loading inventory")
     void testCreateNodesWithoutInventory() {
         assertThrows(IllegalStateException.class, () -> {
-            nodeGroup.createNodesForGroup("webservers", null);
+            nodeGroup.createNodesForGroup("webservers");
         }, "Should throw IllegalStateException when inventory not loaded");
     }
 
@@ -110,7 +107,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers", null);
+        List<Node> loadbalancers = nodeGroup.createNodesForGroup("loadbalancers");
 
         // lb1 has no host-specific vars, should use global vars
         Node lb1 = loadbalancers.get(0);
@@ -125,7 +122,6 @@ class NodeGroupTest {
         nodeGroup.loadInventory(input);
 
         String clusterInfo = nodeGroup.toString();
-        assertTrue(clusterInfo.contains("vaultEnabled=false"), "Should show Vault not enabled");
         assertTrue(clusterInfo.contains("webservers"), "Should show groups");
     }
 
@@ -135,7 +131,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
 
         // Find web1 and web2 by hostname
         Node web1 = webservers.stream()
@@ -161,7 +157,7 @@ class NodeGroupTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         nodeGroup.loadInventory(input);
 
-        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers", null);
+        List<Node> dbservers = nodeGroup.createNodesForGroup("dbservers");
 
         // Find db1 and db2 by hostname
         Node db1 = dbservers.stream()
@@ -193,23 +189,8 @@ class NodeGroupTest {
 
         assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded via Builder");
 
-        List<Node> webservers = nodeGroup.createNodesForGroup("webservers", null);
+        List<Node> webservers = nodeGroup.createNodesForGroup("webservers");
         assertEquals(2, webservers.size(), "Should create 2 webserver nodes via Builder");
-    }
-
-    @Test
-    @DisplayName("Should create nodeGroup with Vault using Builder pattern")
-    void testBuilderPatternWithVault() throws IOException {
-        // Note: This test uses null VaultClient as we don't have a real Vault server
-        // In production, you would pass a real VaultClient instance
-        InputStream inventoryInput = getClass().getResourceAsStream("/test-inventory.ini");
-
-        NodeGroup nodeGroup = new NodeGroup.Builder()
-            .withInventory(inventoryInput)
-            .build();
-
-        assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded");
-        assertNull(nodeGroup.getVaultClient(), "VaultClient should be null when not configured");
     }
 
     @Test

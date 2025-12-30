@@ -66,8 +66,8 @@ public class ClusterExample {
             IIActorSystem actorSystem = new IIActorSystem("iac-system");
 
             // Create Node objects for webservers group
-            // Note: Nodes now extend Interpreter and can execute workflows
-            List<Node> nodes = nodeGroup.createNodesForGroup("webservers", actorSystem);
+            // Note: Nodes are pure POJOs with SSH functionality
+            List<Node> nodes = nodeGroup.createNodesForGroup("webservers");
             System.out.println("\nCreated " + nodes.size() +
                 " Node objects for webservers group");
 

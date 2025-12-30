@@ -7,7 +7,7 @@
 
     <groupId>com.scivicslab</groupId>
     <artifactId>actor-IaC</artifactId>
-    <version>1.0.0</version>
+    <version>2.6.0</version>
     <packaging>jar</packaging>
 
     <name>actor-IaC</name>
@@ -41,6 +41,13 @@
             <groupId>com.github.mwiede</groupId>
             <artifactId>jsch</artifactId>
             <version>0.2.16</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.kohlschutter.junixsocket</groupId>
+            <artifactId>junixsocket-core</artifactId>
+            <version>2.9.1</version>
+            <type>pom</type>
         </dependency>
 
         <dependency>
@@ -81,6 +88,13 @@
                         <goals>
                             <goal>shade</goal>
                         </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.scivicslab.actoriac.example.WorkflowRunner</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

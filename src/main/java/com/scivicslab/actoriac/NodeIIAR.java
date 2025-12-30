@@ -33,10 +33,10 @@ import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 /**
- * Interpreter-interfaced actor reference for {@link Node} instances.
+ * Interpreter-interfaced actor reference for {@link NodeInterpreter} instances.
  *
  * <p>This class provides a concrete implementation of {@link IIActorRef}
- * specifically for {@link Node} objects. It handles action invocations
+ * specifically for {@link NodeInterpreter} objects. It handles action invocations
  * by name, supporting both workflow execution actions (inherited from Interpreter)
  * and infrastructure actions (SSH command execution).</p>
  *
@@ -53,7 +53,7 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  * <li><strong>Infrastructure actions (Node-specific):</strong></li>
  *   <ul>
  *   <li>{@code executeCommand} - Executes a command on the remote node via SSH</li>
- *   <li>{@code executeSudoCommand} - Executes a command with sudo privileges</li>
+ *   <li>{@code executeSudoCommand} - Executes a command with sudo (requires SUDO_PASSWORD env var)</li>
  *   </ul>
  * </ul>
  *
@@ -69,40 +69,40 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  *   - states: [1, 2]
  *     actions:
  *       - actor: node-web-01
- *         method: executeSudoCommand
- *         arguments: ["systemctl restart nginx"]
+ *         method: executeCommand
+ *         arguments: ["ls -la"]
  * }</pre>
  *
  * @author devteam@scivics-lab.com
  */
-public class NodeIIAR extends IIActorRef<Node> {
+public class NodeIIAR extends IIActorRef<NodeInterpreter> {
 
     Logger logger = null;
 
     /**
-     * Constructs a new NodeIIAR with the specified actor name and node object.
+     * Constructs a new NodeIIAR with the specified actor name and node interpreter object.
      *
      * @param actorName the name of this actor
-     * @param object the {@link Node} instance managed by this actor reference
+     * @param object the {@link NodeInterpreter} instance managed by this actor reference
      */
-    public NodeIIAR(String actorName, Node object) {
+    public NodeIIAR(String actorName, NodeInterpreter object) {
         super(actorName, object);
         logger = Logger.getLogger(actorName);
     }
 
     /**
-     * Constructs a new NodeIIAR with the specified actor name, node object,
+     * Constructs a new NodeIIAR with the specified actor name, node interpreter object,
      * and actor system.
      *
      * @param actorName the name of this actor
-     * @param object the {@link Node} instance managed by this actor reference
+     * @param object the {@link NodeInterpreter} instance managed by this actor reference
      * @param system the actor system managing this actor
      */
-    public NodeIIAR(String actorName, Node object, IIActorSystem system) {
+    public NodeIIAR(String actorName, NodeInterpreter object, IIActorSystem system) {
         super(actorName, object, system);
         logger = Logger.getLogger(actorName);
 
-        // Set the selfActorRef in the Interpreter (which Node extends)
+        // Set the selfActorRef in the Interpreter (NodeInterpreter extends Interpreter)
         object.setSelfActorRef(this);
     }
 
@@ -112,7 +112,7 @@ public class NodeIIAR extends IIActorRef<Node> {
      * <p>This method handles both Interpreter actions (workflow execution) and
      * Node-specific actions (SSH command execution).</p>
      *
-     * <p>For command execution actions ({@code executeCommand}, {@code executeSudoCommand}),
+     * <p>For command execution actions ({@code executeCommand}),
      * the {@code arg} parameter should be a JSON array with a single string element
      * containing the command to execute, e.g., {@code ["ls -la"]}.</p>
      *

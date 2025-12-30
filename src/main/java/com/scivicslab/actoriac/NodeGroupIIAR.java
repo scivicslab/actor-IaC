@@ -164,8 +164,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroup> {
     /**
      * Creates child node actors for all nodes in the specified group.
      *
-     * <p>This method creates Node objects using the NodeGroup's inventory,
-     * wraps each in a NodeIIAR, and registers them as children of this actor
+     * <p>This method creates Node POJOs using the NodeGroup's inventory,
+     * wraps each in a NodeInterpreter (for workflow capabilities),
+     * then wraps in a NodeIIAR, and registers them as children of this actor
      * using the parent-child relationship mechanism.</p>
      *
      * @param groupName the name of the group from the inventory file
@@ -177,18 +178,21 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroup> {
             IIActorSystem system = (IIActorSystem) this.system();
 
             // Create Node POJOs for the group
-            List<Node> nodes = nodeGroup.createNodesForGroup(groupName, system);
+            List<Node> nodes = nodeGroup.createNodesForGroup(groupName);
 
             // Create child actors for each node
             for (Node node : nodes) {
                 String nodeName = "node-" + node.getHostname();
 
+                // Wrap Node in NodeInterpreter to add workflow capabilities
+                NodeInterpreter nodeInterpreter = new NodeInterpreter(node, system);
+
                 // Create child actor using ActorRef.createChild()
                 // This establishes parent-child relationship
-                this.createChild(nodeName, node);
+                this.createChild(nodeName, nodeInterpreter);
 
                 // Also wrap in NodeIIAR and add to system for workflow execution
-                NodeIIAR nodeActor = new NodeIIAR(nodeName, node, system);
+                NodeIIAR nodeActor = new NodeIIAR(nodeName, nodeInterpreter, system);
                 system.addIIActor(nodeActor);
 
                 logger.info(String.format("Created child node actor: %s", nodeName));

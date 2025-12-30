@@ -21,51 +21,47 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.logging.Logger;
 
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import com.scivicslab.pojoactor.workflow.Interpreter;
+import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 /**
- * Represents a single node in the infrastructure as a pure POJO.
+ * Represents a single node in the infrastructure that can execute workflows.
  *
- * <p>This is a pure POJO class that provides SSH-based command execution
- * capabilities. It has NO dependency on ActorSystem or workflow components.</p>
+ * <p>This class extends {@link Interpreter} to combine SSH-based command execution
+ * with workflow execution capabilities. Each Node instance can:</p>
+ * <ul>
+ *   <li>Execute commands on remote nodes via SSH</li>
+ *   <li>Execute workflows defined in YAML/JSON/XML files</li>
+ *   <li>Maintain independent workflow execution state (currentState, currentRow)</li>
+ * </ul>
  *
- * <h2>Three Levels of Usage</h2>
+ * <p>Supports Vault-based secret management for SSH keys and sudo passwords.</p>
  *
- * <h3>Level 1: Pure POJO (Synchronous)</h3>
- * <pre>{@code
- * Node node = new Node("192.168.1.1", "admin");
- * CommandResult result = node.executeCommand("show version");
- * System.out.println(result.getStdout());
- * }</pre>
- *
- * <h3>Level 2: Actor-based (Asynchronous, Parallel)</h3>
- * <pre>{@code
- * ActorSystem system = new ActorSystem("iac", 4);
- * ActorRef<Node> nodeActor = system.actorOf("node1", node);
- * CompletableFuture<CommandResult> future = nodeActor.ask(n -> n.executeCommand("show version"));
- * }</pre>
- *
- * <h3>Level 3: Workflow-based (YAML/JSON/XML)</h3>
- * <pre>{@code
- * // Use NodeInterpreter instead for workflow capabilities
- * NodeInterpreter nodeInterpreter = new NodeInterpreter(node, system);
- * IIActorRef<NodeInterpreter> nodeActor = new IIActorRef<>("node1", nodeInterpreter, system);
- * }</pre>
- *
- * <p>Uses ssh-agent for SSH key authentication. Make sure ssh-agent is running
- * and your SSH key is added before using this class.</p>
+ * <p><b>Design rationale:</b> Node extends Interpreter rather than composing it because:</p>
+ * <ul>
+ *   <li>Node "is a" specialized Interpreter with SSH capabilities (is-a relationship)</li>
+ *   <li>Each Node needs independent workflow execution state</li>
+ *   <li>Simplifies ActorSystem registration (only one actor per node)</li>
+ *   <li>Workflow YAML can reference "actor: node" unambiguously</li>
+ * </ul>
  *
  * @author devteam@scivics-lab.com
  */
-public class Node {
+public class Node extends Interpreter {
 
     private final String hostname;
     private final String user;
     private final int port;
+    private final String identityFile;
+    private final String sshKeyContent;
+    private final String sshPassphrase;
+    private final String sudoPassword;
 
     /**
      * Constructs a Node with the specified connection parameters (POJO constructor).
@@ -73,21 +69,58 @@ public class Node {
      * @param hostname the hostname or IP address of the node
      * @param user the SSH username
      * @param port the SSH port (typically 22)
+     * @param identityFile the path to SSH private key file (can be null)
      */
-    public Node(String hostname, String user, int port) {
-        this.hostname = hostname;
-        this.user = user;
-        this.port = port;
+    public Node(String hostname, String user, int port, String identityFile) {
+        this(hostname, user, port, identityFile, null, null, null);
     }
 
     /**
-     * Constructs a Node with default port 22 (POJO constructor).
+     * Constructs a Node with Vault-provided secrets (POJO constructor).
+     *
+     * @param hostname the hostname or IP address of the node
+     * @param user the SSH username
+     * @param port the SSH port (typically 22)
+     * @param identityFile the path to SSH private key file (can be null)
+     * @param sshKeyContent SSH private key content from Vault (can be null)
+     * @param sshPassphrase SSH key passphrase from Vault (can be null)
+     * @param sudoPassword sudo password from Vault (can be null)
+     */
+    public Node(String hostname, String user, int port, String identityFile,
+                String sshKeyContent, String sshPassphrase, String sudoPassword) {
+        // Initialize Interpreter fields
+        super();
+        this.system = null;  // Will be set later if Node is converted to actor
+        this.logger = Logger.getLogger("node-" + hostname);
+
+        // Initialize Node-specific fields
+        this.hostname = hostname;
+        this.user = user;
+        this.port = port;
+        this.identityFile = identityFile;
+        this.sshKeyContent = sshKeyContent;
+        this.sshPassphrase = sshPassphrase;
+        this.sudoPassword = sudoPassword;
+    }
+
+    /**
+     * Constructs a Node with default port 22 and no identity file (POJO constructor).
      *
      * @param hostname the hostname or IP address of the node
      * @param user the SSH username
      */
     public Node(String hostname, String user) {
-        this(hostname, user, 22);
+        this(hostname, user, 22, null);
+    }
+
+    /**
+     * Sets the ActorSystem for workflow execution.
+     * This should be called by IIActorRef when the Node is converted to an actor.
+     *
+     * @param system the actor system for workflow execution
+     */
+    public void setActorSystem(IIActorSystem system) {
+        this.system = system;
     }
 
     /**
@@ -165,31 +198,6 @@ public class Node {
         }
     }
 
-    private static final String SUDO_PASSWORD_ENV = "SUDO_PASSWORD";
-
-    /**
-     * Executes a command with sudo privileges on the remote node.
-     *
-     * <p>Reads the sudo password from the SUDO_PASSWORD environment variable.
-     * If the environment variable is not set, throws an IOException.</p>
-     *
-     * @param command the command to execute with sudo
-     * @return the execution result containing stdout, stderr, and exit code
-     * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set
-     */
-    public CommandResult executeSudoCommand(String command) throws IOException {
-        String sudoPassword = System.getenv(SUDO_PASSWORD_ENV);
-        if (sudoPassword == null || sudoPassword.isEmpty()) {
-            throw new IOException("SUDO_PASSWORD environment variable is not set");
-        }
-
-        // Use sudo -S to read password from stdin
-        String sudoCommand = String.format("echo '%s' | sudo -S %s",
-            sudoPassword.replace("'", "'\\''"), command);
-
-        return executeCommand(sudoCommand);
-    }
-
     /**
      * Creates a JSch SSH session with configured credentials.
      *
@@ -200,66 +208,65 @@ public class Node {
     private Session createSession() throws JSchException, IOException {
         JSch jsch = new JSch();
 
-        // Setup ssh-agent (required)
-        try {
-            com.jcraft.jsch.IdentityRepository repo =
-                new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
-            jsch.setIdentityRepository(repo);
-        } catch (Exception e) {
-            throw new IOException("ssh-agent is not available. Please start ssh-agent and add your SSH key: " +
-                "eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/your_key", e);
-        }
-
-        // Load OpenSSH config file (for user/hostname/port only, NOT for IdentityFile)
-        com.jcraft.jsch.ConfigRepository configRepository = null;
-        try {
-            String sshConfigPath = System.getProperty("user.home") + "/.ssh/config";
-            java.io.File configFile = new java.io.File(sshConfigPath);
-            if (configFile.exists()) {
-                com.jcraft.jsch.OpenSSHConfig openSSHConfig =
-                    com.jcraft.jsch.OpenSSHConfig.parseFile(sshConfigPath);
-                configRepository = openSSHConfig;
-                // Do NOT call jsch.setConfigRepository() - it would override ssh-agent with IdentityFile
-            }
-        } catch (Exception e) {
-            // If config loading fails, continue without it
-        }
-
-        // Get effective connection parameters from SSH config
-        String effectiveUser = user;
-        String effectiveHostname = hostname;
-        int effectivePort = port;
-
-        if (configRepository != null) {
-            com.jcraft.jsch.ConfigRepository.Config config = configRepository.getConfig(hostname);
-            if (config != null) {
-                // Override with SSH config values if present
-                String configUser = config.getUser();
-                if (configUser != null) {
-                    effectiveUser = configUser;
-                }
-                String configHostname = config.getHostname();
-                if (configHostname != null) {
-                    effectiveHostname = configHostname;
-                }
-                String configPort = config.getValue("Port");
-                if (configPort != null) {
-                    try {
-                        effectivePort = Integer.parseInt(configPort);
-                    } catch (NumberFormatException e) {
-                        // Keep original port
-                    }
-                }
+        // Add identity (SSH key)
+        if (sshKeyContent != null && !sshKeyContent.isEmpty()) {
+            // Use SSH key from Vault
+            byte[] keyBytes = sshKeyContent.getBytes();
+            byte[] passphraseBytes = (sshPassphrase != null) ? sshPassphrase.getBytes() : null;
+            jsch.addIdentity(hostname, keyBytes, null, passphraseBytes);
+        } else if (identityFile != null) {
+            // Use SSH key from file
+            if (sshPassphrase != null && !sshPassphrase.isEmpty()) {
+                jsch.addIdentity(identityFile, sshPassphrase);
+            } else {
+                jsch.addIdentity(identityFile);
             }
         }
 
         // Create session
-        Session session = jsch.getSession(effectiveUser, effectiveHostname, effectivePort);
+        Session session = jsch.getSession(user, hostname, port);
 
         // Disable strict host key checking (for convenience)
+        // In production, you might want to make this configurable
         session.setConfig("StrictHostKeyChecking", "no");
 
         return session;
+    }
+
+    /**
+     * Executes a command with sudo privileges on the remote node via SSH.
+     *
+     * <p>This method requires a sudo password to be configured (from Vault).
+     * The password is supplied via stdin to sudo -S.</p>
+     *
+     * @param command the command to execute with sudo
+     * @return the execution result containing stdout, stderr, and exit code
+     * @throws IOException if SSH connection or command execution fails
+     * @throws IllegalStateException if sudo password is not configured
+     */
+    public CommandResult executeSudoCommand(String command) throws IOException {
+        if (sudoPassword == null || sudoPassword.isEmpty()) {
+            throw new IllegalStateException(
+                "Cannot execute sudo command: sudo password not configured. " +
+                "Configure Vault integration to provide sudo password.");
+        }
+
+        // Use sudo -S to read password from stdin
+        // The command format: echo 'password' | sudo -S command
+        String sudoCommand = String.format("echo '%s' | sudo -S %s",
+            escapeSingleQuotes(sudoPassword), command);
+
+        return executeCommand(sudoCommand);
+    }
+
+    /**
+     * Escapes single quotes in a string for use in shell commands.
+     *
+     * @param str the string to escape
+     * @return the escaped string
+     */
+    private String escapeSingleQuotes(String str) {
+        return str.replace("'", "'\\''");
     }
 
     /**
@@ -296,6 +303,15 @@ public class Node {
      */
     public int getPort() {
         return port;
+    }
+
+    /**
+     * Gets the identity file path for this node.
+     *
+     * @return the identity file path, or null if not set
+     */
+    public String getIdentityFile() {
+        return identityFile;
     }
 
     @Override
