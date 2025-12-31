@@ -131,7 +131,7 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         try {
             // Workflow execution actions (from Interpreter)
             if (actionName.equals("execCode")) {
-                ActionResult result = this.ask(n -> n.execCode(), this.system().getWorkStealingPool()).get();
+                ActionResult result = this.ask(n -> n.execCode()).get();
                 return result;
             }
             else if (actionName.equals("readYaml")) {
@@ -199,7 +199,7 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
-                }, this.system().getWorkStealingPool()).get();
+                }).get();
 
                 success = result.isSuccess();
                 message = String.format("exitCode=%d, stdout='%s', stderr='%s'",
@@ -213,7 +213,7 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
-                }, this.system().getWorkStealingPool()).get();
+                }).get();
 
                 success = result.isSuccess();
                 message = String.format("exitCode=%d, stdout='%s', stderr='%s'",

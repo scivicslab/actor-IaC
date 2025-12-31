@@ -23,7 +23,7 @@ actor-IaC is an Infrastructure as Code tool built on top of the POJO-actor workf
 
 - Java 21 or higher
 - Maven 3.6+
-- POJO-actor 2.6.0
+- POJO-actor 2.7.0
 - SSH access to target nodes
 
 ## Core Components
@@ -116,21 +116,54 @@ for (int i = 0; i < futures.size(); i++) {
 system.terminate();
 ```
 
-#### Level 3: Workflow (XML/YAML/JSON)
+#### Level 3: Workflow (YAML/JSON/XML)
 
-*Coming soon in future milestone* - Define infrastructure operations declaratively.
+Using `IIActorSystem` + `IIActorRef` + `Interpreter`, define infrastructure operations declaratively in YAML, JSON, or XML. The workflow engine (actor-WF) executes actions through state transitions, providing Turing-complete expressiveness.
 
 ```yaml
-# Example workflow definition (future feature)
-workflow:
-  name: deploy-webservers
-  steps:
-    - cluster:
-        inventory: inventory.ini
-        group: webservers
-    - execute:
-        command: uptime
-        parallel: true
+# deploy-workflow.yaml
+name: deploy-webservers
+steps:
+  - states: ["0", "1"]
+    actions:
+      - actor: nodeGroup
+        method: createNodeActors
+        arguments: ["webservers"]
+  - states: ["1", "2"]
+    actions:
+      - actor: node-web1.example.com
+        method: executeCommand
+        arguments: ["apt-get update"]
+  - states: ["2", "end"]
+    actions:
+      - actor: node-web1.example.com
+        method: executeCommand
+        arguments: ["systemctl restart nginx"]
+```
+
+```java
+// Create IIActorSystem for workflow execution
+IIActorSystem system = new IIActorSystem("iac-workflow", 4);
+
+// Create NodeGroup and wrap with IIActorRef
+NodeGroup nodeGroup = new NodeGroup.Builder()
+    .withInventory(new FileInputStream("inventory.ini"))
+    .build();
+NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroup, system);
+system.addIIActor(nodeGroupActor);
+
+// Create and configure Interpreter
+Interpreter interpreter = new Interpreter.Builder()
+    .loggerName("deploy-workflow")
+    .team(system)
+    .build();
+
+// Load and execute workflow
+interpreter.readYaml(new FileInputStream("deploy-workflow.yaml"));
+ActionResult result = interpreter.runUntilEnd(100);
+
+System.out.println("Result: " + result.getResult());
+system.terminate();
 ```
 
 ### Inventory File Format
