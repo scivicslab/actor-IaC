@@ -27,6 +27,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.json.JSONArray;
+import org.json.JSONObject;
 
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
@@ -190,6 +191,46 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 success = true;
                 message = "Interpreter reset successfully";
             }
+            else if (actionName.equals("runUntilEnd")) {
+                // Parse optional maxIterations argument
+                int maxIterations = 10000;
+                if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
+                    try {
+                        JSONArray args = new JSONArray(arg);
+                        if (args.length() > 0) {
+                            maxIterations = args.getInt(0);
+                        }
+                    } catch (Exception e) {
+                        // Use default if parsing fails
+                    }
+                }
+                final int iterations = maxIterations;
+                ActionResult result = this.ask(n -> n.runUntilEnd(iterations)).get();
+                return result;
+            }
+            else if (actionName.equals("call")) {
+                // Subworkflow call (creates child actor) - uses Interpreter.call() method
+                JSONArray args = new JSONArray(arg);
+                String workflowFile = args.getString(0);
+                ActionResult result = this.ask(n -> n.call(workflowFile)).get();
+                return result;
+            }
+            else if (actionName.equals("runWorkflow")) {
+                // Load and run workflow directly (no child actor)
+                // Note: Call synchronously to avoid deadlock when runWorkflow calls execCode internally
+                JSONArray args = new JSONArray(arg);
+                String workflowFile = args.getString(0);
+                int maxIterations = args.length() > 1 ? args.getInt(1) : 10000;
+                logger.fine(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, maxIterations));
+                ActionResult result = this.object.runWorkflow(workflowFile, maxIterations);
+                logger.fine(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
+                return result;
+            }
+            else if (actionName.equals("apply")) {
+                // Apply action to child actors - uses Interpreter.apply() method
+                ActionResult result = this.ask(n -> n.apply(arg)).get();
+                return result;
+            }
             // Node-specific actions (SSH command execution)
             else if (actionName.equals("executeCommand")) {
                 String command = extractCommandFromArgs(arg);
@@ -219,6 +260,35 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 message = String.format("exitCode=%d, stdout='%s', stderr='%s'",
                     result.getExitCode(), result.getStdout(), result.getStderr());
             }
+            else if (actionName.equals("executeAndReport")) {
+                // Object argument: {"command": "...", "type": "cpu"}
+                JSONObject json = new JSONObject(arg);
+                String command = json.getString("command");
+                String type = json.getString("type");
+
+                // Execute command
+                Node.CommandResult result = this.ask(n -> {
+                    try {
+                        return n.executeCommand(command);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).get();
+
+                // Report to accumulator
+                IIActorSystem sys = (IIActorSystem) this.system();
+                IIActorRef<?> accumulator = sys.getIIActor("accumulator");
+                if (accumulator != null) {
+                    JSONObject reportArg = new JSONObject();
+                    reportArg.put("source", this.getName());
+                    reportArg.put("type", type);
+                    reportArg.put("data", result.getStdout().trim());
+                    accumulator.callByActionName("add", reportArg.toString());
+                }
+
+                success = result.isSuccess();
+                message = result.getStdout();
+            }
             // Utility actions
             else if (actionName.equals("sleep")) {
                 try {
@@ -247,11 +317,17 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
             }
         }
         catch (InterruptedException e) {
-            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
             message = "Interrupted: " + e.getMessage();
+            logger.warning(String.format("%s: %s", this.getName(), message));
         } catch (ExecutionException e) {
-            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
-            message = "Execution error: " + e.getMessage();
+            // Extract root cause message for cleaner output
+            Throwable cause = e.getCause();
+            while (cause != null && cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            String rootMsg = cause != null ? cause.getMessage() : e.getMessage();
+            message = rootMsg;
+            logger.warning(String.format("%s: %s", this.getName(), message));
         }
 
         return new ActionResult(success, message);

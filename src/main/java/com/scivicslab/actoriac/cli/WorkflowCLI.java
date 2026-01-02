@@ -29,10 +29,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
+import com.scivicslab.actoriac.NodeGroup;
+import com.scivicslab.actoriac.NodeGroupInterpreter;
+import com.scivicslab.actoriac.NodeGroupIIAR;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
-import com.scivicslab.pojoactor.workflow.Interpreter;
-import com.scivicslab.pojoactor.workflow.InterpreterIIAR;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -66,7 +67,7 @@ import picocli.CommandLine.Parameters;
 @Command(
     name = "actor-iac",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC 2.7.0",
+    version = "actor-IaC 2.8.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
 )
 public class WorkflowCLI implements Callable<Integer> {
@@ -86,6 +87,19 @@ public class WorkflowCLI implements Callable<Integer> {
         required = true
     )
     private String workflowName;
+
+    @Option(
+        names = {"-i", "--inventory"},
+        description = "Path to Ansible inventory file (enables node-based execution)"
+    )
+    private File inventoryFile;
+
+    @Option(
+        names = {"-g", "--group"},
+        description = "Name of the host group to target (requires --inventory)",
+        defaultValue = "all"
+    )
+    private String groupName;
 
     @Option(
         names = {"-t", "--threads"},
@@ -153,62 +167,78 @@ public class WorkflowCLI implements Callable<Integer> {
         LOG.info("Main workflow: " + mainWorkflowFile.getName());
         LOG.info("Worker threads: " + threads);
 
-        // Create actor system
+        // Execute workflow (use local inventory if none specified)
+        return executeWorkflow(mainWorkflowFile);
+    }
+
+    /**
+     * Executes workflow with node-based execution.
+     *
+     * <p>This method creates a proper workflow execution hierarchy:</p>
+     * <ol>
+     *   <li>Create IIActorSystem</li>
+     *   <li>Create NodeGroupIIAR and register with system (using inventory or localhost)</li>
+     *   <li>Create main Interpreter to execute the main workflow</li>
+     *   <li>Main workflow calls nodeGroup.createNodeActors and nodeGroup.apply</li>
+     *   <li>apply + runWorkflow executes sub-workflows on each node</li>
+     * </ol>
+     *
+     * @param mainWorkflowFile the main workflow file
+     * @return exit code
+     */
+    private Integer executeWorkflow(File mainWorkflowFile) {
+        NodeGroup nodeGroup;
+
         IIActorSystem system = new IIActorSystem("actor-iac-cli", threads);
 
         try {
-            // Create sub-workflow caller that uses file system
-            FileBasedSubWorkflowCaller subWorkflowCaller =
-                new FileBasedSubWorkflowCaller(system, this::findWorkflowFile);
-            system.addIIActor(new FileBasedSubWorkflowCallerIIAR(
-                "subWorkflow", subWorkflowCaller, system));
-
-            // Create and configure interpreter
-            Interpreter interpreter = new Interpreter.Builder()
-                .loggerName("main-workflow")
-                .team(system)
-                .build();
-
-            // Register interpreter as actor
-            InterpreterIIAR interpreterActor = new InterpreterIIAR("interpreter", interpreter, system);
-            system.addIIActor(interpreterActor);
-
-            // Load workflow file
-            loadWorkflow(interpreter, mainWorkflowFile);
-
-            LOG.info("Starting workflow execution...");
-            LOG.info("-".repeat(50));
-
-            // Execute workflow
-            int stepCount = 0;
-            int maxSteps = 10000;
-
-            while (stepCount < maxSteps) {
-                ActionResult result = interpreter.execCode();
-                stepCount++;
-
-                if (verbose) {
-                    LOG.info("Step " + stepCount + ": " + result.getResult());
-                }
-
-                if (!result.isSuccess()) {
-                    LOG.severe("Workflow failed at step " + stepCount + ": " + result.getResult());
+            if (inventoryFile != null) {
+                // Use specified inventory file
+                if (!inventoryFile.exists()) {
+                    LOG.severe("Inventory file does not exist: " + inventoryFile);
                     return 1;
                 }
-
-                if (result.getResult().contains("end")) {
-                    break;
-                }
+                LOG.info("Inventory: " + inventoryFile.getAbsolutePath());
+                nodeGroup = new NodeGroup.Builder()
+                    .withInventory(new FileInputStream(inventoryFile))
+                    .build();
+            } else {
+                // Use empty NodeGroup for local execution
+                LOG.info("Inventory: (none - using localhost)");
+                nodeGroup = new NodeGroup();
             }
 
-            if (stepCount >= maxSteps) {
-                LOG.severe("Workflow exceeded maximum steps (" + maxSteps + ")");
+            // Step 1: Create NodeGroupInterpreter (wraps NodeGroup with Interpreter capabilities)
+            NodeGroupInterpreter nodeGroupInterpreter = new NodeGroupInterpreter(nodeGroup, system);
+            nodeGroupInterpreter.setWorkflowBaseDir(workflowDir.getAbsolutePath());
+
+            // Step 2: Create NodeGroupIIAR and register with system
+            NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroupInterpreter, system);
+            system.addIIActor(nodeGroupActor);
+
+            // Step 3: Load the main workflow
+            LOG.info("Loading workflow: " + mainWorkflowFile.getAbsolutePath());
+            ActionResult loadResult = nodeGroupActor.callByActionName("readYaml",
+                "[\"" + mainWorkflowFile.getAbsolutePath() + "\"]");
+            if (!loadResult.isSuccess()) {
+                LOG.severe("Failed to load workflow: " + loadResult.getResult());
                 return 1;
             }
 
+            // Step 4: Execute the workflow
+            LOG.info("Starting workflow execution...");
             LOG.info("-".repeat(50));
-            LOG.info("Workflow completed successfully (" + stepCount + " steps)");
-            return 0;
+
+            ActionResult result = nodeGroupActor.callByActionName("runUntilEnd", "[10000]");
+
+            LOG.info("-".repeat(50));
+            if (result.isSuccess()) {
+                LOG.info("Workflow completed successfully: " + result.getResult());
+                return 0;
+            } else {
+                LOG.severe("Workflow failed: " + result.getResult());
+                return 1;
+            }
 
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Workflow execution failed", e);
@@ -289,31 +319,5 @@ public class WorkflowCLI implements Callable<Integer> {
         }
 
         return null;
-    }
-
-    /**
-     * Loads a workflow file into the interpreter.
-     *
-     * @param interpreter the interpreter
-     * @param file the workflow file
-     * @throws Exception if loading fails
-     */
-    private void loadWorkflow(Interpreter interpreter, File file) throws Exception {
-        String fileName = file.getName().toLowerCase();
-
-        try (FileInputStream fis = new FileInputStream(file)) {
-            if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
-                interpreter.readYaml(fis);
-            } else if (fileName.endsWith(".json")) {
-                interpreter.readJson(fis);
-            } else if (fileName.endsWith(".xml")) {
-                interpreter.readXml(fis);
-            } else {
-                throw new IllegalArgumentException(
-                    "Unsupported file format: " + fileName);
-            }
-        }
-
-        LOG.info("Loaded workflow: " + interpreter.getCode().getName());
     }
 }

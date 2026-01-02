@@ -23,6 +23,7 @@ import java.util.logging.Logger;
 
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.NodeGroupIIAR;
+import com.scivicslab.actoriac.NodeGroupInterpreter;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
@@ -121,9 +122,12 @@ public class WorkflowRunner {
                 .build();
             LOG.info("NodeGroup POJO created");
 
-            // Step 2: Convert POJO to IIActor (Level 3 functionality)
-            // NodeGroupIIAR wraps NodeGroup with workflow capabilities
-            NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroup, system);
+            // Step 2: Wrap NodeGroup with Interpreter (Level 3 functionality)
+            NodeGroupInterpreter nodeGroupInterpreter = new NodeGroupInterpreter(nodeGroup, system);
+            LOG.info("NodeGroupInterpreter created");
+
+            // Step 3: Convert to IIActor
+            NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroupInterpreter, system);
             system.addIIActor(nodeGroupActor);
             LOG.info("NodeGroupIIAR actor created");
 
@@ -139,6 +143,9 @@ public class WorkflowRunner {
 
     /**
      * Executes the workflow on the specified group.
+     *
+     * <p>Uses the apply method with runWorkflow to load and run workflows
+     * on all matching child actors in a single step.</p>
      *
      * @param groupName the name of the host group
      * @param workflowPath the path to the workflow file
@@ -156,10 +163,12 @@ public class WorkflowRunner {
         }
         LOG.log(Level.INFO, "Create result: {0}", createResult.getResult());
 
-        // Step 2: Apply workflow to all nodes
-        LOG.log(Level.INFO, "Applying workflow: {0}", workflowPath);
-        ActionResult result = nodeGroupActor.callByActionName(
-            "applyWorkflowToAllNodes", "[\"" + workflowPath + "\"]");
+        // Step 2: Run workflow on all nodes using apply + runWorkflow
+        LOG.log(Level.INFO, "Running workflow on all nodes: {0}", workflowPath);
+        String runAction = String.format(
+            "{\"actor\": \"node-*\", \"method\": \"runWorkflow\", \"arguments\": [\"%s\"]}",
+            workflowPath);
+        ActionResult result = nodeGroupActor.callByActionName("apply", runAction);
 
         LOG.info("Workflow execution result:");
         LOG.log(Level.INFO, "  Success: {0}", result.isSuccess());

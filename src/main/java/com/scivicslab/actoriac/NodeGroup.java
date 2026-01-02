@@ -157,15 +157,44 @@ public class NodeGroup {
             effectiveVars.putAll(inventory.getHostVars(hostname));
 
             // Extract connection parameters for this host
+            // Use ansible_host if specified, otherwise use the logical hostname
+            String actualHost = effectiveVars.getOrDefault("ansible_host", hostname);
             String user = effectiveVars.getOrDefault("ansible_user", System.getProperty("user.name"));
             int port = Integer.parseInt(effectiveVars.getOrDefault("ansible_port", "22"));
 
-            // Create Node - SSH authentication is handled by ssh-agent
-            Node node = new Node(hostname, user, port);
+            // Check if local connection mode is requested (like Ansible's ansible_connection=local)
+            String connection = effectiveVars.getOrDefault("ansible_connection", "ssh");
+            boolean localMode = "local".equalsIgnoreCase(connection);
+
+            // Create Node using actualHost (IP or DNS) for SSH connection
+            Node node = new Node(actualHost, user, port, localMode);
             nodes.add(node);
         }
 
         return nodes;
+    }
+
+    /**
+     * Creates a single Node for localhost execution.
+     *
+     * <p>This method creates a Node configured for local execution without requiring
+     * an inventory file. Useful for development, testing, or single-host scenarios.</p>
+     *
+     * <p>The node is created with:</p>
+     * <ul>
+     *   <li>hostname: "localhost"</li>
+     *   <li>user: current system user</li>
+     *   <li>localMode: true (uses ProcessBuilder instead of SSH)</li>
+     * </ul>
+     *
+     * @return a list containing a single localhost Node
+     */
+    public List<Node> createLocalNode() {
+        Node localNode = new Node("localhost",
+                                   System.getProperty("user.name"),
+                                   22,
+                                   true);  // localMode = true
+        return List.of(localNode);
     }
 
     /**

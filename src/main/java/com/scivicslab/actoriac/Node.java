@@ -66,6 +66,7 @@ public class Node {
     private final String hostname;
     private final String user;
     private final int port;
+    private final boolean localMode;
 
     /**
      * Constructs a Node with the specified connection parameters (POJO constructor).
@@ -75,9 +76,22 @@ public class Node {
      * @param port the SSH port (typically 22)
      */
     public Node(String hostname, String user, int port) {
+        this(hostname, user, port, false);
+    }
+
+    /**
+     * Constructs a Node with the specified connection parameters and local mode.
+     *
+     * @param hostname the hostname or IP address of the node
+     * @param user the SSH username
+     * @param port the SSH port (typically 22)
+     * @param localMode if true, execute commands locally instead of via SSH
+     */
+    public Node(String hostname, String user, int port, boolean localMode) {
         this.hostname = hostname;
         this.user = user;
         this.port = port;
+        this.localMode = localMode;
     }
 
     /**
@@ -87,7 +101,75 @@ public class Node {
      * @param user the SSH username
      */
     public Node(String hostname, String user) {
-        this(hostname, user, 22);
+        this(hostname, user, 22, false);
+    }
+
+    /**
+     * Checks if this node is in local execution mode.
+     *
+     * @return true if commands are executed locally, false for SSH
+     */
+    public boolean isLocalMode() {
+        return localMode;
+    }
+
+    /**
+     * Executes a command on the node.
+     *
+     * <p>If localMode is true, executes the command locally using ProcessBuilder.
+     * Otherwise, executes via SSH using JSch.</p>
+     *
+     * @param command the command to execute
+     * @return the execution result containing stdout, stderr, and exit code
+     * @throws IOException if command execution fails
+     */
+    public CommandResult executeCommand(String command) throws IOException {
+        if (localMode) {
+            return executeLocalCommand(command);
+        }
+        return executeRemoteCommand(command);
+    }
+
+    /**
+     * Executes a command locally using ProcessBuilder.
+     *
+     * @param command the command to execute
+     * @return the execution result
+     * @throws IOException if command execution fails
+     */
+    private CommandResult executeLocalCommand(String command) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
+        Process process = pb.start();
+
+        // Read stdout
+        StringBuilder stdoutBuilder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                stdoutBuilder.append(line).append("\n");
+            }
+        }
+
+        // Read stderr
+        StringBuilder stderrBuilder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                stderrBuilder.append(line).append("\n");
+            }
+        }
+
+        try {
+            int exitCode = process.waitFor();
+            return new CommandResult(
+                stdoutBuilder.toString().trim(),
+                stderrBuilder.toString().trim(),
+                exitCode
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Command execution interrupted", e);
+        }
     }
 
     /**
@@ -97,7 +179,7 @@ public class Node {
      * @return the execution result containing stdout, stderr, and exit code
      * @throws IOException if SSH connection or command execution fails
      */
-    public CommandResult executeCommand(String command) throws IOException {
+    private CommandResult executeRemoteCommand(String command) throws IOException {
         Session session = null;
         ChannelExec channel = null;
 
