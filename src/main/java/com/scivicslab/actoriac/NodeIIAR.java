@@ -29,6 +29,7 @@ import java.util.logging.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.github.lalyos.jfiglet.FigletFont;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
@@ -287,10 +288,17 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     result.getExitCode(), result.getStdout(), result.getStderr());
             }
             else if (actionName.equals("executeAndReport")) {
-                // Object argument: {"command": "...", "type": "cpu"}
+                // Object argument: {"command": "...", "type": "cpu"} or {"command": "..."}
                 JSONObject json = new JSONObject(arg);
                 String command = json.getString("command");
-                String type = json.getString("type");
+
+                // Generate label from first 10 characters of command (for accumulator type)
+                String bannerText = command.trim();
+                if (bannerText.length() > 10) {
+                    bannerText = bannerText.substring(0, 10);
+                }
+                // Remove newlines
+                bannerText = bannerText.replace("\n", " ").replace("\r", "");
 
                 // Execute command
                 Node.CommandResult result = this.ask(n -> {
@@ -301,19 +309,31 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     }
                 }).get();
 
-                // Report to accumulator
+                // Report to accumulator (include both stdout and stderr)
                 IIActorSystem sys = (IIActorSystem) this.system();
                 IIActorRef<?> accumulator = sys.getIIActor("accumulator");
                 if (accumulator != null) {
                     JSONObject reportArg = new JSONObject();
                     reportArg.put("source", this.getName());
+                    // Use type if provided, otherwise use first 10 chars of command
+                    String type = json.optString("type", bannerText);
                     reportArg.put("type", type);
-                    reportArg.put("data", result.getStdout().trim());
+                    // Combine stdout and stderr for complete output
+                    String output = result.getStdout().trim();
+                    String stderr = result.getStderr().trim();
+                    if (!stderr.isEmpty()) {
+                        output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;
+                    }
+                    reportArg.put("data", output);
                     accumulator.callByActionName("add", reportArg.toString());
                 }
 
                 success = result.isSuccess();
                 message = result.getStdout();
+                String stderr = result.getStderr().trim();
+                if (!stderr.isEmpty()) {
+                    message = message.isEmpty() ? stderr : message + "\n[stderr]\n" + stderr;
+                }
             }
             // Utility actions
             else if (actionName.equals("sleep")) {

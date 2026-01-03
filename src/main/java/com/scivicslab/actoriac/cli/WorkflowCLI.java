@@ -20,13 +20,19 @@ package com.scivicslab.actoriac.cli;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.logging.FileHandler;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 import java.util.stream.Stream;
 
 import com.scivicslab.actoriac.NodeGroup;
@@ -120,8 +126,23 @@ public class WorkflowCLI implements Callable<Integer> {
     )
     private File overlayDir;
 
+    @Option(
+        names = {"-l", "--log"},
+        description = "Log file path (default: actor-iac-YYYYMMDDHHmm.log in current directory)"
+    )
+    private File logFile;
+
+    @Option(
+        names = {"--no-log"},
+        description = "Disable file logging (output to console only)"
+    )
+    private boolean noLog;
+
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
+
+    /** File handler for logging */
+    private FileHandler fileHandler;
 
     /**
      * Main entry point.
@@ -129,6 +150,15 @@ public class WorkflowCLI implements Callable<Integer> {
      * @param args command line arguments
      */
     public static void main(String[] args) {
+        // Load logging configuration from resources
+        try (InputStream is = WorkflowCLI.class.getResourceAsStream("/logging.properties")) {
+            if (is != null) {
+                LogManager.getLogManager().readConfiguration(is);
+            }
+        } catch (IOException e) {
+            System.err.println("Warning: Failed to load logging.properties: " + e.getMessage());
+        }
+
         int exitCode = new CommandLine(new WorkflowCLI()).execute(args);
         System.exit(exitCode);
     }
@@ -140,6 +170,56 @@ public class WorkflowCLI implements Callable<Integer> {
      */
     @Override
     public Integer call() {
+        // Setup file logging
+        if (!noLog) {
+            try {
+                setupFileLogging();
+            } catch (IOException e) {
+                System.err.println("Warning: Failed to setup file logging: " + e.getMessage());
+            }
+        }
+
+        try {
+            return executeMain();
+        } finally {
+            // Clean up file handler
+            if (fileHandler != null) {
+                fileHandler.close();
+            }
+        }
+    }
+
+    /**
+     * Sets up file logging with default or specified log file.
+     *
+     * @throws IOException if log file cannot be created
+     */
+    private void setupFileLogging() throws IOException {
+        String logFilePath;
+        if (logFile != null) {
+            logFilePath = logFile.getAbsolutePath();
+        } else {
+            // Generate default log file name: actor-iac-YYYYMMDDHHmm.log
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmm"));
+            logFilePath = "actor-iac-" + timestamp + ".log";
+        }
+
+        fileHandler = new FileHandler(logFilePath, false);
+        fileHandler.setFormatter(new SimpleFormatter());
+
+        // Add handler to root logger to capture all logs
+        Logger rootLogger = Logger.getLogger("");
+        rootLogger.addHandler(fileHandler);
+
+        System.out.println("Logging to: " + logFilePath);
+    }
+
+    /**
+     * Main execution logic.
+     *
+     * @return exit code (0 for success, non-zero for failure)
+     */
+    private Integer executeMain() {
         // Validate workflow directory
         if (!workflowDir.exists()) {
             LOG.severe("Workflow directory does not exist: " + workflowDir);

@@ -19,8 +19,10 @@ package com.scivicslab.actoriac;
 
 import java.util.List;
 
+import com.github.ricksbrown.cowsay.Cowsay;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
+import com.scivicslab.pojoactor.workflow.Vertex;
 
 /**
  * Level 3 wrapper that adds workflow capabilities to a NodeGroup POJO.
@@ -127,5 +129,21 @@ public class NodeGroupInterpreter extends Interpreter {
      */
     public String getOverlayDir() {
         return overlayDir;
+    }
+
+    /**
+     * Hook called when entering a vertex during workflow execution.
+     *
+     * <p>Displays the first 5 lines of the vertex definition in YAML format
+     * using cowsay to provide visual separation between workflow steps.</p>
+     *
+     * @param vertex the vertex being entered
+     */
+    @Override
+    protected void onEnterVertex(Vertex vertex) {
+        // Get YAML-formatted output (first 5 lines)
+        String yamlText = vertex.toYamlString(5).trim();
+        String[] cowsayArgs = { yamlText };
+        System.out.println(Cowsay.say(cowsayArgs));
     }
 }
