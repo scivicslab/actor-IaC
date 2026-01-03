@@ -70,15 +70,13 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  *       - actor: this
  *         method: executeCommand
  *         arguments:
- *           command: "apt-get update"
- *           type: update
+ *           - "apt-get update"
  *   - states: ["1", "end"]
  *     actions:
  *       - actor: this
  *         method: executeCommand
  *         arguments:
- *           command: "ls -la"
- *           type: verify
+ *           - "ls -la"
  * }</pre>
  *
  * @author devteam@scivics-lab.com
@@ -296,18 +294,9 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     result.getExitCode(), result.getStdout(), result.getStderr());
             }
             // executeCommand: Execute and report to accumulator (default)
+            // Argument format: ["command"] (array with single command string)
             else if (actionName.equals("executeCommand")) {
-                // Object argument: {"command": "...", "type": "cpu"} or {"command": "..."}
-                JSONObject json = new JSONObject(arg);
-                String command = json.getString("command");
-
-                // Generate label from first 10 characters of command (for accumulator type)
-                String bannerText = command.trim();
-                if (bannerText.length() > 10) {
-                    bannerText = bannerText.substring(0, 10);
-                }
-                // Remove newlines
-                bannerText = bannerText.replace("\n", " ").replace("\r", "");
+                String command = extractCommandFromArgs(arg);
 
                 // Execute command
                 Node.CommandResult result = this.ask(n -> {
@@ -324,9 +313,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 if (accumulator != null) {
                     JSONObject reportArg = new JSONObject();
                     reportArg.put("source", this.getName());
-                    // Use type if provided, otherwise use first 10 chars of command
-                    String type = json.optString("type", bannerText);
-                    reportArg.put("type", type);
+                    // Use vertex YAML snippet as type (what step is being executed)
+                    reportArg.put("type", this.object.getCurrentVertexYaml());
                     // Combine stdout and stderr for complete output
                     String output = result.getStdout().trim();
                     String stderr = result.getStderr().trim();
@@ -345,17 +333,9 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 }
             }
             // executeSudoCommand: Execute sudo and report to accumulator (default)
+            // Argument format: ["command"] (array with single command string)
             else if (actionName.equals("executeSudoCommand")) {
-                // Object argument: {"command": "...", "type": "sshd-check"} or {"command": "..."}
-                JSONObject json = new JSONObject(arg);
-                String command = json.getString("command");
-
-                // Generate label from first 10 characters of command
-                String bannerText = command.trim();
-                if (bannerText.length() > 10) {
-                    bannerText = bannerText.substring(0, 10);
-                }
-                bannerText = bannerText.replace("\n", " ").replace("\r", "");
+                String command = extractCommandFromArgs(arg);
 
                 // Execute sudo command
                 Node.CommandResult result = this.ask(n -> {
@@ -372,8 +352,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 if (accumulator != null) {
                     JSONObject reportArg = new JSONObject();
                     reportArg.put("source", this.getName());
-                    String type = json.optString("type", bannerText);
-                    reportArg.put("type", type);
+                    // Use vertex YAML snippet as type (what step is being executed)
+                    reportArg.put("type", this.object.getCurrentVertexYaml());
                     String output = result.getStdout().trim();
                     String stderr = result.getStderr().trim();
                     if (!stderr.isEmpty()) {

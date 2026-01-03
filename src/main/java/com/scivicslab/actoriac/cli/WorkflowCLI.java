@@ -145,9 +145,15 @@ public class WorkflowCLI implements Callable<Integer> {
 
     @Option(
         names = {"--log-db"},
-        description = "H2 database path for distributed logging (enables structured log storage)"
+        description = "H2 database path for distributed logging (default: actor-iac-logs in workflow directory)"
     )
     private File logDbPath;
+
+    @Option(
+        names = {"--no-log-db"},
+        description = "Disable H2 database logging"
+    )
+    private boolean noLogDb;
 
     @Option(
         names = {"-k", "--ask-pass"},
@@ -208,8 +214,12 @@ public class WorkflowCLI implements Callable<Integer> {
             }
         }
 
-        // Setup H2 log database if specified
-        if (logDbPath != null) {
+        // Setup H2 log database (enabled by default, use --no-log-db to disable)
+        if (!noLogDb) {
+            if (logDbPath == null) {
+                // Default: actor-iac-logs in workflow directory
+                logDbPath = new File(workflowDir, "actor-iac-logs");
+            }
             try {
                 setupLogDatabase();
             } catch (SQLException e) {

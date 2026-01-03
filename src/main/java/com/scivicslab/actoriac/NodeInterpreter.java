@@ -61,6 +61,11 @@ public class NodeInterpreter extends Interpreter {
     private String overlayDir;
 
     /**
+     * The current vertex YAML snippet (first 5 lines) for accumulator reporting.
+     */
+    private String currentVertexYaml = "";
+
+    /**
      * Constructs a NodeInterpreter that wraps the specified Node.
      *
      * @param node the {@link Node} instance to wrap
@@ -70,6 +75,8 @@ public class NodeInterpreter extends Interpreter {
         super();
         this.node = node;
         this.system = system;
+        // Initialize parent's logger (used by Interpreter.runWorkflow error handling)
+        super.logger = logger;
     }
 
     /**
@@ -167,8 +174,18 @@ public class NodeInterpreter extends Interpreter {
     protected void onEnterVertex(Vertex vertex) {
         // Get YAML-formatted output (first 5 lines)
         String yamlText = vertex.toYamlString(5).trim();
+        this.currentVertexYaml = yamlText;
         String[] cowsayArgs = { yamlText };
         System.out.println(Cowsay.say(cowsayArgs));
+    }
+
+    /**
+     * Returns the current vertex YAML snippet for accumulator reporting.
+     *
+     * @return the first 5 lines of the current vertex in YAML format
+     */
+    public String getCurrentVertexYaml() {
+        return currentVertexYaml;
     }
 
     /**
