@@ -48,6 +48,12 @@ public class NodeGroupInterpreter extends Interpreter {
     private final NodeGroup nodeGroup;
 
     /**
+     * The overlay directory path for YAML overlay feature.
+     * When set, workflows are loaded with overlay applied.
+     */
+    private String overlayDir;
+
+    /**
      * Constructs a NodeGroupInterpreter that wraps the specified NodeGroup.
      *
      * @param nodeGroup the {@link NodeGroup} instance to wrap
@@ -100,5 +106,26 @@ public class NodeGroupInterpreter extends Interpreter {
      */
     public NodeGroup getNodeGroup() {
         return nodeGroup;
+    }
+
+    /**
+     * Sets the overlay directory for YAML overlay feature.
+     *
+     * <p>When an overlay directory is set, workflows will be loaded with
+     * overlay applied, allowing environment-specific configuration.</p>
+     *
+     * @param overlayDir the path to the overlay directory containing overlay-conf.yaml
+     */
+    public void setOverlayDir(String overlayDir) {
+        this.overlayDir = overlayDir;
+    }
+
+    /**
+     * Gets the overlay directory path.
+     *
+     * @return the overlay directory path, or null if not set
+     */
+    public String getOverlayDir() {
+        return overlayDir;
     }
 }

@@ -67,7 +67,7 @@ import picocli.CommandLine.Parameters;
 @Command(
     name = "actor-iac",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC 2.8.0",
+    version = "actor-IaC 2.9.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
 )
 public class WorkflowCLI implements Callable<Integer> {
@@ -113,6 +113,12 @@ public class WorkflowCLI implements Callable<Integer> {
         description = "Enable verbose output"
     )
     private boolean verbose;
+
+    @Option(
+        names = {"-o", "--overlay"},
+        description = "Overlay directory containing overlay-conf.yaml for environment-specific configuration"
+    )
+    private File overlayDir;
 
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
@@ -162,9 +168,24 @@ public class WorkflowCLI implements Callable<Integer> {
             return 1;
         }
 
+        // Validate overlay directory if specified
+        if (overlayDir != null) {
+            if (!overlayDir.exists()) {
+                LOG.severe("Overlay directory does not exist: " + overlayDir);
+                return 1;
+            }
+            if (!overlayDir.isDirectory()) {
+                LOG.severe("Overlay path is not a directory: " + overlayDir);
+                return 1;
+            }
+        }
+
         LOG.info("=== actor-IaC Workflow CLI ===");
         LOG.info("Workflow directory: " + workflowDir.getAbsolutePath());
         LOG.info("Main workflow: " + mainWorkflowFile.getName());
+        if (overlayDir != null) {
+            LOG.info("Overlay: " + overlayDir.getAbsolutePath());
+        }
         LOG.info("Worker threads: " + threads);
 
         // Execute workflow (use local inventory if none specified)
@@ -211,6 +232,9 @@ public class WorkflowCLI implements Callable<Integer> {
             // Step 1: Create NodeGroupInterpreter (wraps NodeGroup with Interpreter capabilities)
             NodeGroupInterpreter nodeGroupInterpreter = new NodeGroupInterpreter(nodeGroup, system);
             nodeGroupInterpreter.setWorkflowBaseDir(workflowDir.getAbsolutePath());
+            if (overlayDir != null) {
+                nodeGroupInterpreter.setOverlayDir(overlayDir.getAbsolutePath());
+            }
 
             // Step 2: Create NodeGroupIIAR and register with system
             NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroupInterpreter, system);

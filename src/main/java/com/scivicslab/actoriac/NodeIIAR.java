@@ -136,16 +136,42 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 return result;
             }
             else if (actionName.equals("readYaml")) {
-                try (InputStream input = new FileInputStream(new File(arg))) {
-                    this.tell(n -> n.readYaml(input)).get();
-                    success = true;
-                    message = "YAML loaded successfully";
+                try {
+                    String overlayPath = this.object.getOverlayDir();
+                    if (overlayPath != null) {
+                        // Use overlay: readYaml(Path, Path)
+                        java.nio.file.Path yamlPath = java.nio.file.Path.of(arg);
+                        java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);
+                        this.tell(n -> {
+                            try {
+                                n.readYaml(yamlPath, overlayDir);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }).get();
+                        success = true;
+                        message = "YAML loaded with overlay: " + overlayPath;
+                    } else {
+                        // No overlay: use InputStream
+                        try (InputStream input = new FileInputStream(new File(arg))) {
+                            this.tell(n -> n.readYaml(input)).get();
+                            success = true;
+                            message = "YAML loaded successfully";
+                        }
+                    }
                 } catch (FileNotFoundException e) {
                     logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
                     message = "File not found: " + arg;
                 } catch (IOException e) {
                     logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
                     message = "IO error: " + arg;
+                } catch (RuntimeException e) {
+                    if (e.getCause() instanceof IOException) {
+                        logger.log(Level.SEVERE, String.format("IOException: %s", arg), e.getCause());
+                        message = "IO error: " + arg;
+                    } else {
+                        throw e;
+                    }
                 }
             }
             else if (actionName.equals("readJson")) {

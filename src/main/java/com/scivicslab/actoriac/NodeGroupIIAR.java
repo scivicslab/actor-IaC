@@ -178,16 +178,42 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             }
             else if (actionName.equals("readYaml")) {
                 String filePath = extractSingleArgument(arg);
-                try (java.io.InputStream input = new java.io.FileInputStream(new java.io.File(filePath))) {
-                    this.tell(n -> n.readYaml(input)).get();
-                    success = true;
-                    message = "YAML loaded successfully";
+                try {
+                    String overlayPath = this.object.getOverlayDir();
+                    if (overlayPath != null) {
+                        // Use overlay: readYaml(Path, Path)
+                        java.nio.file.Path yamlPath = java.nio.file.Path.of(filePath);
+                        java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);
+                        this.tell(n -> {
+                            try {
+                                n.readYaml(yamlPath, overlayDir);
+                            } catch (java.io.IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }).get();
+                        success = true;
+                        message = "YAML loaded with overlay: " + overlayPath;
+                    } else {
+                        // No overlay: use InputStream
+                        try (java.io.InputStream input = new java.io.FileInputStream(new java.io.File(filePath))) {
+                            this.tell(n -> n.readYaml(input)).get();
+                            success = true;
+                            message = "YAML loaded successfully";
+                        }
+                    }
                 } catch (java.io.FileNotFoundException e) {
                     logger.log(Level.SEVERE, String.format("file not found: %s", filePath), e);
                     message = "File not found: " + filePath;
                 } catch (java.io.IOException e) {
                     logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e);
                     message = "IO error: " + filePath;
+                } catch (RuntimeException e) {
+                    if (e.getCause() instanceof java.io.IOException) {
+                        logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e.getCause());
+                        message = "IO error: " + filePath;
+                    } else {
+                        throw e;
+                    }
                 }
             }
             // NodeGroup-specific actions
@@ -290,6 +316,11 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             // Propagate workflowBaseDir to child interpreter
             if (nodeGroupInterpreter.getWorkflowBaseDir() != null) {
                 nodeInterpreter.setWorkflowBaseDir(nodeGroupInterpreter.getWorkflowBaseDir());
+            }
+
+            // Propagate overlayDir to child interpreter
+            if (nodeGroupInterpreter.getOverlayDir() != null) {
+                nodeInterpreter.setOverlayDir(nodeGroupInterpreter.getOverlayDir());
             }
 
             // Create child actor using ActorRef.createChild()

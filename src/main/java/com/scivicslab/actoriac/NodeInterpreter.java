@@ -48,6 +48,11 @@ public class NodeInterpreter extends Interpreter {
     private final Node node;
 
     /**
+     * The overlay directory path for YAML overlay feature.
+     */
+    private String overlayDir;
+
+    /**
      * Constructs a NodeInterpreter that wraps the specified Node.
      *
      * @param node the {@link Node} instance to wrap
@@ -122,5 +127,23 @@ public class NodeInterpreter extends Interpreter {
      */
     public Node getNode() {
         return node;
+    }
+
+    /**
+     * Sets the overlay directory for YAML overlay feature.
+     *
+     * @param overlayDir the path to the overlay directory containing overlay-conf.yaml
+     */
+    public void setOverlayDir(String overlayDir) {
+        this.overlayDir = overlayDir;
+    }
+
+    /**
+     * Gets the overlay directory path.
+     *
+     * @return the overlay directory path, or null if not set
+     */
+    public String getOverlayDir() {
+        return overlayDir;
     }
 }
