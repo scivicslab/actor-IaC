@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -38,6 +39,10 @@ import java.util.stream.Stream;
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.NodeGroupInterpreter;
 import com.scivicslab.actoriac.NodeGroupIIAR;
+import com.scivicslab.actoriac.log.DistributedLogStore;
+import com.scivicslab.actoriac.log.H2LogStore;
+import com.scivicslab.actoriac.log.LogLevel;
+import com.scivicslab.actoriac.log.SessionStatus;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
@@ -138,11 +143,35 @@ public class WorkflowCLI implements Callable<Integer> {
     )
     private boolean noLog;
 
+    @Option(
+        names = {"--log-db"},
+        description = "H2 database path for distributed logging (enables structured log storage)"
+    )
+    private File logDbPath;
+
+    @Option(
+        names = {"-k", "--ask-pass"},
+        description = "Prompt for SSH password (uses password authentication instead of ssh-agent)"
+    )
+    private boolean askPass;
+
+    @Option(
+        names = {"--limit"},
+        description = "Limit execution to specific hosts (comma-separated, e.g., '192.168.5.15' or '192.168.5.15,192.168.5.16')"
+    )
+    private String limitHosts;
+
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
 
     /** File handler for logging */
     private FileHandler fileHandler;
+
+    /** Distributed log store (H2 database) */
+    private DistributedLogStore logStore;
+
+    /** Current session ID for distributed logging */
+    private long sessionId = -1;
 
     /**
      * Main entry point.
@@ -179,14 +208,41 @@ public class WorkflowCLI implements Callable<Integer> {
             }
         }
 
+        // Setup H2 log database if specified
+        if (logDbPath != null) {
+            try {
+                setupLogDatabase();
+            } catch (SQLException e) {
+                System.err.println("Warning: Failed to setup log database: " + e.getMessage());
+            }
+        }
+
         try {
             return executeMain();
         } finally {
-            // Clean up file handler
+            // Clean up resources
             if (fileHandler != null) {
                 fileHandler.close();
             }
+            if (logStore != null) {
+                try {
+                    logStore.close();
+                } catch (Exception e) {
+                    System.err.println("Warning: Failed to close log database: " + e.getMessage());
+                }
+            }
         }
+    }
+
+    /**
+     * Sets up H2 database for distributed logging.
+     *
+     * @throws SQLException if database connection fails
+     */
+    private void setupLogDatabase() throws SQLException {
+        Path dbPath = logDbPath.toPath();
+        logStore = new H2LogStore(dbPath);
+        System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
     }
 
     /**
@@ -290,13 +346,30 @@ public class WorkflowCLI implements Callable<Integer> {
     private Integer executeWorkflow(File mainWorkflowFile) {
         NodeGroup nodeGroup;
 
+        // Prompt for password if --ask-pass is specified
+        String sshPassword = null;
+        if (askPass) {
+            sshPassword = promptForPassword("SSH password: ");
+            if (sshPassword == null) {
+                LOG.severe("Password input cancelled");
+                return 1;
+            }
+        }
+
         IIActorSystem system = new IIActorSystem("actor-iac-cli", threads);
+
+        // Start log session if log database is configured
+        if (logStore != null) {
+            sessionId = logStore.startSession(workflowName, 1); // nodeCount will be updated later
+            logStore.log(sessionId, "cli", LogLevel.INFO, "Starting workflow: " + workflowName);
+        }
 
         try {
             if (inventoryFile != null) {
                 // Use specified inventory file
                 if (!inventoryFile.exists()) {
                     LOG.severe("Inventory file does not exist: " + inventoryFile);
+                    logToDb("cli", LogLevel.ERROR, "Inventory file does not exist: " + inventoryFile);
                     return 1;
                 }
                 LOG.info("Inventory: " + inventoryFile.getAbsolutePath());
@@ -309,11 +382,30 @@ public class WorkflowCLI implements Callable<Integer> {
                 nodeGroup = new NodeGroup();
             }
 
+            // Set SSH password if provided
+            if (sshPassword != null) {
+                nodeGroup.setSshPassword(sshPassword);
+                LOG.info("Authentication: password");
+            } else {
+                LOG.info("Authentication: ssh-agent");
+            }
+
+            // Set host limit if provided
+            if (limitHosts != null) {
+                nodeGroup.setHostLimit(limitHosts);
+                LOG.info("Host limit: " + limitHosts);
+            }
+
             // Step 1: Create NodeGroupInterpreter (wraps NodeGroup with Interpreter capabilities)
             NodeGroupInterpreter nodeGroupInterpreter = new NodeGroupInterpreter(nodeGroup, system);
             nodeGroupInterpreter.setWorkflowBaseDir(workflowDir.getAbsolutePath());
             if (overlayDir != null) {
                 nodeGroupInterpreter.setOverlayDir(overlayDir.getAbsolutePath());
+            }
+
+            // Inject log store into interpreter for node-level logging
+            if (logStore != null) {
+                nodeGroupInterpreter.setLogStore(logStore, sessionId);
             }
 
             // Step 2: Create NodeGroupIIAR and register with system
@@ -322,33 +414,94 @@ public class WorkflowCLI implements Callable<Integer> {
 
             // Step 3: Load the main workflow
             LOG.info("Loading workflow: " + mainWorkflowFile.getAbsolutePath());
+            logToDb("cli", LogLevel.INFO, "Loading workflow: " + mainWorkflowFile.getName());
+
             ActionResult loadResult = nodeGroupActor.callByActionName("readYaml",
                 "[\"" + mainWorkflowFile.getAbsolutePath() + "\"]");
             if (!loadResult.isSuccess()) {
                 LOG.severe("Failed to load workflow: " + loadResult.getResult());
+                logToDb("cli", LogLevel.ERROR, "Failed to load workflow: " + loadResult.getResult());
+                endSession(SessionStatus.FAILED);
                 return 1;
             }
 
             // Step 4: Execute the workflow
             LOG.info("Starting workflow execution...");
             LOG.info("-".repeat(50));
+            logToDb("cli", LogLevel.INFO, "Starting workflow execution");
 
+            long startTime = System.currentTimeMillis();
             ActionResult result = nodeGroupActor.callByActionName("runUntilEnd", "[10000]");
+            long duration = System.currentTimeMillis() - startTime;
 
             LOG.info("-".repeat(50));
             if (result.isSuccess()) {
                 LOG.info("Workflow completed successfully: " + result.getResult());
+                logToDb("cli", LogLevel.INFO, "Workflow completed successfully in " + duration + "ms");
+                endSession(SessionStatus.COMPLETED);
                 return 0;
             } else {
                 LOG.severe("Workflow failed: " + result.getResult());
+                logToDb("cli", LogLevel.ERROR, "Workflow failed: " + result.getResult());
+                endSession(SessionStatus.FAILED);
                 return 1;
             }
 
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "Workflow execution failed", e);
+            logToDb("cli", LogLevel.ERROR, "Exception: " + e.getMessage());
+            endSession(SessionStatus.FAILED);
             return 1;
         } finally {
             system.terminate();
+        }
+    }
+
+    /**
+     * Logs a message to the distributed log store if available.
+     */
+    private void logToDb(String nodeId, LogLevel level, String message) {
+        if (logStore != null && sessionId >= 0) {
+            logStore.log(sessionId, nodeId, level, message);
+        }
+    }
+
+    /**
+     * Ends the current session with the given status.
+     */
+    private void endSession(SessionStatus status) {
+        if (logStore != null && sessionId >= 0) {
+            logStore.endSession(sessionId, status);
+        }
+    }
+
+    /**
+     * Prompts for a password from the console.
+     *
+     * <p>Uses System.console() for secure input (password is not echoed).
+     * Falls back to System.in if console is not available (e.g., in IDE).</p>
+     *
+     * @param prompt the prompt message to display
+     * @return the entered password, or null if input failed
+     */
+    private String promptForPassword(String prompt) {
+        java.io.Console console = System.console();
+        if (console != null) {
+            // Secure input - password not echoed
+            char[] passwordChars = console.readPassword(prompt);
+            if (passwordChars != null) {
+                return new String(passwordChars);
+            }
+            return null;
+        } else {
+            // Fallback for environments without console (e.g., IDE)
+            System.out.print(prompt);
+            try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {
+                if (scanner.hasNextLine()) {
+                    return scanner.nextLine();
+                }
+            }
+            return null;
         }
     }
 

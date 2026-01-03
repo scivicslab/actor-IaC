@@ -54,6 +54,8 @@ import java.util.Map;
 public class NodeGroup {
 
     private InventoryParser.Inventory inventory;
+    private String sshPassword;
+    private List<String> hostLimit;
 
     /**
      * Builder for creating NodeGroup instances with fluent API.
@@ -151,6 +153,10 @@ public class NodeGroup {
 
         // Create nodes
         for (String hostname : hosts) {
+            // Apply host limit if set
+            if (hostLimit != null && !hostLimit.contains(hostname)) {
+                continue;
+            }
             // Merge vars with priority: host vars > group vars > global vars
             Map<String, String> effectiveVars = new HashMap<>(globalVars);
             effectiveVars.putAll(groupVars);
@@ -167,7 +173,7 @@ public class NodeGroup {
             boolean localMode = "local".equalsIgnoreCase(connection);
 
             // Create Node using actualHost (IP or DNS) for SSH connection
-            Node node = new Node(actualHost, user, port, localMode);
+            Node node = new Node(actualHost, user, port, localMode, sshPassword);
             nodes.add(node);
         }
 
@@ -204,6 +210,58 @@ public class NodeGroup {
      */
     public InventoryParser.Inventory getInventory() {
         return inventory;
+    }
+
+    /**
+     * Sets the SSH password for all nodes in this group.
+     *
+     * <p>When set, nodes will use password authentication instead of
+     * ssh-agent key authentication.</p>
+     *
+     * @param password the SSH password to use for all nodes
+     */
+    public void setSshPassword(String password) {
+        this.sshPassword = password;
+    }
+
+    /**
+     * Gets the SSH password.
+     *
+     * @return the SSH password, or null if not set
+     */
+    public String getSshPassword() {
+        return sshPassword;
+    }
+
+    /**
+     * Sets the host limit to restrict execution to specific hosts.
+     *
+     * <p>When set, only hosts in this list will be included when creating nodes.
+     * This is similar to Ansible's --limit option.</p>
+     *
+     * @param limitString comma-separated list of hosts (e.g., "192.168.5.15,192.168.5.16")
+     */
+    public void setHostLimit(String limitString) {
+        if (limitString == null || limitString.trim().isEmpty()) {
+            this.hostLimit = null;
+        } else {
+            this.hostLimit = new ArrayList<>();
+            for (String host : limitString.split(",")) {
+                String trimmed = host.trim();
+                if (!trimmed.isEmpty()) {
+                    this.hostLimit.add(trimmed);
+                }
+            }
+        }
+    }
+
+    /**
+     * Gets the host limit.
+     *
+     * @return the list of limited hosts, or null if no limit is set
+     */
+    public List<String> getHostLimit() {
+        return hostLimit;
     }
 
     @Override

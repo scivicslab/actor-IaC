@@ -1,0 +1,228 @@
+/*
+ * Copyright 2025 devteam@scivics-lab.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package com.scivicslab.actoriac.cli;
+
+import java.io.File;
+import java.nio.file.Path;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.concurrent.Callable;
+
+import com.scivicslab.actoriac.log.H2LogReader;
+import com.scivicslab.actoriac.log.LogEntry;
+import com.scivicslab.actoriac.log.LogLevel;
+import com.scivicslab.actoriac.log.SessionSummary;
+
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
+/**
+ * CLI tool for querying workflow execution logs from H2 database.
+ *
+ * <p>Usage examples:</p>
+ * <pre>
+ * # Show summary of the latest session
+ * java -jar actor-IaC.jar logs --db logs --summary
+ *
+ * # Show logs for a specific node
+ * java -jar actor-IaC.jar logs --db logs --node node-001
+ *
+ * # Show only error logs
+ * java -jar actor-IaC.jar logs --db logs --level ERROR
+ *
+ * # List all sessions
+ * java -jar actor-IaC.jar logs --db logs --list
+ * </pre>
+ *
+ * @author devteam@scivics-lab.com
+ */
+@Command(
+    name = "logs",
+    mixinStandardHelpOptions = true,
+    version = "actor-IaC logs 2.9.0",
+    description = "Query workflow execution logs from H2 database."
+)
+public class LogsCLI implements Callable<Integer> {
+
+    @Option(
+        names = {"--db"},
+        description = "H2 database path (without .mv.db extension)",
+        required = true
+    )
+    private File dbPath;
+
+    @Option(
+        names = {"-s", "--session"},
+        description = "Session ID to query (default: latest session)"
+    )
+    private Long sessionId;
+
+    @Option(
+        names = {"-n", "--node"},
+        description = "Filter logs by node ID"
+    )
+    private String nodeId;
+
+    @Option(
+        names = {"--level"},
+        description = "Minimum log level to show (DEBUG, INFO, WARN, ERROR)",
+        defaultValue = "DEBUG"
+    )
+    private LogLevel minLevel;
+
+    @Option(
+        names = {"--summary"},
+        description = "Show session summary only"
+    )
+    private boolean summaryOnly;
+
+    @Option(
+        names = {"--list"},
+        description = "List recent sessions"
+    )
+    private boolean listSessions;
+
+    @Option(
+        names = {"--limit"},
+        description = "Maximum number of entries to show",
+        defaultValue = "100"
+    )
+    private int limit;
+
+    /**
+     * Main entry point for the logs CLI.
+     *
+     * @param args command line arguments
+     */
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new LogsCLI()).execute(args);
+        System.exit(exitCode);
+    }
+
+    @Override
+    public Integer call() {
+        Path path = dbPath.toPath();
+
+        try (H2LogReader reader = new H2LogReader(path)) {
+            if (listSessions) {
+                return listRecentSessions(reader);
+            }
+
+            // Determine session ID
+            long targetSession = sessionId != null ? sessionId : reader.getLatestSessionId();
+            if (targetSession < 0) {
+                System.err.println("No sessions found in database.");
+                return 1;
+            }
+
+            if (summaryOnly) {
+                return showSummary(reader, targetSession);
+            }
+
+            return showLogs(reader, targetSession);
+
+        } catch (SQLException e) {
+            System.err.println("Database error: " + e.getMessage());
+            return 1;
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+            return 1;
+        }
+    }
+
+    private Integer listRecentSessions(H2LogReader reader) {
+        List<SessionSummary> sessions = reader.listSessions(limit);
+        if (sessions.isEmpty()) {
+            System.out.println("No sessions found.");
+            return 0;
+        }
+
+        System.out.println("Recent Sessions:");
+        System.out.println("=".repeat(60));
+        for (SessionSummary summary : sessions) {
+            System.out.printf("#%-4d %-30s %-10s%n",
+                    summary.getSessionId(),
+                    summary.getWorkflowName(),
+                    summary.getStatus());
+            System.out.printf("      Started: %s%n",
+                    summary.getStartedAt() != null ?
+                            summary.getStartedAt().toString().replace("T", " ") : "N/A");
+            System.out.println("-".repeat(60));
+        }
+        return 0;
+    }
+
+    private Integer showSummary(H2LogReader reader, long targetSession) {
+        SessionSummary summary = reader.getSummary(targetSession);
+        if (summary == null) {
+            System.err.println("Session not found: " + targetSession);
+            return 1;
+        }
+        System.out.println(summary);
+        return 0;
+    }
+
+    private Integer showLogs(H2LogReader reader, long targetSession) {
+        List<LogEntry> logs;
+
+        if (nodeId != null) {
+            logs = reader.getLogsByNode(targetSession, nodeId);
+            System.out.println("Logs for node: " + nodeId);
+        } else {
+            logs = reader.getLogsByLevel(targetSession, minLevel);
+            System.out.println("Logs (level >= " + minLevel + "):");
+        }
+
+        System.out.println("=".repeat(80));
+
+        int count = 0;
+        for (LogEntry entry : logs) {
+            if (count >= limit) {
+                System.out.println("... (truncated, use --limit to show more)");
+                break;
+            }
+
+            // Format: [timestamp] LEVEL [node] message
+            String levelColor = getLevelPrefix(entry.getLevel());
+            System.out.printf("%s[%s] %-5s [%s] %s%s%n",
+                    levelColor,
+                    entry.getTimestamp().toString().replace("T", " "),
+                    entry.getLevel(),
+                    entry.getNodeId(),
+                    entry.getMessage(),
+                    "\u001B[0m"); // Reset color
+
+            count++;
+        }
+
+        System.out.println("=".repeat(80));
+        System.out.println("Total: " + logs.size() + " entries");
+
+        return 0;
+    }
+
+    private String getLevelPrefix(LogLevel level) {
+        return switch (level) {
+            case ERROR -> "\u001B[31m"; // Red
+            case WARN -> "\u001B[33m";  // Yellow
+            case INFO -> "\u001B[32m";  // Green
+            case DEBUG -> "\u001B[36m"; // Cyan
+        };
+    }
+}

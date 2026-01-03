@@ -335,6 +335,51 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     message = message.isEmpty() ? stderr : message + "\n[stderr]\n" + stderr;
                 }
             }
+            else if (actionName.equals("executeSudoAndReport")) {
+                // Object argument: {"command": "...", "type": "sshd-check"} or {"command": "..."}
+                JSONObject json = new JSONObject(arg);
+                String command = json.getString("command");
+
+                // Generate label from first 10 characters of command
+                String bannerText = command.trim();
+                if (bannerText.length() > 10) {
+                    bannerText = bannerText.substring(0, 10);
+                }
+                bannerText = bannerText.replace("\n", " ").replace("\r", "");
+
+                // Execute sudo command
+                Node.CommandResult result = this.ask(n -> {
+                    try {
+                        return n.executeSudoCommand(command);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).get();
+
+                // Report to accumulator
+                IIActorSystem sys = (IIActorSystem) this.system();
+                IIActorRef<?> accumulator = sys.getIIActor("accumulator");
+                if (accumulator != null) {
+                    JSONObject reportArg = new JSONObject();
+                    reportArg.put("source", this.getName());
+                    String type = json.optString("type", bannerText);
+                    reportArg.put("type", type);
+                    String output = result.getStdout().trim();
+                    String stderr = result.getStderr().trim();
+                    if (!stderr.isEmpty()) {
+                        output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;
+                    }
+                    reportArg.put("data", output);
+                    accumulator.callByActionName("add", reportArg.toString());
+                }
+
+                success = result.isSuccess();
+                message = result.getStdout();
+                String stderrSudo = result.getStderr().trim();
+                if (!stderrSudo.isEmpty()) {
+                    message = message.isEmpty() ? stderrSudo : message + "\n[stderr]\n" + stderrSudo;
+                }
+            }
             // Utility actions
             else if (actionName.equals("sleep")) {
                 try {

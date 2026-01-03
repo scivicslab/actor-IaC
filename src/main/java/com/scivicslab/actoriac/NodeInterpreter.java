@@ -18,8 +18,12 @@
 package com.scivicslab.actoriac;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.github.ricksbrown.cowsay.Cowsay;
+import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
 import com.scivicslab.pojoactor.workflow.Vertex;
@@ -43,6 +47,8 @@ import com.scivicslab.pojoactor.workflow.Vertex;
  * @author devteam@scivics-lab.com
  */
 public class NodeInterpreter extends Interpreter {
+
+    private static final Logger logger = Logger.getLogger(NodeInterpreter.class.getName());
 
     /**
      * The wrapped Node POJO that handles actual SSH operations.
@@ -163,5 +169,47 @@ public class NodeInterpreter extends Interpreter {
         String yamlText = vertex.toYamlString(5).trim();
         String[] cowsayArgs = { yamlText };
         System.out.println(Cowsay.say(cowsayArgs));
+    }
+
+    /**
+     * Loads and runs a workflow file to completion with overlay support.
+     *
+     * <p>If overlayDir is set, the workflow is loaded with overlay applied.
+     * Variables defined in overlay-conf.yaml are substituted before execution.</p>
+     *
+     * @param workflowFile the workflow file path (YAML or JSON)
+     * @param maxIterations maximum number of state transitions allowed
+     * @return ActionResult with success=true if completed, false otherwise
+     */
+    @Override
+    public ActionResult runWorkflow(String workflowFile, int maxIterations) {
+        // If no overlay is set, use parent implementation
+        if (overlayDir == null) {
+            return super.runWorkflow(workflowFile, maxIterations);
+        }
+
+        try {
+            // Reset state for fresh execution
+            reset();
+
+            // Resolve workflow file path
+            Path workflowPath;
+            if (workflowBaseDir != null) {
+                workflowPath = Path.of(workflowBaseDir, workflowFile);
+            } else {
+                workflowPath = Path.of(workflowFile);
+            }
+
+            // Load workflow with overlay applied
+            Path overlayPath = Path.of(overlayDir);
+            readYaml(workflowPath, overlayPath);
+
+            // Run until end
+            return runUntilEnd(maxIterations);
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error running workflow with overlay: " + workflowFile, e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 }

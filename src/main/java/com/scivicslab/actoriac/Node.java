@@ -67,6 +67,7 @@ public class Node {
     private final String user;
     private final int port;
     private final boolean localMode;
+    private final String password;
 
     /**
      * Constructs a Node with the specified connection parameters (POJO constructor).
@@ -76,7 +77,7 @@ public class Node {
      * @param port the SSH port (typically 22)
      */
     public Node(String hostname, String user, int port) {
-        this(hostname, user, port, false);
+        this(hostname, user, port, false, null);
     }
 
     /**
@@ -88,10 +89,24 @@ public class Node {
      * @param localMode if true, execute commands locally instead of via SSH
      */
     public Node(String hostname, String user, int port, boolean localMode) {
+        this(hostname, user, port, localMode, null);
+    }
+
+    /**
+     * Constructs a Node with all connection parameters including password.
+     *
+     * @param hostname the hostname or IP address of the node
+     * @param user the SSH username
+     * @param port the SSH port (typically 22)
+     * @param localMode if true, execute commands locally instead of via SSH
+     * @param password the SSH password (null to use ssh-agent key authentication)
+     */
+    public Node(String hostname, String user, int port, boolean localMode, String password) {
         this.hostname = hostname;
         this.user = user;
         this.port = port;
         this.localMode = localMode;
+        this.password = password;
     }
 
     /**
@@ -101,7 +116,7 @@ public class Node {
      * @param user the SSH username
      */
     public Node(String hostname, String user) {
-        this(hostname, user, 22, false);
+        this(hostname, user, 22, false, null);
     }
 
     /**
@@ -282,14 +297,20 @@ public class Node {
     private Session createSession() throws JSchException, IOException {
         JSch jsch = new JSch();
 
-        // Setup ssh-agent (required)
-        try {
-            com.jcraft.jsch.IdentityRepository repo =
-                new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
-            jsch.setIdentityRepository(repo);
-        } catch (Exception e) {
-            throw new IOException("ssh-agent is not available. Please start ssh-agent and add your SSH key: " +
-                "eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/your_key", e);
+        // Setup authentication
+        if (password != null && !password.isEmpty()) {
+            // Password authentication - no ssh-agent needed
+        } else {
+            // SSH key authentication via ssh-agent
+            try {
+                com.jcraft.jsch.IdentityRepository repo =
+                    new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
+                jsch.setIdentityRepository(repo);
+            } catch (Exception e) {
+                throw new IOException("ssh-agent is not available. Please start ssh-agent and add your SSH key: " +
+                    "eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/your_key\n" +
+                    "Or use --ask-pass for password authentication.", e);
+            }
         }
 
         // Load OpenSSH config file (for user/hostname/port only, NOT for IdentityFile)
@@ -337,6 +358,11 @@ public class Node {
 
         // Create session
         Session session = jsch.getSession(effectiveUser, effectiveHostname, effectivePort);
+
+        // Set password if using password authentication
+        if (password != null && !password.isEmpty()) {
+            session.setPassword(password);
+        }
 
         // Disable strict host key checking (for convenience)
         session.setConfig("StrictHostKeyChecking", "no");

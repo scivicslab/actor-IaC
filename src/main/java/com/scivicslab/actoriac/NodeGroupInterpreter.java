@@ -20,6 +20,8 @@ package com.scivicslab.actoriac;
 import java.util.List;
 
 import com.github.ricksbrown.cowsay.Cowsay;
+import com.scivicslab.actoriac.log.DistributedLogStore;
+import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
 import com.scivicslab.pojoactor.workflow.Vertex;
@@ -54,6 +56,16 @@ public class NodeGroupInterpreter extends Interpreter {
      * When set, workflows are loaded with overlay applied.
      */
     private String overlayDir;
+
+    /**
+     * Distributed log store for structured logging.
+     */
+    private DistributedLogStore logStore;
+
+    /**
+     * Session ID for the current workflow execution.
+     */
+    private long sessionId = -1;
 
     /**
      * Constructs a NodeGroupInterpreter that wraps the specified NodeGroup.
@@ -132,6 +144,35 @@ public class NodeGroupInterpreter extends Interpreter {
     }
 
     /**
+     * Sets the distributed log store for structured logging.
+     *
+     * @param logStore the log store to use
+     * @param sessionId the session ID for this execution
+     */
+    public void setLogStore(DistributedLogStore logStore, long sessionId) {
+        this.logStore = logStore;
+        this.sessionId = sessionId;
+    }
+
+    /**
+     * Gets the log store.
+     *
+     * @return the log store, or null if not set
+     */
+    public DistributedLogStore getLogStore() {
+        return logStore;
+    }
+
+    /**
+     * Gets the session ID.
+     *
+     * @return the session ID, or -1 if not set
+     */
+    public long getSessionId() {
+        return sessionId;
+    }
+
+    /**
      * Hook called when entering a vertex during workflow execution.
      *
      * <p>Displays the first 5 lines of the vertex definition in YAML format
@@ -145,5 +186,15 @@ public class NodeGroupInterpreter extends Interpreter {
         String yamlText = vertex.toYamlString(5).trim();
         String[] cowsayArgs = { yamlText };
         System.out.println(Cowsay.say(cowsayArgs));
+
+        // Log to distributed log store
+        if (logStore != null && sessionId >= 0) {
+            String vertexName = vertex.getVertexName();
+            if (vertexName == null && vertex.getStates() != null && vertex.getStates().size() >= 2) {
+                vertexName = vertex.getStates().get(0) + " -> " + vertex.getStates().get(1);
+            }
+            logStore.log(sessionId, "nodeGroup", vertexName, LogLevel.INFO,
+                    "Entering vertex: " + yamlText.split("\n")[0]);
+        }
     }
 }
