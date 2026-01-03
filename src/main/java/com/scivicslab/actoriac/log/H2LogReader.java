@@ -26,10 +26,9 @@ import java.util.List;
 /**
  * Read-only H2 log reader for querying workflow logs.
  *
- * <p>This class provides read-only access to the H2 log database,
+ * <p>This class provides access to the H2 log database for querying logs.
+ * Uses AUTO_SERVER=TRUE to connect to the H2 server started by the writer process,
  * allowing concurrent access while actor-IaC is writing logs.</p>
- *
- * <p>Uses ACCESS_MODE_DATA=r for read-only file access.</p>
  *
  * @author devteam@scivics-lab.com
  */
@@ -44,10 +43,10 @@ public class H2LogReader implements AutoCloseable {
      * @throws SQLException if database connection fails
      */
     public H2LogReader(Path dbPath) throws SQLException {
-        // ACCESS_MODE_DATA=r opens in read-only mode
         // AUTO_SERVER=TRUE allows connection while another process is writing
+        // H2 server is started by the writer process, reader connects to it
         String url = "jdbc:h2:" + dbPath.toAbsolutePath().toString()
-                   + ";ACCESS_MODE_DATA=r;AUTO_SERVER=TRUE";
+                   + ";AUTO_SERVER=TRUE";
         this.connection = DriverManager.getConnection(url);
     }
 
