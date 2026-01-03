@@ -54,8 +54,10 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  *   </ul>
  * <li><strong>Infrastructure actions (Node-specific):</strong></li>
  *   <ul>
- *   <li>{@code executeCommand} - Executes a command on the remote node via SSH</li>
- *   <li>{@code executeSudoCommand} - Executes a command with sudo (requires SUDO_PASSWORD env var)</li>
+ *   <li>{@code executeCommand} - Executes a command and reports to accumulator (default)</li>
+ *   <li>{@code executeCommandQuiet} - Executes a command without reporting</li>
+ *   <li>{@code executeSudoCommand} - Executes sudo command and reports to accumulator (default)</li>
+ *   <li>{@code executeSudoCommandQuiet} - Executes sudo command without reporting</li>
  *   </ul>
  * </ul>
  *
@@ -63,16 +65,20 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  * <pre>{@code
  * name: deploy-application
  * steps:
- *   - states: [0, 1]
+ *   - states: ["0", "1"]
  *     actions:
- *       - actor: node-web-01
+ *       - actor: this
  *         method: executeCommand
- *         arguments: ["apt-get update"]
- *   - states: [1, 2]
+ *         arguments:
+ *           command: "apt-get update"
+ *           type: update
+ *   - states: ["1", "end"]
  *     actions:
- *       - actor: node-web-01
+ *       - actor: this
  *         method: executeCommand
- *         arguments: ["ls -la"]
+ *         arguments:
+ *           command: "ls -la"
+ *           type: verify
  * }</pre>
  *
  * @author devteam@scivics-lab.com
@@ -259,7 +265,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 return result;
             }
             // Node-specific actions (SSH command execution)
-            else if (actionName.equals("executeCommand")) {
+            // executeCommandQuiet: Execute without reporting to accumulator
+            else if (actionName.equals("executeCommandQuiet")) {
                 String command = extractCommandFromArgs(arg);
                 Node.CommandResult result = this.ask(n -> {
                     try {
@@ -273,7 +280,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 message = String.format("exitCode=%d, stdout='%s', stderr='%s'",
                     result.getExitCode(), result.getStdout(), result.getStderr());
             }
-            else if (actionName.equals("executeSudoCommand")) {
+            // executeSudoCommandQuiet: Execute sudo without reporting to accumulator
+            else if (actionName.equals("executeSudoCommandQuiet")) {
                 String command = extractCommandFromArgs(arg);
                 Node.CommandResult result = this.ask(n -> {
                     try {
@@ -287,7 +295,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 message = String.format("exitCode=%d, stdout='%s', stderr='%s'",
                     result.getExitCode(), result.getStdout(), result.getStderr());
             }
-            else if (actionName.equals("executeAndReport")) {
+            // executeCommand: Execute and report to accumulator (default)
+            else if (actionName.equals("executeCommand")) {
                 // Object argument: {"command": "...", "type": "cpu"} or {"command": "..."}
                 JSONObject json = new JSONObject(arg);
                 String command = json.getString("command");
@@ -335,7 +344,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                     message = message.isEmpty() ? stderr : message + "\n[stderr]\n" + stderr;
                 }
             }
-            else if (actionName.equals("executeSudoAndReport")) {
+            // executeSudoCommand: Execute sudo and report to accumulator (default)
+            else if (actionName.equals("executeSudoCommand")) {
                 // Object argument: {"command": "...", "type": "sshd-check"} or {"command": "..."}
                 JSONObject json = new JSONObject(arg);
                 String command = json.getString("command");
