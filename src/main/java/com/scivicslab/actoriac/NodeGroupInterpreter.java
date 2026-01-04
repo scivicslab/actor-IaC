@@ -175,16 +175,24 @@ public class NodeGroupInterpreter extends Interpreter {
     /**
      * Hook called when entering a vertex during workflow execution.
      *
-     * <p>Displays the first 5 lines of the vertex definition in YAML format
-     * using cowsay to provide visual separation between workflow steps.</p>
+     * <p>Displays the workflow name and first 10 lines of the vertex definition
+     * in YAML format using cowsay to provide visual separation between workflow steps.</p>
      *
      * @param vertex the vertex being entered
      */
     @Override
     protected void onEnterVertex(Vertex vertex) {
-        // Get YAML-formatted output (first 5 lines)
-        String yamlText = vertex.toYamlString(5).trim();
-        String[] cowsayArgs = { yamlText };
+        // Get workflow name
+        String workflowName = (getCode() != null && getCode().getName() != null)
+                ? getCode().getName()
+                : "unknown-workflow";
+
+        // Get YAML-formatted output (first 10 lines)
+        String yamlText = vertex.toYamlString(10).trim();
+
+        // Combine workflow name and vertex YAML
+        String displayText = "[" + workflowName + "]\n" + yamlText;
+        String[] cowsayArgs = { displayText };
         System.out.println(Cowsay.say(cowsayArgs));
 
         // Log to distributed log store

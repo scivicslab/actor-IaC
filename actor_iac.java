@@ -19,15 +19,13 @@ class actor_iac {
     private static final String VERSION = "2.9.0";
 
     public static void main(String[] args) throws Exception {
-        String[] forwardedArgs = translateListCommand(args);
-
         File jarFile = locateJar();
 
         List<String> command = new ArrayList<>();
         command.add("java");
         command.add("-jar");
         command.add(jarFile.getAbsolutePath());
-        command.addAll(Arrays.asList(forwardedArgs));
+        command.addAll(Arrays.asList(args));
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.inheritIO();
@@ -35,18 +33,6 @@ class actor_iac {
 
         int exitCode = process.waitFor();
         System.exit(exitCode);
-    }
-
-    private static String[] translateListCommand(String[] args) {
-        if (args.length > 0 && "list".equalsIgnoreCase(args[0])) {
-            List<String> translated = new ArrayList<>();
-            translated.add("--list-workflows");
-            for (int i = 1; i < args.length; i++) {
-                translated.add(args[i]);
-            }
-            return translated.toArray(new String[0]);
-        }
-        return args;
     }
 
     private static File locateJar() {
@@ -60,11 +46,6 @@ class actor_iac {
         candidates.add(Paths.get(System.getProperty("user.home"),
                                  ".m2", "repository", "com", "scivicslab", "actor-IaC",
                                  VERSION, "actor-IaC-" + VERSION + ".jar"));
-
-        Path cwd = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
-        candidates.add(cwd.resolve("target").resolve("actor-IaC-" + VERSION + ".jar"));
-        candidates.add(cwd.resolve("../actor-IaC/target/actor-IaC-" + VERSION + ".jar").normalize());
-        candidates.add(cwd.resolve("../actor-IaC-w206/actor-IaC-" + VERSION + ".jar").normalize());
 
         for (Path candidate : candidates) {
             File file = candidate.toFile();

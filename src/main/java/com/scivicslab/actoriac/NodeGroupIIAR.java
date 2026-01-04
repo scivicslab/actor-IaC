@@ -33,9 +33,10 @@ import com.scivicslab.pojoactor.core.accumulator.BufferedAccumulator;
 import com.scivicslab.pojoactor.core.accumulator.JsonAccumulator;
 import com.scivicslab.pojoactor.core.accumulator.StreamingAccumulator;
 import com.scivicslab.pojoactor.core.accumulator.TableAccumulator;
-import com.scivicslab.pojoactor.workflow.accumulator.AccumulatorIIAR;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
+
+import com.scivicslab.actoriac.log.DistributedLogStore;
 
 /**
  * Interpreter-interfaced actor reference for {@link NodeGroupInterpreter} instances.
@@ -99,7 +100,7 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
 public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
 
     Logger logger = null;
-    private AccumulatorIIAR accumulatorActor = null;
+    private LoggingAccumulatorIIAR accumulatorActor = null;
 
     /**
      * Constructs a new NodeGroupIIAR with the specified actor name and nodeGroupInterpreter object.
@@ -514,6 +515,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
     /**
      * Creates an accumulator as a child actor.
      *
+     * <p>If a log store is configured in the NodeGroupInterpreter, creates a
+     * LoggingAccumulatorIIAR that also writes to the H2 database.</p>
+     *
      * @param type the accumulator type ("streaming", "buffered", "table", "json")
      */
     private void createAccumulator(String type) {
@@ -538,12 +542,17 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
                 throw new IllegalArgumentException("Unknown accumulator type: " + type);
         }
 
-        // Create actor and register as child
-        accumulatorActor = new AccumulatorIIAR("accumulator", accumulator, sys);
+        // Get logStore and sessionId from NodeGroupInterpreter
+        DistributedLogStore logStore = this.object.getLogStore();
+        long sessionId = this.object.getSessionId();
+
+        // Create LoggingAccumulatorIIAR that also writes to H2 database
+        accumulatorActor = new LoggingAccumulatorIIAR("accumulator", accumulator, sys, logStore, sessionId);
         this.createChild("accumulator", accumulator);
         sys.addIIActor(accumulatorActor);
 
-        logger.info(String.format("Created %s accumulator as child actor", type));
+        logger.info(String.format("Created %s accumulator as child actor (logging=%s)",
+            type, logStore != null ? "enabled" : "disabled"));
     }
 
     /**

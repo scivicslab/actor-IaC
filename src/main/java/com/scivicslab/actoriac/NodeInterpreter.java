@@ -61,7 +61,7 @@ public class NodeInterpreter extends Interpreter {
     private String overlayDir;
 
     /**
-     * The current vertex YAML snippet (first 5 lines) for accumulator reporting.
+     * The current vertex YAML snippet (first 10 lines) for accumulator reporting.
      */
     private String currentVertexYaml = "";
 
@@ -165,24 +165,32 @@ public class NodeInterpreter extends Interpreter {
     /**
      * Hook called when entering a vertex during workflow execution.
      *
-     * <p>Displays the first 5 lines of the vertex definition in YAML format
-     * using cowsay to provide visual separation between workflow steps.</p>
+     * <p>Displays the workflow name and first 10 lines of the vertex definition
+     * in YAML format using cowsay to provide visual separation between workflow steps.</p>
      *
      * @param vertex the vertex being entered
      */
     @Override
     protected void onEnterVertex(Vertex vertex) {
-        // Get YAML-formatted output (first 5 lines)
-        String yamlText = vertex.toYamlString(5).trim();
+        // Get workflow name
+        String workflowName = (getCode() != null && getCode().getName() != null)
+                ? getCode().getName()
+                : "unknown-workflow";
+
+        // Get YAML-formatted output (first 10 lines)
+        String yamlText = vertex.toYamlString(10).trim();
         this.currentVertexYaml = yamlText;
-        String[] cowsayArgs = { yamlText };
+
+        // Combine workflow name and vertex YAML
+        String displayText = "[" + workflowName + "]\n" + yamlText;
+        String[] cowsayArgs = { displayText };
         System.out.println(Cowsay.say(cowsayArgs));
     }
 
     /**
      * Returns the current vertex YAML snippet for accumulator reporting.
      *
-     * @return the first 5 lines of the current vertex in YAML format
+     * @return the first 10 lines of the current vertex in YAML format
      */
     public String getCurrentVertexYaml() {
         return currentVertexYaml;

@@ -20,6 +20,9 @@ package com.scivicslab.actoriac.cli;
 import java.io.File;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -59,6 +62,17 @@ import picocli.CommandLine.Option;
     description = "Query workflow execution logs from H2 database."
 )
 public class LogsCLI implements Callable<Integer> {
+
+    /**
+     * ISO 8601 format with timezone offset (e.g., 2026-01-05T10:30:00+09:00).
+     */
+    private static final DateTimeFormatter ISO_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+
+    /**
+     * System timezone for display.
+     */
+    private static final ZoneId SYSTEM_ZONE = ZoneId.systemDefault();
 
     @Option(
         names = {"--db"},
@@ -154,16 +168,14 @@ public class LogsCLI implements Callable<Integer> {
         }
 
         System.out.println("Recent Sessions:");
-        System.out.println("=".repeat(60));
+        System.out.println("=".repeat(70));
         for (SessionSummary summary : sessions) {
             System.out.printf("#%-4d %-30s %-10s%n",
                     summary.getSessionId(),
                     summary.getWorkflowName(),
                     summary.getStatus());
-            System.out.printf("      Started: %s%n",
-                    summary.getStartedAt() != null ?
-                            summary.getStartedAt().toString().replace("T", " ") : "N/A");
-            System.out.println("-".repeat(60));
+            System.out.printf("      Started: %s%n", formatTimestamp(summary.getStartedAt()));
+            System.out.println("-".repeat(70));
         }
         return 0;
     }
@@ -202,7 +214,7 @@ public class LogsCLI implements Callable<Integer> {
             String levelColor = getLevelPrefix(entry.getLevel());
             System.out.printf("%s[%s] %-5s [%s] %s%s%n",
                     levelColor,
-                    entry.getTimestamp().toString().replace("T", " "),
+                    formatTimestamp(entry.getTimestamp()),
                     entry.getLevel(),
                     entry.getNodeId(),
                     entry.getMessage(),
@@ -224,5 +236,20 @@ public class LogsCLI implements Callable<Integer> {
             case INFO -> "\u001B[32m";  // Green
             case DEBUG -> "\u001B[36m"; // Cyan
         };
+    }
+
+    /**
+     * Formats a LocalDateTime as ISO 8601 string with timezone offset.
+     *
+     * <p>Example output: 2026-01-05T10:30:00+09:00</p>
+     *
+     * @param timestamp the timestamp to format
+     * @return ISO 8601 formatted string, or "N/A" if null
+     */
+    private String formatTimestamp(LocalDateTime timestamp) {
+        if (timestamp == null) {
+            return "N/A";
+        }
+        return timestamp.atZone(SYSTEM_ZONE).format(ISO_FORMATTER);
     }
 }

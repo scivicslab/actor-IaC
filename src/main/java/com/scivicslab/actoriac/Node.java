@@ -146,7 +146,10 @@ public class Node {
     }
 
     /**
-     * Executes a command locally using ProcessBuilder.
+     * Executes a command locally using ProcessBuilder with real-time streaming.
+     *
+     * <p>Output is streamed to System.out/System.err in real-time as it becomes available,
+     * while also being captured for the CommandResult.</p>
      *
      * @param command the command to execute
      * @return the execution result
@@ -156,25 +159,36 @@ public class Node {
         ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
         Process process = pb.start();
 
-        // Read stdout
         StringBuilder stdoutBuilder = new StringBuilder();
+        StringBuilder stderrBuilder = new StringBuilder();
+
+        // Read stderr in separate thread to avoid deadlock
+        Thread stderrThread = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    synchronized (stderrBuilder) {
+                        stderrBuilder.append(line).append("\n");
+                    }
+                    System.err.println(line);
+                }
+            } catch (IOException e) {
+                // Ignore
+            }
+        });
+        stderrThread.start();
+
+        // Read stdout with real-time streaming
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 stdoutBuilder.append(line).append("\n");
-            }
-        }
-
-        // Read stderr
-        StringBuilder stderrBuilder = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                stderrBuilder.append(line).append("\n");
+                System.out.println(line);
             }
         }
 
         try {
+            stderrThread.join();
             int exitCode = process.waitFor();
             return new CommandResult(
                 stdoutBuilder.toString().trim(),
@@ -188,7 +202,10 @@ public class Node {
     }
 
     /**
-     * Executes a command on the remote node via SSH using JSch.
+     * Executes a command on the remote node via SSH using JSch with real-time streaming.
+     *
+     * <p>Output is streamed to System.out/System.err in real-time as it becomes available,
+     * while also being captured for the CommandResult.</p>
      *
      * @param command the command to execute
      * @return the execution result containing stdout, stderr, and exit code
@@ -207,30 +224,44 @@ public class Node {
             channel = (ChannelExec) session.openChannel("exec");
             channel.setCommand(command);
 
-            // Get streams
+            // Get streams before connecting
             InputStream stdout = channel.getInputStream();
             InputStream stderr = channel.getErrStream();
 
             // Connect channel
             channel.connect();
 
-            // Read stdout
             StringBuilder stdoutBuilder = new StringBuilder();
+            StringBuilder stderrBuilder = new StringBuilder();
+
+            // Read stderr in separate thread to avoid deadlock
+            final InputStream stderrFinal = stderr;
+            Thread stderrThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(stderrFinal))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        synchronized (stderrBuilder) {
+                            stderrBuilder.append(line).append("\n");
+                        }
+                        System.err.println(line);
+                    }
+                } catch (IOException e) {
+                    // Ignore
+                }
+            });
+            stderrThread.start();
+
+            // Read stdout with real-time streaming
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(stdout))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     stdoutBuilder.append(line).append("\n");
+                    System.out.println(line);
                 }
             }
 
-            // Read stderr
-            StringBuilder stderrBuilder = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stderr))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    stderrBuilder.append(line).append("\n");
-                }
-            }
+            // Wait for stderr thread
+            stderrThread.join();
 
             // Wait for channel to close
             while (!channel.isClosed()) {
@@ -252,6 +283,9 @@ public class Node {
 
         } catch (JSchException e) {
             throw new IOException("SSH connection failed: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Command execution interrupted", e);
         } finally {
             if (channel != null && channel.isConnected()) {
                 channel.disconnect();
@@ -270,6 +304,8 @@ public class Node {
      * <p>Reads the sudo password from the SUDO_PASSWORD environment variable.
      * If the environment variable is not set, throws an IOException.</p>
      *
+     * <p>Multi-line scripts are properly handled by wrapping them in bash -c.</p>
+     *
      * @param command the command to execute with sudo
      * @return the execution result containing stdout, stderr, and exit code
      * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set
@@ -280,9 +316,12 @@ public class Node {
             throw new IOException("SUDO_PASSWORD environment variable is not set");
         }
 
-        // Use sudo -S to read password from stdin
-        String sudoCommand = String.format("echo '%s' | sudo -S %s",
-            sudoPassword.replace("'", "'\\''"), command);
+        // Escape single quotes in command for bash -c
+        String escapedCommand = command.replace("'", "'\"'\"'");
+
+        // Use sudo -S to read password from stdin, wrap command in bash -c for multi-line support
+        String sudoCommand = String.format("echo '%s' | sudo -S bash -c '%s'",
+            sudoPassword.replace("'", "'\\''"), escapedCommand);
 
         return executeCommand(sudoCommand);
     }

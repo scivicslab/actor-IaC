@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -176,6 +177,12 @@ public class WorkflowCLI implements Callable<Integer> {
     )
     private boolean listWorkflows;
 
+    @Option(
+        names = {"-q", "--quiet"},
+        description = "Suppress all console output (stdout/stderr). Logs are still written to database."
+    )
+    private boolean quiet;
+
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
 
@@ -203,6 +210,12 @@ public class WorkflowCLI implements Callable<Integer> {
             System.err.println("Warning: Failed to load logging.properties: " + e.getMessage());
         }
 
+        if (args.length > 0 && "list".equalsIgnoreCase(args[0])) {
+            int exitCode = new CommandLine(new ListWorkflowsCommand())
+                .execute(Arrays.copyOfRange(args, 1, args.length));
+            System.exit(exitCode);
+        }
+
         int exitCode = new CommandLine(new WorkflowCLI()).execute(args);
         System.exit(exitCode);
     }
@@ -216,9 +229,16 @@ public class WorkflowCLI implements Callable<Integer> {
     public Integer call() {
         // Validate required options when running workflow (not subcommands)
         if (workflowDir == null || workflowName == null) {
-            System.err.println("Missing required options: '--dir=<workflowDir>', '--workflow=<workflowName>'");
-            CommandLine.usage(this, System.err);
+            if (!quiet) {
+                System.err.println("Missing required options: '--dir=<workflowDir>', '--workflow=<workflowName>'");
+                CommandLine.usage(this, System.err);
+            }
             return 2;
+        }
+
+        // In quiet mode, suppress all console output
+        if (quiet) {
+            suppressConsoleOutput();
         }
 
         // Setup file logging
@@ -226,7 +246,9 @@ public class WorkflowCLI implements Callable<Integer> {
             try {
                 setupFileLogging();
             } catch (IOException e) {
-                System.err.println("Warning: Failed to setup file logging: " + e.getMessage());
+                if (!quiet) {
+                    System.err.println("Warning: Failed to setup file logging: " + e.getMessage());
+                }
             }
         }
 
@@ -239,7 +261,9 @@ public class WorkflowCLI implements Callable<Integer> {
             try {
                 setupLogDatabase();
             } catch (SQLException e) {
-                System.err.println("Warning: Failed to setup log database: " + e.getMessage());
+                if (!quiet) {
+                    System.err.println("Warning: Failed to setup log database: " + e.getMessage());
+                }
             }
         }
 
@@ -261,6 +285,30 @@ public class WorkflowCLI implements Callable<Integer> {
     }
 
     /**
+     * Suppresses all console output (stdout/stderr) for quiet mode.
+     *
+     * <p>This method:</p>
+     * <ul>
+     *   <li>Removes ConsoleHandler from root logger</li>
+     *   <li>Redirects System.out and System.err to null streams</li>
+     * </ul>
+     */
+    private void suppressConsoleOutput() {
+        // Remove ConsoleHandler from root logger
+        Logger rootLogger = Logger.getLogger("");
+        for (java.util.logging.Handler handler : rootLogger.getHandlers()) {
+            if (handler instanceof java.util.logging.ConsoleHandler) {
+                rootLogger.removeHandler(handler);
+            }
+        }
+
+        // Redirect System.out and System.err to null
+        java.io.PrintStream nullStream = new java.io.PrintStream(java.io.OutputStream.nullOutputStream());
+        System.setOut(nullStream);
+        System.setErr(nullStream);
+    }
+
+    /**
      * Sets up H2 database for distributed logging.
      *
      * @throws SQLException if database connection fails
@@ -268,6 +316,7 @@ public class WorkflowCLI implements Callable<Integer> {
     private void setupLogDatabase() throws SQLException {
         Path dbPath = logDbPath.toPath();
         logStore = new H2LogStore(dbPath);
+        // Note: In quiet mode, System.out is already redirected to null
         System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
     }
 
