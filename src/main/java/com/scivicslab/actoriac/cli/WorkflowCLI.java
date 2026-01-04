@@ -679,13 +679,17 @@ public class WorkflowCLI implements Callable<Integer> {
 
         System.out.println("Available workflows (directory: "
             + workflowDir.getAbsolutePath() + ")");
+        System.out.println("-".repeat(90));
+        System.out.printf("%-4s %-25s %-35s %s%n", "#", "File (-w)", "Path", "Workflow Name (in logs)");
+        System.out.println("-".repeat(90));
         int index = 1;
         for (WorkflowDisplay display : displays) {
-            System.out.printf("%2d. %-30s (%s)%n",
-                index++, display.baseName(), display.relativePath());
+            String workflowName = display.workflowName() != null ? display.workflowName() : "(no name)";
+            System.out.printf("%2d.  %-25s %-35s %s%n",
+                index++, display.baseName(), display.relativePath(), workflowName);
         }
-        System.out.println("\nUse -w <workflow-name> with the base names shown above "
-            + "(extension optional).");
+        System.out.println("-".repeat(90));
+        System.out.println("Use -w <File> with the names shown in the 'File (-w)' column.");
     }
 
     private static String getBaseName(String fileName) {
@@ -721,8 +725,10 @@ public class WorkflowCLI implements Callable<Integer> {
 
             Path basePath = directory.toPath();
             return uniqueFiles.values().stream()
-                .map(file -> new WorkflowDisplay(getBaseName(file.getName()),
-                    relativize(basePath, file.toPath())))
+                .map(file -> new WorkflowDisplay(
+                    getBaseName(file.getName()),
+                    relativize(basePath, file.toPath()),
+                    extractWorkflowName(file)))
                 .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))
                 .collect(Collectors.toList());
         } catch (IOException e) {
@@ -731,7 +737,75 @@ public class WorkflowCLI implements Callable<Integer> {
         }
     }
 
-    private static record WorkflowDisplay(String baseName, String relativePath) {}
+    /**
+     * Extracts the workflow name from a YAML/JSON/XML file.
+     *
+     * <p>Looks for "name:" field in YAML/JSON files.</p>
+     *
+     * @param file the workflow file
+     * @return the workflow name, or null if not found
+     */
+    private static String extractWorkflowName(File file) {
+        String fileName = file.getName().toLowerCase();
+        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
+            return extractNameFromYaml(file);
+        } else if (fileName.endsWith(".json")) {
+            return extractNameFromJson(file);
+        }
+        return null;
+    }
+
+    /**
+     * Extracts name field from YAML file using simple line parsing.
+     */
+    private static String extractNameFromYaml(File file) {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                // Look for "name: value" at the top level (not indented)
+                if (line.startsWith("name:")) {
+                    String value = line.substring(5).trim();
+                    // Remove quotes if present
+                    if ((value.startsWith("\"") && value.endsWith("\"")) ||
+                        (value.startsWith("'") && value.endsWith("'"))) {
+                        value = value.substring(1, value.length() - 1);
+                    }
+                    return value.isEmpty() ? null : value;
+                }
+                // Stop if we hit a steps: or other major section
+                if (line.startsWith("steps:") || line.startsWith("vertices:")) {
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            // Ignore and return null
+        }
+        return null;
+    }
+
+    /**
+     * Extracts name field from JSON file.
+     */
+    private static String extractNameFromJson(File file) {
+        try (java.io.FileReader reader = new java.io.FileReader(file)) {
+            org.json.JSONTokener tokener = new org.json.JSONTokener(reader);
+            org.json.JSONObject json = new org.json.JSONObject(tokener);
+            return json.optString("name", null);
+        } catch (Exception e) {
+            // Ignore and return null
+        }
+        return null;
+    }
+
+    /**
+     * Record for displaying workflow information.
+     *
+     * @param baseName the base name of the workflow file (without extension)
+     * @param relativePath the relative path to the workflow file
+     * @param workflowName the workflow name defined in the YAML file (name: field)
+     */
+    private static record WorkflowDisplay(String baseName, String relativePath, String workflowName) {}
 
     @Command(
         name = "list",
@@ -762,13 +836,17 @@ public class WorkflowCLI implements Callable<Integer> {
 
             System.out.println("Available workflows (directory: "
                 + workflowDir.getAbsolutePath() + ")");
+            System.out.println("-".repeat(90));
+            System.out.printf("%-4s %-25s %-35s %s%n", "#", "File (-w)", "Path", "Workflow Name (in logs)");
+            System.out.println("-".repeat(90));
             int index = 1;
             for (WorkflowDisplay display : displays) {
-                System.out.printf("%2d. %-30s (%s)%n",
-                    index++, display.baseName(), display.relativePath());
+                String workflowName = display.workflowName() != null ? display.workflowName() : "(no name)";
+                System.out.printf("%2d.  %-25s %-35s %s%n",
+                    index++, display.baseName(), display.relativePath(), workflowName);
             }
-            System.out.println("\nUse -w <workflow-name> with the base names shown above "
-                + "(extension optional).");
+            System.out.println("-".repeat(90));
+            System.out.println("Use -w <File> with the names shown in the 'File (-w)' column.");
             return 0;
         }
     }
