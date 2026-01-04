@@ -26,7 +26,10 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.logging.FileHandler;
@@ -34,6 +37,7 @@ import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.scivicslab.actoriac.NodeGroup;
@@ -166,6 +170,12 @@ public class WorkflowCLI implements Callable<Integer> {
     )
     private String limitHosts;
 
+    @Option(
+        names = {"-L", "--list-workflows"},
+        description = "List workflows discovered under --dir and exit"
+    )
+    private boolean listWorkflows;
+
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
 
@@ -297,6 +307,11 @@ public class WorkflowCLI implements Callable<Integer> {
             LOG.severe("Workflow directory does not exist: " + workflowDir);
             return 1;
         }
+        if (workflowDir == null) {
+            LOG.severe("Workflow directory is required. Use -d/--dir to specify it.");
+            return 1;
+        }
+
         if (!workflowDir.isDirectory()) {
             LOG.severe("Not a directory: " + workflowDir);
             return 1;
@@ -310,6 +325,16 @@ public class WorkflowCLI implements Callable<Integer> {
             LOG.info("Discovered " + workflowCache.size() + " workflow files:");
             workflowCache.forEach((name, file) ->
                 LOG.info("  " + name + " -> " + file.getPath()));
+        }
+
+        if (listWorkflows) {
+            printWorkflowList();
+            return 0;
+        }
+
+        if (workflowName == null || workflowName.isBlank()) {
+            LOG.severe("Workflow name is required unless --list-workflows is specified.");
+            return 1;
         }
 
         // Find main workflow
@@ -593,4 +618,53 @@ public class WorkflowCLI implements Callable<Integer> {
 
         return null;
     }
+
+    private void printWorkflowList() {
+        Map<String, File> uniqueFiles = new LinkedHashMap<>();
+        workflowCache.forEach((name, file) ->
+            uniqueFiles.putIfAbsent(file.getAbsolutePath(), file));
+
+        if (uniqueFiles.isEmpty()) {
+            System.out.println("No workflow files found under "
+                + workflowDir.getAbsolutePath());
+            return;
+        }
+
+        Path basePath = workflowDir.toPath();
+        List<WorkflowDisplay> displays = uniqueFiles.values().stream()
+            .map(file -> {
+                String relativePath = relativize(basePath, file.toPath());
+                return new WorkflowDisplay(getBaseName(file.getName()), relativePath);
+            })
+            .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))
+            .collect(Collectors.toList());
+
+        System.out.println("Available workflows (directory: "
+            + basePath.toAbsolutePath() + ")");
+        int index = 1;
+        for (WorkflowDisplay display : displays) {
+            System.out.printf("%2d. %-30s (%s)%n",
+                index++, display.baseName(), display.relativePath());
+        }
+        System.out.println("\nUse -w <workflow-name> with the base names shown above "
+            + "(extension optional).");
+    }
+
+    private String getBaseName(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            return fileName.substring(0, dotIndex);
+        }
+        return fileName;
+    }
+
+    private String relativize(Path base, Path target) {
+        try {
+            return base.relativize(target).toString();
+        } catch (IllegalArgumentException e) {
+            return target.toAbsolutePath().toString();
+        }
+    }
+
+    private record WorkflowDisplay(String baseName, String relativePath) {}
 }

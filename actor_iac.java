@@ -4,6 +4,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -18,15 +19,15 @@ class actor_iac {
     private static final String VERSION = "2.9.0";
 
     public static void main(String[] args) throws Exception {
+        String[] forwardedArgs = translateListCommand(args);
+
         File jarFile = locateJar();
 
         List<String> command = new ArrayList<>();
         command.add("java");
         command.add("-jar");
         command.add(jarFile.getAbsolutePath());
-        for (String arg : args) {
-            command.add(arg);
-        }
+        command.addAll(Arrays.asList(forwardedArgs));
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.inheritIO();
@@ -34,6 +35,18 @@ class actor_iac {
 
         int exitCode = process.waitFor();
         System.exit(exitCode);
+    }
+
+    private static String[] translateListCommand(String[] args) {
+        if (args.length > 0 && "list".equalsIgnoreCase(args[0])) {
+            List<String> translated = new ArrayList<>();
+            translated.add("--list-workflows");
+            for (int i = 1; i < args.length; i++) {
+                translated.add(args[i]);
+            }
+            return translated.toArray(new String[0]);
+        }
+        return args;
     }
 
     private static File locateJar() {
