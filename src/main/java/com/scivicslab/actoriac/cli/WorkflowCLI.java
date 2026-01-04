@@ -50,6 +50,7 @@ import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.actoriac.log.SessionStatus;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
+import com.scivicslab.pojoactor.workflow.kustomize.WorkflowKustomizer;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -183,6 +184,12 @@ public class WorkflowCLI implements Callable<Integer> {
     )
     private boolean quiet;
 
+    @Option(
+        names = {"--render-to"},
+        description = "Render overlay-applied workflows to specified directory (does not execute)"
+    )
+    private File renderToDir;
+
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
 
@@ -228,7 +235,16 @@ public class WorkflowCLI implements Callable<Integer> {
     @Override
     public Integer call() {
         // Validate required options when running workflow (not subcommands)
-        if (workflowDir == null || workflowName == null) {
+        // --render-to only requires --dir and --overlay, not --workflow
+        if (renderToDir != null) {
+            if (workflowDir == null || overlayDir == null) {
+                if (!quiet) {
+                    System.err.println("--render-to requires both '--dir=<workflowDir>' and '--overlay=<overlayDir>'");
+                    CommandLine.usage(this, System.err);
+                }
+                return 2;
+            }
+        } else if (workflowDir == null || workflowName == null) {
             if (!quiet) {
                 System.err.println("Missing required options: '--dir=<workflowDir>', '--workflow=<workflowName>'");
                 CommandLine.usage(this, System.err);
@@ -251,6 +267,9 @@ public class WorkflowCLI implements Callable<Integer> {
                 }
             }
         }
+
+        // Configure log level based on verbose flag
+        configureLogLevel(verbose);
 
         // Setup H2 log database (enabled by default, use --no-log-db to disable)
         if (!noLogDb) {
@@ -346,6 +365,36 @@ public class WorkflowCLI implements Callable<Integer> {
     }
 
     /**
+     * Configures log level based on verbose flag.
+     *
+     * <p>When verbose mode is enabled, sets log level to FINE to show
+     * detailed debug information including workflow selection logic.
+     * Otherwise, sets log level to INFO for normal operation.</p>
+     *
+     * @param verbose true to enable FINE level logging
+     */
+    private void configureLogLevel(boolean verbose) {
+        Level targetLevel = verbose ? Level.FINE : Level.INFO;
+
+        // Configure root logger level
+        Logger rootLogger = Logger.getLogger("");
+        rootLogger.setLevel(targetLevel);
+
+        // Configure handlers to respect the new level
+        for (java.util.logging.Handler handler : rootLogger.getHandlers()) {
+            handler.setLevel(targetLevel);
+        }
+
+        // Configure POJO-actor Interpreter logger
+        Logger interpreterLogger = Logger.getLogger("com.scivicslab.pojoactor.workflow.Interpreter");
+        interpreterLogger.setLevel(targetLevel);
+
+        if (verbose) {
+            LOG.info("Verbose mode enabled - log level set to FINE");
+        }
+    }
+
+    /**
      * Main execution logic.
      *
      * @return exit code (0 for success, non-zero for failure)
@@ -379,6 +428,11 @@ public class WorkflowCLI implements Callable<Integer> {
         if (listWorkflows) {
             printWorkflowList();
             return 0;
+        }
+
+        // Handle --render-to option
+        if (renderToDir != null) {
+            return renderOverlayWorkflows();
         }
 
         if (workflowName == null || workflowName.isBlank()) {
@@ -416,6 +470,70 @@ public class WorkflowCLI implements Callable<Integer> {
 
         // Execute workflow (use local inventory if none specified)
         return executeWorkflow(mainWorkflowFile);
+    }
+
+    /**
+     * Renders overlay-applied workflows to the specified directory.
+     *
+     * <p>This method uses WorkflowKustomizer to apply overlays and writes
+     * the resulting YAML files to the output directory. This is useful for
+     * debugging overlay configurations without executing the workflow.</p>
+     *
+     * @return exit code (0 for success, non-zero for failure)
+     */
+    private Integer renderOverlayWorkflows() {
+        if (overlayDir == null) {
+            LOG.severe("--render-to requires --overlay to be specified");
+            return 1;
+        }
+
+        try {
+            // Create output directory if it doesn't exist
+            if (!renderToDir.exists()) {
+                if (!renderToDir.mkdirs()) {
+                    LOG.severe("Failed to create output directory: " + renderToDir);
+                    return 1;
+                }
+            }
+
+            LOG.info("=== Rendering Overlay-Applied Workflows ===");
+            LOG.info("Overlay directory: " + overlayDir.getAbsolutePath());
+            LOG.info("Output directory: " + renderToDir.getAbsolutePath());
+
+            WorkflowKustomizer kustomizer = new WorkflowKustomizer();
+            Map<String, Map<String, Object>> workflows = kustomizer.build(overlayDir.toPath());
+
+            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+
+            for (Map.Entry<String, Map<String, Object>> entry : workflows.entrySet()) {
+                String fileName = entry.getKey();
+                Map<String, Object> workflowContent = entry.getValue();
+
+                Path outputPath = renderToDir.toPath().resolve(fileName);
+
+                // Add header comment
+                StringBuilder sb = new StringBuilder();
+                sb.append("# Rendered from overlay: ").append(overlayDir.getName()).append("\n");
+                sb.append("# Source: ").append(fileName).append("\n");
+                sb.append("# Generated: ").append(LocalDateTime.now()).append("\n");
+                sb.append("#\n");
+                sb.append(yaml.dump(workflowContent));
+
+                Files.writeString(outputPath, sb.toString());
+                LOG.info("  Written: " + outputPath);
+            }
+
+            LOG.info("Rendered " + workflows.size() + " workflow(s) to " + renderToDir.getAbsolutePath());
+            return 0;
+
+        } catch (IOException e) {
+            LOG.severe("Failed to render workflows: " + e.getMessage());
+            return 1;
+        } catch (Exception e) {
+            LOG.severe("Error during rendering: " + e.getMessage());
+            e.printStackTrace();
+            return 1;
+        }
     }
 
     /**
@@ -492,6 +610,9 @@ public class WorkflowCLI implements Callable<Integer> {
             if (overlayDir != null) {
                 nodeGroupInterpreter.setOverlayDir(overlayDir.getAbsolutePath());
             }
+            if (verbose) {
+                nodeGroupInterpreter.setVerbose(true);
+            }
 
             // Inject log store into interpreter for node-level logging
             if (logStore != null) {
@@ -502,12 +623,8 @@ public class WorkflowCLI implements Callable<Integer> {
             NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroupInterpreter, system);
             system.addIIActor(nodeGroupActor);
 
-            // Step 3: Load the main workflow
-            LOG.info("Loading workflow: " + mainWorkflowFile.getAbsolutePath());
-            logToDb("cli", LogLevel.INFO, "Loading workflow: " + mainWorkflowFile.getName());
-
-            ActionResult loadResult = nodeGroupActor.callByActionName("readYaml",
-                "[\"" + mainWorkflowFile.getAbsolutePath() + "\"]");
+            // Step 3: Load the main workflow (with overlay if specified)
+            ActionResult loadResult = loadMainWorkflow(nodeGroupActor, mainWorkflowFile, overlayDir);
             if (!loadResult.isSuccess()) {
                 LOG.severe("Failed to load workflow: " + loadResult.getResult());
                 logToDb("cli", LogLevel.ERROR, "Failed to load workflow: " + loadResult.getResult());
@@ -666,6 +783,31 @@ public class WorkflowCLI implements Callable<Integer> {
         }
 
         return null;
+    }
+
+    /**
+     * Loads the main workflow file with optional overlay support.
+     *
+     * @param nodeGroupActor the actor to load the workflow into
+     * @param workflowFile the workflow file to load
+     * @param overlayDir the overlay directory (may be null)
+     * @return the result of the load operation
+     */
+    private ActionResult loadMainWorkflow(NodeGroupIIAR nodeGroupActor, File workflowFile, File overlayDir) {
+        LOG.info("Loading workflow: " + workflowFile.getAbsolutePath());
+        logToDb("cli", LogLevel.INFO, "Loading workflow: " + workflowFile.getName());
+
+        String loadArg;
+        if (overlayDir != null) {
+            // Pass both workflow path and overlay directory
+            loadArg = "[\"" + workflowFile.getAbsolutePath() + "\", \"" + overlayDir.getAbsolutePath() + "\"]";
+            LOG.fine("Loading with overlay: " + overlayDir.getAbsolutePath());
+        } else {
+            // Load without overlay
+            loadArg = "[\"" + workflowFile.getAbsolutePath() + "\"]";
+        }
+
+        return nodeGroupActor.callByActionName("readYaml", loadArg);
     }
 
     private void printWorkflowList() {

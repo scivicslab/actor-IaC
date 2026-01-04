@@ -132,152 +132,184 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
     /**
      * Invokes an action on the node group by name with the given arguments.
      *
+     * <p>This method dispatches to specialized handler methods based on the action type:</p>
+     * <ul>
+     *   <li>Workflow actions: {@link #handleWorkflowAction}</li>
+     *   <li>NodeGroup-specific actions: {@link #handleNodeGroupAction}</li>
+     * </ul>
+     *
      * @param actionName the name of the action to execute
      * @param arg the argument string (JSON array format)
      * @return an {@link ActionResult} indicating success or failure with a message
      */
     @Override
     public ActionResult callByActionName(String actionName, String arg) {
-
         logger.fine(String.format("actionName = %s, args = %s", actionName, arg));
-
-        boolean success = false;
-        String message = "";
 
         try {
             // Workflow execution actions (from Interpreter)
-            if (actionName.equals("execCode")) {
-                ActionResult result = this.ask(n -> n.execCode()).get();
-                return result;
+            ActionResult workflowResult = handleWorkflowAction(actionName, arg);
+            if (workflowResult != null) {
+                return workflowResult;
             }
-            else if (actionName.equals("runUntilEnd")) {
-                // Parse optional maxIterations argument
-                int maxIterations = 10000;
-                if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
-                    try {
-                        JSONArray args = new JSONArray(arg);
-                        if (args.length() > 0) {
-                            maxIterations = args.getInt(0);
-                        }
-                    } catch (Exception e) {
-                        // Use default if parsing fails
-                    }
-                }
-                final int iterations = maxIterations;
-                ActionResult result = this.ask(n -> n.runUntilEnd(iterations)).get();
-                return result;
-            }
-            else if (actionName.equals("runWorkflow")) {
-                // Load and run workflow directly
-                JSONArray args = new JSONArray(arg);
-                String workflowFile = args.getString(0);
-                int maxIterations = args.length() > 1 ? args.getInt(1) : 10000;
-                logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, maxIterations));
-                ActionResult result = this.object.runWorkflow(workflowFile, maxIterations);
-                logger.info(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
-                return result;
-            }
-            else if (actionName.equals("readYaml")) {
-                String filePath = extractSingleArgument(arg);
-                try {
-                    String overlayPath = this.object.getOverlayDir();
-                    if (overlayPath != null) {
-                        // Use overlay: readYaml(Path, Path)
-                        java.nio.file.Path yamlPath = java.nio.file.Path.of(filePath);
-                        java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);
-                        this.tell(n -> {
-                            try {
-                                n.readYaml(yamlPath, overlayDir);
-                            } catch (java.io.IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }).get();
-                        success = true;
-                        message = "YAML loaded with overlay: " + overlayPath;
-                    } else {
-                        // No overlay: use InputStream
-                        try (java.io.InputStream input = new java.io.FileInputStream(new java.io.File(filePath))) {
-                            this.tell(n -> n.readYaml(input)).get();
-                            success = true;
-                            message = "YAML loaded successfully";
-                        }
-                    }
-                } catch (java.io.FileNotFoundException e) {
-                    logger.log(Level.SEVERE, String.format("file not found: %s", filePath), e);
-                    message = "File not found: " + filePath;
-                } catch (java.io.IOException e) {
-                    logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e);
-                    message = "IO error: " + filePath;
-                } catch (RuntimeException e) {
-                    if (e.getCause() instanceof java.io.IOException) {
-                        logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e.getCause());
-                        message = "IO error: " + filePath;
-                    } else {
-                        throw e;
-                    }
-                }
-            }
+
             // NodeGroup-specific actions
-            else if (actionName.equals("hasInventory")) {
-                // Returns true if inventory is loaded, false otherwise
-                // Used for conditional branching in workflows
-                boolean hasInv = this.object.getInventory() != null;
-                return new ActionResult(hasInv, hasInv ? "Inventory available" : "No inventory");
+            ActionResult nodeGroupResult = handleNodeGroupAction(actionName, arg);
+            if (nodeGroupResult != null) {
+                return nodeGroupResult;
             }
-            else if (actionName.equals("createNodeActors")) {
-                String groupName = extractSingleArgument(arg);
-                createNodeActors(groupName);
-                success = true;
-                message = String.format("Created node actors for group '%s'", groupName);
-            }
-            else if (actionName.equals("apply")) {
-                // Apply action to child actors matching wildcard pattern
-                ActionResult result = apply(arg);
-                return result;
-            }
-            else if (actionName.equals("executeCommandOnAllNodes")) {
-                String command = extractSingleArgument(arg);
-                List<String> results = executeCommandOnAllNodes(command);
-                success = true;
-                message = String.format("Executed command on %d nodes: %s", results.size(), results);
-            }
-            else if (actionName.equals("hasAccumulator")) {
-                // Returns true if accumulator already exists, false otherwise
-                // Used for idempotent workflow: skip creation if already exists
-                boolean hasAcc = accumulatorActor != null;
-                return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");
-            }
-            else if (actionName.equals("createAccumulator")) {
-                String type = extractSingleArgument(arg);
-                createAccumulator(type);
-                success = true;
-                message = String.format("Created %s accumulator", type);
-            }
-            else if (actionName.equals("getAccumulatorSummary")) {
-                return getAccumulatorSummary();
-            }
-            else if (actionName.equals("doNothing")) {
-                success = true;
-                message = arg;
-            }
-            else {
-                logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
-                        this.getName(), actionName, arg));
-                message = "Unknown action: " + actionName;
-            }
-        }
-        catch (InterruptedException e) {
+
+            // Unknown action
+            logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
+                    this.getName(), actionName, arg));
+            return new ActionResult(false, "Unknown action: " + actionName);
+
+        } catch (InterruptedException e) {
             logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
-            message = "Interrupted: " + e.getMessage();
+            return new ActionResult(false, "Interrupted: " + e.getMessage());
         } catch (ExecutionException e) {
             logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
-            message = "Execution error: " + e.getMessage();
+            return new ActionResult(false, "Execution error: " + e.getMessage());
         } catch (Exception e) {
             logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
-            message = "Error: " + e.getMessage();
+            return new ActionResult(false, "Error: " + e.getMessage());
         }
+    }
 
-        return new ActionResult(success, message);
+    /**
+     * Handles workflow-related actions (from Interpreter).
+     *
+     * @param actionName the action name
+     * @param arg the argument string
+     * @return ActionResult if handled, null if not a workflow action
+     */
+    private ActionResult handleWorkflowAction(String actionName, String arg)
+            throws InterruptedException, ExecutionException {
+
+        switch (actionName) {
+            case "execCode":
+                return this.ask(n -> n.execCode()).get();
+
+            case "runUntilEnd":
+                int maxIterations = parseMaxIterations(arg, 10000);
+                return this.ask(n -> n.runUntilEnd(maxIterations)).get();
+
+            case "runWorkflow":
+                JSONArray runArgs = new JSONArray(arg);
+                String workflowFile = runArgs.getString(0);
+                int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
+                logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, runMaxIterations));
+                ActionResult result = this.object.runWorkflow(workflowFile, runMaxIterations);
+                logger.info(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
+                return result;
+
+            case "readYaml":
+                return handleReadYaml(arg);
+
+            default:
+                return null; // Not a workflow action
+        }
+    }
+
+    /**
+     * Handles NodeGroup-specific actions.
+     *
+     * @param actionName the action name
+     * @param arg the argument string
+     * @return ActionResult if handled, null if not a NodeGroup action
+     */
+    private ActionResult handleNodeGroupAction(String actionName, String arg)
+            throws InterruptedException, ExecutionException {
+
+        switch (actionName) {
+            case "hasInventory":
+                boolean hasInv = this.object.getInventory() != null;
+                return new ActionResult(hasInv, hasInv ? "Inventory available" : "No inventory");
+
+            case "createNodeActors":
+                String groupName = extractSingleArgument(arg);
+                createNodeActors(groupName);
+                return new ActionResult(true, String.format("Created node actors for group '%s'", groupName));
+
+            case "apply":
+                return apply(arg);
+
+            case "executeCommandOnAllNodes":
+                String command = extractSingleArgument(arg);
+                List<String> results = executeCommandOnAllNodes(command);
+                return new ActionResult(true,
+                    String.format("Executed command on %d nodes: %s", results.size(), results));
+
+            case "hasAccumulator":
+                boolean hasAcc = accumulatorActor != null;
+                return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");
+
+            case "createAccumulator":
+                String type = extractSingleArgument(arg);
+                createAccumulator(type);
+                return new ActionResult(true, String.format("Created %s accumulator", type));
+
+            case "getAccumulatorSummary":
+                return getAccumulatorSummary();
+
+            case "doNothing":
+                return new ActionResult(true, arg);
+
+            default:
+                return null; // Not a NodeGroup action
+        }
+    }
+
+    // --- Helper methods ---
+
+    private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {
+        String filePath = extractSingleArgument(arg);
+        try {
+            String overlayPath = this.object.getOverlayDir();
+            if (overlayPath != null) {
+                java.nio.file.Path yamlPath = java.nio.file.Path.of(filePath);
+                java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);
+                this.tell(n -> {
+                    try {
+                        n.readYaml(yamlPath, overlayDir);
+                    } catch (java.io.IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).get();
+                return new ActionResult(true, "YAML loaded with overlay: " + overlayPath);
+            } else {
+                try (java.io.InputStream input = new java.io.FileInputStream(new java.io.File(filePath))) {
+                    this.tell(n -> n.readYaml(input)).get();
+                    return new ActionResult(true, "YAML loaded successfully");
+                }
+            }
+        } catch (java.io.FileNotFoundException e) {
+            logger.log(Level.SEVERE, String.format("file not found: %s", filePath), e);
+            return new ActionResult(false, "File not found: " + filePath);
+        } catch (java.io.IOException e) {
+            logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e);
+            return new ActionResult(false, "IO error: " + filePath);
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof java.io.IOException) {
+                logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e.getCause());
+                return new ActionResult(false, "IO error: " + filePath);
+            }
+            throw e;
+        }
+    }
+
+    private int parseMaxIterations(String arg, int defaultValue) {
+        if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
+            try {
+                JSONArray args = new JSONArray(arg);
+                if (args.length() > 0) {
+                    return args.getInt(0);
+                }
+            } catch (Exception e) {
+                // Use default if parsing fails
+            }
+        }
+        return defaultValue;
     }
 
     /**

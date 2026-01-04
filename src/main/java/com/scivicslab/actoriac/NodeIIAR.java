@@ -115,12 +115,12 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
     /**
      * Invokes an action on the node by name with the given arguments.
      *
-     * <p>This method handles both Interpreter actions (workflow execution) and
-     * Node-specific actions (SSH command execution).</p>
-     *
-     * <p>For command execution actions ({@code executeCommand}),
-     * the {@code arg} parameter should be a JSON array with a single string element
-     * containing the command to execute, e.g., {@code ["ls -la"]}.</p>
+     * <p>This method dispatches to specialized handler methods based on the action type:</p>
+     * <ul>
+     *   <li>Workflow actions: {@link #handleWorkflowAction}</li>
+     *   <li>Command execution actions: {@link #handleCommandAction}</li>
+     *   <li>Utility actions: {@link #handleUtilityAction}</li>
+     * </ul>
      *
      * @param actionName the name of the action to execute
      * @param arg the argument string (file path for read operations, JSON array for commands)
@@ -128,290 +128,342 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
      */
     @Override
     public ActionResult callByActionName(String actionName, String arg) {
-
         logger.fine(String.format("actionName = %s, args = %s", actionName, arg));
-
-        boolean success = false;
-        String message = "";
 
         try {
             // Workflow execution actions (from Interpreter)
-            if (actionName.equals("execCode")) {
-                ActionResult result = this.ask(n -> n.execCode()).get();
-                return result;
+            ActionResult workflowResult = handleWorkflowAction(actionName, arg);
+            if (workflowResult != null) {
+                return workflowResult;
             }
-            else if (actionName.equals("readYaml")) {
-                try {
-                    String overlayPath = this.object.getOverlayDir();
-                    if (overlayPath != null) {
-                        // Use overlay: readYaml(Path, Path)
-                        java.nio.file.Path yamlPath = java.nio.file.Path.of(arg);
-                        java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);
-                        this.tell(n -> {
-                            try {
-                                n.readYaml(yamlPath, overlayDir);
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }).get();
-                        success = true;
-                        message = "YAML loaded with overlay: " + overlayPath;
-                    } else {
-                        // No overlay: use InputStream
-                        try (InputStream input = new FileInputStream(new File(arg))) {
-                            this.tell(n -> n.readYaml(input)).get();
-                            success = true;
-                            message = "YAML loaded successfully";
-                        }
-                    }
-                } catch (FileNotFoundException e) {
-                    logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
-                    message = "File not found: " + arg;
-                } catch (IOException e) {
-                    logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
-                    message = "IO error: " + arg;
-                } catch (RuntimeException e) {
-                    if (e.getCause() instanceof IOException) {
-                        logger.log(Level.SEVERE, String.format("IOException: %s", arg), e.getCause());
-                        message = "IO error: " + arg;
-                    } else {
-                        throw e;
-                    }
-                }
+
+            // Node-specific actions (SSH command execution)
+            ActionResult commandResult = handleCommandAction(actionName, arg);
+            if (commandResult != null) {
+                return commandResult;
             }
-            else if (actionName.equals("readJson")) {
-                try (InputStream input = new FileInputStream(new File(arg))) {
-                    this.tell(n -> {
-                        try {
-                            n.readJson(input);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }).get();
-                    success = true;
-                    message = "JSON loaded successfully";
-                } catch (FileNotFoundException e) {
-                    logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
-                    message = "File not found: " + arg;
-                } catch (IOException e) {
-                    logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
-                    message = "IO error: " + arg;
-                }
+
+            // Utility actions
+            ActionResult utilityResult = handleUtilityAction(actionName, arg);
+            if (utilityResult != null) {
+                return utilityResult;
             }
-            else if (actionName.equals("readXml")) {
-                try (InputStream input = new FileInputStream(new File(arg))) {
-                    this.tell(n -> {
-                        try {
-                            n.readXml(input);
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
-                    }).get();
-                    success = true;
-                    message = "XML loaded successfully";
-                } catch (FileNotFoundException e) {
-                    logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
-                    message = "File not found: " + arg;
-                } catch (Exception e) {
-                    logger.log(Level.SEVERE, String.format("Exception: %s", arg), e);
-                    message = "Error: " + arg;
-                }
-            }
-            else if (actionName.equals("reset")) {
+
+            // Unknown action
+            logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
+                    this.getName(), actionName, arg));
+            return new ActionResult(false, "Unknown action: " + actionName);
+
+        } catch (InterruptedException e) {
+            String message = "Interrupted: " + e.getMessage();
+            logger.warning(String.format("%s: %s", this.getName(), message));
+            return new ActionResult(false, message);
+        } catch (ExecutionException e) {
+            String message = extractRootCauseMessage(e);
+            logger.warning(String.format("%s: %s", this.getName(), message));
+            return new ActionResult(false, message);
+        }
+    }
+
+    /**
+     * Handles workflow-related actions (from Interpreter).
+     *
+     * @param actionName the action name
+     * @param arg the argument string
+     * @return ActionResult if handled, null if not a workflow action
+     */
+    private ActionResult handleWorkflowAction(String actionName, String arg)
+            throws InterruptedException, ExecutionException {
+
+        switch (actionName) {
+            case "execCode":
+                return this.ask(n -> n.execCode()).get();
+
+            case "readYaml":
+                return handleReadYaml(arg);
+
+            case "readJson":
+                return handleReadJson(arg);
+
+            case "readXml":
+                return handleReadXml(arg);
+
+            case "reset":
                 this.tell(n -> n.reset()).get();
-                success = true;
-                message = "Interpreter reset successfully";
-            }
-            else if (actionName.equals("runUntilEnd")) {
-                // Parse optional maxIterations argument
-                int maxIterations = 10000;
-                if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
-                    try {
-                        JSONArray args = new JSONArray(arg);
-                        if (args.length() > 0) {
-                            maxIterations = args.getInt(0);
-                        }
-                    } catch (Exception e) {
-                        // Use default if parsing fails
-                    }
-                }
-                final int iterations = maxIterations;
-                ActionResult result = this.ask(n -> n.runUntilEnd(iterations)).get();
-                return result;
-            }
-            else if (actionName.equals("call")) {
-                // Subworkflow call (creates child actor) - uses Interpreter.call() method
-                JSONArray args = new JSONArray(arg);
-                String workflowFile = args.getString(0);
-                ActionResult result = this.ask(n -> n.call(workflowFile)).get();
-                return result;
-            }
-            else if (actionName.equals("runWorkflow")) {
-                // Load and run workflow directly (no child actor)
-                // Note: Call synchronously to avoid deadlock when runWorkflow calls execCode internally
-                JSONArray args = new JSONArray(arg);
-                String workflowFile = args.getString(0);
-                int maxIterations = args.length() > 1 ? args.getInt(1) : 10000;
-                logger.fine(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, maxIterations));
-                ActionResult result = this.object.runWorkflow(workflowFile, maxIterations);
+                return new ActionResult(true, "Interpreter reset successfully");
+
+            case "runUntilEnd":
+                int maxIterations = parseMaxIterations(arg, 10000);
+                return this.ask(n -> n.runUntilEnd(maxIterations)).get();
+
+            case "call":
+                JSONArray callArgs = new JSONArray(arg);
+                String callWorkflowFile = callArgs.getString(0);
+                return this.ask(n -> n.call(callWorkflowFile)).get();
+
+            case "runWorkflow":
+                JSONArray runArgs = new JSONArray(arg);
+                String runWorkflowFile = runArgs.getString(0);
+                int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
+                logger.fine(String.format("Running workflow: %s (maxIterations=%d)", runWorkflowFile, runMaxIterations));
+                ActionResult result = this.object.runWorkflow(runWorkflowFile, runMaxIterations);
                 logger.fine(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
                 return result;
-            }
-            else if (actionName.equals("apply")) {
-                // Apply action to child actors - uses Interpreter.apply() method
-                ActionResult result = this.ask(n -> n.apply(arg)).get();
-                return result;
-            }
-            // Node-specific actions (SSH command execution)
-            // executeCommandQuiet: Execute without reporting to accumulator
-            else if (actionName.equals("executeCommandQuiet")) {
-                String command = extractCommandFromArgs(arg);
-                Node.CommandResult result = this.ask(n -> {
-                    try {
-                        return n.executeCommand(command);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }).get();
 
-                success = result.isSuccess();
-                message = String.format("exitCode=%d, stdout='%s', stderr='%s'",
-                    result.getExitCode(), result.getStdout(), result.getStderr());
-            }
-            // executeSudoCommandQuiet: Execute sudo without reporting to accumulator
-            else if (actionName.equals("executeSudoCommandQuiet")) {
-                String command = extractCommandFromArgs(arg);
-                Node.CommandResult result = this.ask(n -> {
-                    try {
-                        return n.executeSudoCommand(command);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }).get();
+            case "apply":
+                return this.ask(n -> n.apply(arg)).get();
 
-                success = result.isSuccess();
-                message = String.format("exitCode=%d, stdout='%s', stderr='%s'",
-                    result.getExitCode(), result.getStdout(), result.getStderr());
-            }
-            // executeCommand: Execute and report to accumulator (default)
-            // Argument format: ["command"] (array with single command string)
-            else if (actionName.equals("executeCommand")) {
-                String command = extractCommandFromArgs(arg);
+            default:
+                return null; // Not a workflow action
+        }
+    }
 
-                // Execute command
-                Node.CommandResult result = this.ask(n -> {
-                    try {
-                        return n.executeCommand(command);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }).get();
+    /**
+     * Handles SSH command execution actions.
+     *
+     * @param actionName the action name
+     * @param arg the argument string
+     * @return ActionResult if handled, null if not a command action
+     */
+    private ActionResult handleCommandAction(String actionName, String arg)
+            throws InterruptedException, ExecutionException {
 
-                // Report to accumulator (include both stdout and stderr)
-                IIActorSystem sys = (IIActorSystem) this.system();
-                IIActorRef<?> accumulator = sys.getIIActor("accumulator");
-                if (accumulator != null) {
-                    JSONObject reportArg = new JSONObject();
-                    reportArg.put("source", this.getName());
-                    // Use vertex YAML snippet as type (what step is being executed)
-                    reportArg.put("type", this.object.getCurrentVertexYaml());
-                    // Combine stdout and stderr for complete output
-                    String output = result.getStdout().trim();
-                    String stderr = result.getStderr().trim();
-                    if (!stderr.isEmpty()) {
-                        output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;
-                    }
-                    reportArg.put("data", output);
-                    accumulator.callByActionName("add", reportArg.toString());
-                }
+        switch (actionName) {
+            case "executeCommandQuiet":
+                return executeCommandQuiet(arg);
 
-                success = result.isSuccess();
-                message = result.getStdout();
-                String stderr = result.getStderr().trim();
-                if (!stderr.isEmpty()) {
-                    message = message.isEmpty() ? stderr : message + "\n[stderr]\n" + stderr;
-                }
-            }
-            // executeSudoCommand: Execute sudo and report to accumulator (default)
-            // Argument format: ["command"] (array with single command string)
-            else if (actionName.equals("executeSudoCommand")) {
-                String command = extractCommandFromArgs(arg);
+            case "executeSudoCommandQuiet":
+                return executeSudoCommandQuiet(arg);
 
-                // Execute sudo command
-                Node.CommandResult result = this.ask(n -> {
-                    try {
-                        return n.executeSudoCommand(command);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }).get();
+            case "executeCommand":
+                return executeCommandWithReport(arg);
 
-                // Report to accumulator
-                IIActorSystem sys = (IIActorSystem) this.system();
-                IIActorRef<?> accumulator = sys.getIIActor("accumulator");
-                if (accumulator != null) {
-                    JSONObject reportArg = new JSONObject();
-                    reportArg.put("source", this.getName());
-                    // Use vertex YAML snippet as type (what step is being executed)
-                    reportArg.put("type", this.object.getCurrentVertexYaml());
-                    String output = result.getStdout().trim();
-                    String stderr = result.getStderr().trim();
-                    if (!stderr.isEmpty()) {
-                        output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;
-                    }
-                    reportArg.put("data", output);
-                    accumulator.callByActionName("add", reportArg.toString());
-                }
+            case "executeSudoCommand":
+                return executeSudoCommandWithReport(arg);
 
-                success = result.isSuccess();
-                message = result.getStdout();
-                String stderrSudo = result.getStderr().trim();
-                if (!stderrSudo.isEmpty()) {
-                    message = message.isEmpty() ? stderrSudo : message + "\n[stderr]\n" + stderrSudo;
-                }
-            }
-            // Utility actions
-            else if (actionName.equals("sleep")) {
+            default:
+                return null; // Not a command action
+        }
+    }
+
+    /**
+     * Handles utility actions (sleep, print, doNothing).
+     *
+     * @param actionName the action name
+     * @param arg the argument string
+     * @return ActionResult if handled, null if not a utility action
+     */
+    private ActionResult handleUtilityAction(String actionName, String arg) {
+        switch (actionName) {
+            case "sleep":
                 try {
                     long millis = Long.parseLong(arg);
                     Thread.sleep(millis);
-                    success = true;
-                    message = "Slept for " + millis + "ms";
+                    return new ActionResult(true, "Slept for " + millis + "ms");
                 } catch (NumberFormatException e) {
                     logger.log(Level.SEVERE, String.format("Invalid sleep duration: %s", arg), e);
-                    message = "Invalid sleep duration: " + arg;
+                    return new ActionResult(false, "Invalid sleep duration: " + arg);
+                } catch (InterruptedException e) {
+                    return new ActionResult(false, "Sleep interrupted: " + e.getMessage());
+                }
+
+            case "print":
+                System.out.println(arg);
+                return new ActionResult(true, "Printed: " + arg);
+
+            case "doNothing":
+                return new ActionResult(true, arg);
+
+            default:
+                return null; // Not a utility action
+        }
+    }
+
+    // --- Helper methods for workflow actions ---
+
+    private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {
+        try {
+            String overlayPath = this.object.getOverlayDir();
+            if (overlayPath != null) {
+                java.nio.file.Path yamlPath = java.nio.file.Path.of(arg);
+                java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);
+                this.tell(n -> {
+                    try {
+                        n.readYaml(yamlPath, overlayDir);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).get();
+                return new ActionResult(true, "YAML loaded with overlay: " + overlayPath);
+            } else {
+                try (InputStream input = new FileInputStream(new File(arg))) {
+                    this.tell(n -> n.readYaml(input)).get();
+                    return new ActionResult(true, "YAML loaded successfully");
                 }
             }
-            else if (actionName.equals("print")) {
-                System.out.println(arg);
-                success = true;
-                message = "Printed: " + arg;
+        } catch (FileNotFoundException e) {
+            logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
+            return new ActionResult(false, "File not found: " + arg);
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
+            return new ActionResult(false, "IO error: " + arg);
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof IOException) {
+                logger.log(Level.SEVERE, String.format("IOException: %s", arg), e.getCause());
+                return new ActionResult(false, "IO error: " + arg);
             }
-            else if (actionName.equals("doNothing")) {
-                success = true;
-                message = arg;
-            }
-            else {
-                logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
-                        this.getName(), actionName, arg));
-                message = "Unknown action: " + actionName;
-            }
+            throw e;
         }
-        catch (InterruptedException e) {
-            message = "Interrupted: " + e.getMessage();
-            logger.warning(String.format("%s: %s", this.getName(), message));
-        } catch (ExecutionException e) {
-            // Extract root cause message for cleaner output
-            Throwable cause = e.getCause();
-            while (cause != null && cause.getCause() != null) {
-                cause = cause.getCause();
-            }
-            String rootMsg = cause != null ? cause.getMessage() : e.getMessage();
-            message = rootMsg;
-            logger.warning(String.format("%s: %s", this.getName(), message));
-        }
+    }
 
-        return new ActionResult(success, message);
+    private ActionResult handleReadJson(String arg) throws InterruptedException, ExecutionException {
+        try (InputStream input = new FileInputStream(new File(arg))) {
+            this.tell(n -> {
+                try {
+                    n.readJson(input);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+            return new ActionResult(true, "JSON loaded successfully");
+        } catch (FileNotFoundException e) {
+            logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
+            return new ActionResult(false, "File not found: " + arg);
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
+            return new ActionResult(false, "IO error: " + arg);
+        }
+    }
+
+    private ActionResult handleReadXml(String arg) throws InterruptedException, ExecutionException {
+        try (InputStream input = new FileInputStream(new File(arg))) {
+            this.tell(n -> {
+                try {
+                    n.readXml(input);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+            return new ActionResult(true, "XML loaded successfully");
+        } catch (FileNotFoundException e) {
+            logger.log(Level.SEVERE, String.format("file not found: %s", arg), e);
+            return new ActionResult(false, "File not found: " + arg);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, String.format("Exception: %s", arg), e);
+            return new ActionResult(false, "Error: " + arg);
+        }
+    }
+
+    private int parseMaxIterations(String arg, int defaultValue) {
+        if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
+            try {
+                JSONArray args = new JSONArray(arg);
+                if (args.length() > 0) {
+                    return args.getInt(0);
+                }
+            } catch (Exception e) {
+                // Use default if parsing fails
+            }
+        }
+        return defaultValue;
+    }
+
+    // --- Helper methods for command actions ---
+
+    private ActionResult executeCommandQuiet(String arg) throws InterruptedException, ExecutionException {
+        String command = extractCommandFromArgs(arg);
+        Node.CommandResult result = this.ask(n -> {
+            try {
+                return n.executeCommand(command);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).get();
+
+        return new ActionResult(result.isSuccess(),
+            String.format("exitCode=%d, stdout='%s', stderr='%s'",
+                result.getExitCode(), result.getStdout(), result.getStderr()));
+    }
+
+    private ActionResult executeSudoCommandQuiet(String arg) throws InterruptedException, ExecutionException {
+        String command = extractCommandFromArgs(arg);
+        Node.CommandResult result = this.ask(n -> {
+            try {
+                return n.executeSudoCommand(command);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).get();
+
+        return new ActionResult(result.isSuccess(),
+            String.format("exitCode=%d, stdout='%s', stderr='%s'",
+                result.getExitCode(), result.getStdout(), result.getStderr()));
+    }
+
+    private ActionResult executeCommandWithReport(String arg) throws InterruptedException, ExecutionException {
+        String command = extractCommandFromArgs(arg);
+        Node.CommandResult result = this.ask(n -> {
+            try {
+                return n.executeCommand(command);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).get();
+
+        reportToAccumulator(result);
+        return new ActionResult(result.isSuccess(), combineOutput(result));
+    }
+
+    private ActionResult executeSudoCommandWithReport(String arg) throws InterruptedException, ExecutionException {
+        String command = extractCommandFromArgs(arg);
+        Node.CommandResult result = this.ask(n -> {
+            try {
+                return n.executeSudoCommand(command);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).get();
+
+        reportToAccumulator(result);
+        return new ActionResult(result.isSuccess(), combineOutput(result));
+    }
+
+    /**
+     * Reports command result to the accumulator actor if available.
+     */
+    private void reportToAccumulator(Node.CommandResult result) {
+        IIActorSystem sys = (IIActorSystem) this.system();
+        IIActorRef<?> accumulator = sys.getIIActor("accumulator");
+        if (accumulator != null) {
+            JSONObject reportArg = new JSONObject();
+            reportArg.put("source", this.getName());
+            reportArg.put("type", this.object.getCurrentVertexYaml());
+            reportArg.put("data", combineOutput(result));
+            accumulator.callByActionName("add", reportArg.toString());
+        }
+    }
+
+    /**
+     * Combines stdout and stderr into a single output string.
+     */
+    private String combineOutput(Node.CommandResult result) {
+        String output = result.getStdout().trim();
+        String stderr = result.getStderr().trim();
+        if (!stderr.isEmpty()) {
+            output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;
+        }
+        return output;
+    }
+
+    /**
+     * Extracts the root cause message from an ExecutionException.
+     */
+    private String extractRootCauseMessage(ExecutionException e) {
+        Throwable cause = e.getCause();
+        while (cause != null && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause != null ? cause.getMessage() : e.getMessage();
     }
 
     /**

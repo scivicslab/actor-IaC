@@ -58,6 +58,12 @@ public class NodeGroupInterpreter extends Interpreter {
     private String overlayDir;
 
     /**
+     * Verbose output flag.
+     * When true, displays full YAML for each vertex instead of truncated version.
+     */
+    private boolean verbose = false;
+
+    /**
      * Distributed log store for structured logging.
      */
     private DistributedLogStore logStore;
@@ -144,6 +150,27 @@ public class NodeGroupInterpreter extends Interpreter {
     }
 
     /**
+     * Sets verbose mode for detailed output.
+     *
+     * <p>When enabled, displays full YAML for each vertex in cowsay output
+     * instead of the truncated version.</p>
+     *
+     * @param verbose true to enable verbose output
+     */
+    public void setVerbose(boolean verbose) {
+        this.verbose = verbose;
+    }
+
+    /**
+     * Checks if verbose mode is enabled.
+     *
+     * @return true if verbose mode is enabled
+     */
+    public boolean isVerbose() {
+        return verbose;
+    }
+
+    /**
      * Sets the distributed log store for structured logging.
      *
      * @param logStore the log store to use
@@ -175,8 +202,9 @@ public class NodeGroupInterpreter extends Interpreter {
     /**
      * Hook called when entering a vertex during workflow execution.
      *
-     * <p>Displays the workflow name and first 10 lines of the vertex definition
-     * in YAML format using cowsay to provide visual separation between workflow steps.</p>
+     * <p>Displays the workflow name and vertex definition using cowsay.
+     * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML
+     * after the cowsay output.</p>
      *
      * @param vertex the vertex being entered
      */
@@ -187,13 +215,21 @@ public class NodeGroupInterpreter extends Interpreter {
                 ? getCode().getName()
                 : "unknown-workflow";
 
-        // Get YAML-formatted output (first 10 lines)
+        // Get YAML-formatted output (first 10 lines for cowsay)
         String yamlText = vertex.toYamlString(10).trim();
 
         // Combine workflow name and vertex YAML
         String displayText = "[" + workflowName + "]\n" + yamlText;
         String[] cowsayArgs = { displayText };
         System.out.println(Cowsay.say(cowsayArgs));
+
+        // In verbose mode, show the full YAML after cowsay
+        if (verbose) {
+            String fullYaml = vertex.toYamlString(-1);
+            System.out.println("--- Full vertex YAML ---");
+            System.out.println(fullYaml);
+            System.out.println("------------------------");
+        }
 
         // Log to distributed log store
         if (logStore != null && sessionId >= 0) {
