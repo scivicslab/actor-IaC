@@ -84,7 +84,7 @@ import picocli.CommandLine.Parameters;
     mixinStandardHelpOptions = true,
     version = "actor-IaC 2.9.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format.",
-    subcommands = {LogsCLI.class}
+    subcommands = {LogsCLI.class, WorkflowCLI.ListWorkflowsCommand.class}
 )
 public class WorkflowCLI implements Callable<Integer> {
 
@@ -620,27 +620,16 @@ public class WorkflowCLI implements Callable<Integer> {
     }
 
     private void printWorkflowList() {
-        Map<String, File> uniqueFiles = new LinkedHashMap<>();
-        workflowCache.forEach((name, file) ->
-            uniqueFiles.putIfAbsent(file.getAbsolutePath(), file));
+        List<WorkflowDisplay> displays = scanWorkflowsForDisplay(workflowDir);
 
-        if (uniqueFiles.isEmpty()) {
+        if (displays.isEmpty()) {
             System.out.println("No workflow files found under "
                 + workflowDir.getAbsolutePath());
             return;
         }
 
-        Path basePath = workflowDir.toPath();
-        List<WorkflowDisplay> displays = uniqueFiles.values().stream()
-            .map(file -> {
-                String relativePath = relativize(basePath, file.toPath());
-                return new WorkflowDisplay(getBaseName(file.getName()), relativePath);
-            })
-            .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))
-            .collect(Collectors.toList());
-
         System.out.println("Available workflows (directory: "
-            + basePath.toAbsolutePath() + ")");
+            + workflowDir.getAbsolutePath() + ")");
         int index = 1;
         for (WorkflowDisplay display : displays) {
             System.out.printf("%2d. %-30s (%s)%n",
@@ -650,7 +639,7 @@ public class WorkflowCLI implements Callable<Integer> {
             + "(extension optional).");
     }
 
-    private String getBaseName(String fileName) {
+    private static String getBaseName(String fileName) {
         int dotIndex = fileName.lastIndexOf('.');
         if (dotIndex > 0) {
             return fileName.substring(0, dotIndex);
@@ -658,7 +647,7 @@ public class WorkflowCLI implements Callable<Integer> {
         return fileName;
     }
 
-    private String relativize(Path base, Path target) {
+    private static String relativize(Path base, Path target) {
         try {
             return base.relativize(target).toString();
         } catch (IllegalArgumentException e) {
@@ -666,5 +655,72 @@ public class WorkflowCLI implements Callable<Integer> {
         }
     }
 
-    private record WorkflowDisplay(String baseName, String relativePath) {}
+    private static List<WorkflowDisplay> scanWorkflowsForDisplay(File directory) {
+        if (directory == null) {
+            return List.of();
+        }
+
+        try (Stream<Path> paths = Files.walk(directory.toPath())) {
+            Map<String, File> uniqueFiles = new LinkedHashMap<>();
+            paths.filter(Files::isRegularFile)
+                 .filter(path -> {
+                     String name = path.getFileName().toString().toLowerCase();
+                     return name.endsWith(".yaml") || name.endsWith(".yml")
+                         || name.endsWith(".json") || name.endsWith(".xml");
+                 })
+                 .forEach(path -> uniqueFiles.putIfAbsent(path.toFile().getAbsolutePath(), path.toFile()));
+
+            Path basePath = directory.toPath();
+            return uniqueFiles.values().stream()
+                .map(file -> new WorkflowDisplay(getBaseName(file.getName()),
+                    relativize(basePath, file.toPath())))
+                .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))
+                .collect(Collectors.toList());
+        } catch (IOException e) {
+            System.err.println("Failed to scan workflows: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    private static record WorkflowDisplay(String baseName, String relativePath) {}
+
+    @Command(
+        name = "list",
+        description = "List workflows discovered under --dir and exit",
+        mixinStandardHelpOptions = true
+    )
+    static class ListWorkflowsCommand implements Callable<Integer> {
+
+        @Option(
+            names = {"-d", "--dir"},
+            required = true,
+            description = "Directory containing workflow files (searched recursively)"
+        )
+        private File workflowDir;
+
+        @Override
+        public Integer call() {
+            if (!workflowDir.isDirectory()) {
+                System.err.println("Not a directory: " + workflowDir);
+                return 1;
+            }
+            List<WorkflowDisplay> displays = scanWorkflowsForDisplay(workflowDir);
+            if (displays.isEmpty()) {
+                System.out.println("No workflow files found under "
+                    + workflowDir.getAbsolutePath());
+                return 0;
+            }
+
+            System.out.println("Available workflows (directory: "
+                + workflowDir.getAbsolutePath() + ")");
+            int index = 1;
+            for (WorkflowDisplay display : displays) {
+                System.out.printf("%2d. %-30s (%s)%n",
+                    index++, display.baseName(), display.relativePath());
+            }
+            System.out.println("\nUse -w <workflow-name> with the base names shown above "
+                + "(extension optional).");
+            return 0;
+        }
+    }
 }
