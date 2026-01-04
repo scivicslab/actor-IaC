@@ -79,7 +79,8 @@ import picocli.CommandLine.Parameters;
     name = "actor-iac",
     mixinStandardHelpOptions = true,
     version = "actor-IaC 2.9.0",
-    description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
+    description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format.",
+    subcommands = {LogsCLI.class}
 )
 public class WorkflowCLI implements Callable<Integer> {
 
@@ -87,15 +88,13 @@ public class WorkflowCLI implements Callable<Integer> {
 
     @Option(
         names = {"-d", "--dir"},
-        description = "Directory containing workflow files (searched recursively)",
-        required = true
+        description = "Directory containing workflow files (searched recursively)"
     )
     private File workflowDir;
 
     @Option(
         names = {"-w", "--workflow"},
-        description = "Name of the main workflow to execute (with or without extension)",
-        required = true
+        description = "Name of the main workflow to execute (with or without extension)"
     )
     private String workflowName;
 
@@ -205,6 +204,13 @@ public class WorkflowCLI implements Callable<Integer> {
      */
     @Override
     public Integer call() {
+        // Validate required options when running workflow (not subcommands)
+        if (workflowDir == null || workflowName == null) {
+            System.err.println("Missing required options: '--dir=<workflowDir>', '--workflow=<workflowName>'");
+            CommandLine.usage(this, System.err);
+            return 2;
+        }
+
         // Setup file logging
         if (!noLog) {
             try {

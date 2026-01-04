@@ -37,16 +37,18 @@ public class H2LogReader implements AutoCloseable {
     private final Connection connection;
 
     /**
-     * Opens the log database in read-only mode.
+     * Opens the log database for reading.
      *
      * @param dbPath path to the database file (without extension)
      * @throws SQLException if database connection fails
      */
     public H2LogReader(Path dbPath) throws SQLException {
-        // AUTO_SERVER=TRUE allows connection while another process is writing
-        // H2 server is started by the writer process, reader connects to it
+        // Connect to the database.
+        // If H2LogStore is running with AUTO_SERVER=TRUE, H2 will automatically
+        // detect this and connect to the server process via TCP.
+        // FILE_LOCK=FS allows multiple readers even without AUTO_SERVER.
         String url = "jdbc:h2:" + dbPath.toAbsolutePath().toString()
-                   + ";AUTO_SERVER=TRUE";
+                   + ";FILE_LOCK=FS;OPEN_NEW=FALSE";
         this.connection = DriverManager.getConnection(url);
     }
 
