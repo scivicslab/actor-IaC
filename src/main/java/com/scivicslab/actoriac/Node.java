@@ -336,24 +336,9 @@ public class Node {
     private Session createSession() throws JSchException, IOException {
         JSch jsch = new JSch();
 
-        // Setup authentication
-        if (password != null && !password.isEmpty()) {
-            // Password authentication - no ssh-agent needed
-        } else {
-            // SSH key authentication via ssh-agent
-            try {
-                com.jcraft.jsch.IdentityRepository repo =
-                    new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
-                jsch.setIdentityRepository(repo);
-            } catch (Exception e) {
-                throw new IOException("ssh-agent is not available. Please start ssh-agent and add your SSH key: " +
-                    "eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/your_key\n" +
-                    "Or use --ask-pass for password authentication.", e);
-            }
-        }
-
-        // Load OpenSSH config file (for user/hostname/port only, NOT for IdentityFile)
+        // Load OpenSSH config file first (for user/hostname/port/IdentityFile)
         com.jcraft.jsch.ConfigRepository configRepository = null;
+        String identityFileFromConfig = null;
         try {
             String sshConfigPath = System.getProperty("user.home") + "/.ssh/config";
             java.io.File configFile = new java.io.File(sshConfigPath);
@@ -361,10 +346,81 @@ public class Node {
                 com.jcraft.jsch.OpenSSHConfig openSSHConfig =
                     com.jcraft.jsch.OpenSSHConfig.parseFile(sshConfigPath);
                 configRepository = openSSHConfig;
-                // Do NOT call jsch.setConfigRepository() - it would override ssh-agent with IdentityFile
+
+                // Get IdentityFile from config for this host
+                com.jcraft.jsch.ConfigRepository.Config hostConfig = openSSHConfig.getConfig(hostname);
+                if (hostConfig != null) {
+                    identityFileFromConfig = hostConfig.getValue("IdentityFile");
+                    // Expand ~ to home directory
+                    if (identityFileFromConfig != null && identityFileFromConfig.startsWith("~")) {
+                        identityFileFromConfig = System.getProperty("user.home") +
+                            identityFileFromConfig.substring(1);
+                    }
+                }
             }
         } catch (Exception e) {
             // If config loading fails, continue without it
+        }
+
+        // Setup authentication
+        if (password != null && !password.isEmpty()) {
+            // Password authentication - no ssh-agent needed
+        } else {
+            boolean authConfigured = false;
+
+            // Priority 1: Try ssh-agent first (supports Ed25519 and other modern key types)
+            try {
+                com.jcraft.jsch.IdentityRepository repo =
+                    new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
+                jsch.setIdentityRepository(repo);
+                authConfigured = true;
+            } catch (Exception e) {
+                // ssh-agent not available, will try key files directly
+            }
+
+            // Priority 2: Use IdentityFile from ~/.ssh/config (for RSA/ECDSA keys without passphrase)
+            if (!authConfigured && identityFileFromConfig != null) {
+                java.io.File keyFile = new java.io.File(identityFileFromConfig);
+                if (keyFile.exists() && keyFile.canRead()) {
+                    try {
+                        jsch.addIdentity(identityFileFromConfig);
+                        authConfigured = true;
+                    } catch (JSchException ex) {
+                        // Key file may require passphrase or be unsupported type
+                    }
+                }
+            }
+
+            // Priority 3: Fallback to default key files (for RSA/ECDSA keys without passphrase)
+            if (!authConfigured) {
+                String home = System.getProperty("user.home");
+                String[] keyFiles = {
+                    home + "/.ssh/id_rsa",
+                    home + "/.ssh/id_ecdsa",
+                    home + "/.ssh/id_dsa"
+                    // Note: id_ed25519 requires ssh-agent, so not included here
+                };
+
+                for (String keyFile : keyFiles) {
+                    java.io.File f = new java.io.File(keyFile);
+                    if (f.exists() && f.canRead()) {
+                        try {
+                            jsch.addIdentity(keyFile);
+                            authConfigured = true;
+                            break;
+                        } catch (JSchException ex) {
+                            // Key file may require passphrase, try next
+                        }
+                    }
+                }
+
+                if (!authConfigured) {
+                    throw new IOException("SSH authentication failed: No usable authentication method found.\n" +
+                        "For Ed25519 keys, please start ssh-agent: eval \"$(ssh-agent -s)\" && ssh-add\n" +
+                        "Or ensure you have RSA/ECDSA keys in ~/.ssh/ without passphrase.\n" +
+                        "Or use --ask-pass for password authentication.");
+                }
+            }
         }
 
         // Get effective connection parameters from SSH config
