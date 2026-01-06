@@ -69,6 +69,9 @@ public class Node {
     private final boolean localMode;
     private final String password;
 
+    // Jump host session (kept open for the duration of the connection)
+    private Session jumpHostSession = null;
+
     /**
      * Constructs a Node with the specified connection parameters (POJO constructor).
      *
@@ -293,6 +296,11 @@ public class Node {
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
+            // Clean up jump host session if used
+            if (jumpHostSession != null && jumpHostSession.isConnected()) {
+                jumpHostSession.disconnect();
+                jumpHostSession = null;
+            }
         }
     }
 
@@ -328,6 +336,7 @@ public class Node {
 
     /**
      * Creates a JSch SSH session with configured credentials.
+     * Supports ProxyJump for connections through a jump host.
      *
      * @return configured but not yet connected Session
      * @throws JSchException if session creation fails
@@ -336,9 +345,10 @@ public class Node {
     private Session createSession() throws JSchException, IOException {
         JSch jsch = new JSch();
 
-        // Load OpenSSH config file first (for user/hostname/port/IdentityFile)
+        // Load OpenSSH config file first (for user/hostname/port/IdentityFile/ProxyJump)
         com.jcraft.jsch.ConfigRepository configRepository = null;
         String identityFileFromConfig = null;
+        String proxyJump = null;
         try {
             String sshConfigPath = System.getProperty("user.home") + "/.ssh/config";
             java.io.File configFile = new java.io.File(sshConfigPath);
@@ -347,7 +357,7 @@ public class Node {
                     com.jcraft.jsch.OpenSSHConfig.parseFile(sshConfigPath);
                 configRepository = openSSHConfig;
 
-                // Get IdentityFile from config for this host
+                // Get IdentityFile and ProxyJump from config for this host
                 com.jcraft.jsch.ConfigRepository.Config hostConfig = openSSHConfig.getConfig(hostname);
                 if (hostConfig != null) {
                     identityFileFromConfig = hostConfig.getValue("IdentityFile");
@@ -356,6 +366,8 @@ public class Node {
                         identityFileFromConfig = System.getProperty("user.home") +
                             identityFileFromConfig.substring(1);
                     }
+                    // Get ProxyJump setting
+                    proxyJump = hostConfig.getValue("ProxyJump");
                 }
             }
         } catch (Exception e) {
@@ -363,65 +375,7 @@ public class Node {
         }
 
         // Setup authentication
-        if (password != null && !password.isEmpty()) {
-            // Password authentication - no ssh-agent needed
-        } else {
-            boolean authConfigured = false;
-
-            // Priority 1: Try ssh-agent first (supports Ed25519 and other modern key types)
-            try {
-                com.jcraft.jsch.IdentityRepository repo =
-                    new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
-                jsch.setIdentityRepository(repo);
-                authConfigured = true;
-            } catch (Exception e) {
-                // ssh-agent not available, will try key files directly
-            }
-
-            // Priority 2: Use IdentityFile from ~/.ssh/config (for RSA/ECDSA keys without passphrase)
-            if (!authConfigured && identityFileFromConfig != null) {
-                java.io.File keyFile = new java.io.File(identityFileFromConfig);
-                if (keyFile.exists() && keyFile.canRead()) {
-                    try {
-                        jsch.addIdentity(identityFileFromConfig);
-                        authConfigured = true;
-                    } catch (JSchException ex) {
-                        // Key file may require passphrase or be unsupported type
-                    }
-                }
-            }
-
-            // Priority 3: Fallback to default key files (for RSA/ECDSA keys without passphrase)
-            if (!authConfigured) {
-                String home = System.getProperty("user.home");
-                String[] keyFiles = {
-                    home + "/.ssh/id_rsa",
-                    home + "/.ssh/id_ecdsa",
-                    home + "/.ssh/id_dsa"
-                    // Note: id_ed25519 requires ssh-agent, so not included here
-                };
-
-                for (String keyFile : keyFiles) {
-                    java.io.File f = new java.io.File(keyFile);
-                    if (f.exists() && f.canRead()) {
-                        try {
-                            jsch.addIdentity(keyFile);
-                            authConfigured = true;
-                            break;
-                        } catch (JSchException ex) {
-                            // Key file may require passphrase, try next
-                        }
-                    }
-                }
-
-                if (!authConfigured) {
-                    throw new IOException("SSH authentication failed: No usable authentication method found.\n" +
-                        "For Ed25519 keys, please start ssh-agent: eval \"$(ssh-agent -s)\" && ssh-add\n" +
-                        "Or ensure you have RSA/ECDSA keys in ~/.ssh/ without passphrase.\n" +
-                        "Or use --ask-pass for password authentication.");
-                }
-            }
-        }
+        setupAuthentication(jsch, identityFileFromConfig);
 
         // Get effective connection parameters from SSH config
         String effectiveUser = user;
@@ -451,8 +405,15 @@ public class Node {
             }
         }
 
-        // Create session
-        Session session = jsch.getSession(effectiveUser, effectiveHostname, effectivePort);
+        Session session;
+
+        // Handle ProxyJump if configured
+        if (proxyJump != null && !proxyJump.isEmpty()) {
+            session = createSessionViaProxyJump(jsch, proxyJump, effectiveUser, effectiveHostname, effectivePort);
+        } else {
+            // Direct connection
+            session = jsch.getSession(effectiveUser, effectiveHostname, effectivePort);
+        }
 
         // Set password if using password authentication
         if (password != null && !password.isEmpty()) {
@@ -466,12 +427,142 @@ public class Node {
     }
 
     /**
+     * Sets up authentication for JSch.
+     */
+    private void setupAuthentication(JSch jsch, String identityFileFromConfig) throws IOException, JSchException {
+        if (password != null && !password.isEmpty()) {
+            // Password authentication - no ssh-agent needed
+            return;
+        }
+
+        boolean authConfigured = false;
+
+        // Priority 1: Try ssh-agent first (supports Ed25519 and other modern key types)
+        try {
+            com.jcraft.jsch.IdentityRepository repo =
+                new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());
+            jsch.setIdentityRepository(repo);
+            authConfigured = true;
+        } catch (Exception e) {
+            // ssh-agent not available, will try key files directly
+        }
+
+        // Priority 2: Use IdentityFile from ~/.ssh/config (for RSA/ECDSA keys without passphrase)
+        if (!authConfigured && identityFileFromConfig != null) {
+            java.io.File keyFile = new java.io.File(identityFileFromConfig);
+            if (keyFile.exists() && keyFile.canRead()) {
+                try {
+                    jsch.addIdentity(identityFileFromConfig);
+                    authConfigured = true;
+                } catch (JSchException ex) {
+                    // Key file may require passphrase or be unsupported type
+                }
+            }
+        }
+
+        // Priority 3: Fallback to default key files (for RSA/ECDSA keys without passphrase)
+        if (!authConfigured) {
+            String home = System.getProperty("user.home");
+            String[] keyFiles = {
+                home + "/.ssh/id_rsa",
+                home + "/.ssh/id_ecdsa",
+                home + "/.ssh/id_dsa"
+                // Note: id_ed25519 requires ssh-agent, so not included here
+            };
+
+            for (String keyFile : keyFiles) {
+                java.io.File f = new java.io.File(keyFile);
+                if (f.exists() && f.canRead()) {
+                    try {
+                        jsch.addIdentity(keyFile);
+                        authConfigured = true;
+                        break;
+                    } catch (JSchException ex) {
+                        // Key file may require passphrase, try next
+                    }
+                }
+            }
+
+            if (!authConfigured) {
+                throw new IOException("SSH authentication failed: No usable authentication method found.\n" +
+                    "For Ed25519 keys, please start ssh-agent: eval \"$(ssh-agent -s)\" && ssh-add\n" +
+                    "Or ensure you have RSA/ECDSA keys in ~/.ssh/ without passphrase.\n" +
+                    "Or use --ask-pass for password authentication.");
+            }
+        }
+    }
+
+    /**
+     * Creates a session through a jump host using ProxyJump.
+     * Format: user@host or user@host:port
+     */
+    private Session createSessionViaProxyJump(JSch jsch, String proxyJump,
+            String targetUser, String targetHost, int targetPort) throws JSchException, IOException {
+
+        // Parse ProxyJump: user@host or user@host:port
+        String jumpUser;
+        String jumpHost;
+        int jumpPort = 22;
+
+        String[] atParts = proxyJump.split("@", 2);
+        if (atParts.length == 2) {
+            jumpUser = atParts[0];
+            String hostPart = atParts[1];
+            if (hostPart.contains(":")) {
+                String[] hostPortParts = hostPart.split(":", 2);
+                jumpHost = hostPortParts[0];
+                try {
+                    jumpPort = Integer.parseInt(hostPortParts[1]);
+                } catch (NumberFormatException e) {
+                    jumpHost = hostPart;
+                }
+            } else {
+                jumpHost = hostPart;
+            }
+        } else {
+            // No user specified, use current user
+            jumpUser = user;
+            String hostPart = proxyJump;
+            if (hostPart.contains(":")) {
+                String[] hostPortParts = hostPart.split(":", 2);
+                jumpHost = hostPortParts[0];
+                try {
+                    jumpPort = Integer.parseInt(hostPortParts[1]);
+                } catch (NumberFormatException e) {
+                    jumpHost = hostPart;
+                }
+            } else {
+                jumpHost = hostPart;
+            }
+        }
+
+        // Create and connect to jump host
+        jumpHostSession = jsch.getSession(jumpUser, jumpHost, jumpPort);
+        jumpHostSession.setConfig("StrictHostKeyChecking", "no");
+        if (password != null && !password.isEmpty()) {
+            jumpHostSession.setPassword(password);
+        }
+        jumpHostSession.connect();
+
+        // Set up port forwarding through jump host
+        // Find an available local port
+        int localPort = jumpHostSession.setPortForwardingL(0, targetHost, targetPort);
+
+        // Create session to target via the forwarded port
+        Session targetSession = jsch.getSession(targetUser, "127.0.0.1", localPort);
+
+        return targetSession;
+    }
+
+    /**
      * Cleans up resources used by this Node.
-     * With JSch-based implementation, sessions are closed immediately after use,
-     * so this method is a no-op but kept for API compatibility.
+     * Closes any open jump host sessions.
      */
     public void cleanup() {
-        // No cleanup needed with JSch - sessions are closed in executeCommand()
+        if (jumpHostSession != null && jumpHostSession.isConnected()) {
+            jumpHostSession.disconnect();
+            jumpHostSession = null;
+        }
     }
 
     /**
