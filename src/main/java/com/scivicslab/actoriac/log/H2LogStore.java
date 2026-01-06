@@ -107,14 +107,15 @@ public class H2LogStore implements DistributedLogStore {
                 """);
 
             // Logs table
+            // vertex_name and action_name use CLOB to store long YAML snippets
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS logs (
                     id IDENTITY PRIMARY KEY,
                     session_id BIGINT,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     node_id VARCHAR(255) NOT NULL,
-                    vertex_name VARCHAR(255),
-                    action_name VARCHAR(255),
+                    vertex_name CLOB,
+                    action_name CLOB,
                     level VARCHAR(10) NOT NULL,
                     message CLOB,
                     exit_code INT,

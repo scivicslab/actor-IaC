@@ -252,6 +252,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             case "getAccumulatorSummary":
                 return getAccumulatorSummary();
 
+            case "printSessionSummary":
+                return printSessionSummary();
+
             case "doNothing":
                 return new ActionResult(true, arg);
 
@@ -600,6 +603,224 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         // Print the summary to stdout
         System.out.println(result.getResult());
         return result;
+    }
+
+    /**
+     * Prints a summary of the current session's verification results.
+     *
+     * <p>Groups results by vertex name (step) and displays a formatted table.</p>
+     *
+     * @return ActionResult with success status and summary text
+     */
+    private ActionResult printSessionSummary() {
+        DistributedLogStore logStore = this.object.getLogStore();
+        long sessionId = this.object.getSessionId();
+
+        if (logStore == null || sessionId < 0) {
+            String msg = "Log store not available";
+            System.out.println(msg);
+            return new ActionResult(false, msg);
+        }
+
+        // Get all logs for this session
+        List<com.scivicslab.actoriac.log.LogEntry> logs = logStore.getLogsByLevel(sessionId,
+            com.scivicslab.actoriac.log.LogLevel.DEBUG);
+
+        // Group logs by vertex name and count results
+        java.util.Map<String, VerifyResult> resultsByVertex = new java.util.LinkedHashMap<>();
+
+        for (com.scivicslab.actoriac.log.LogEntry entry : logs) {
+            String message = entry.getMessage();
+            String vertexName = entry.getVertexName();
+            if (message == null) continue;
+
+            // Extract vertex name from the message if it contains step info
+            // Format: "- states: [...]\n  vertexName: xxx\n..."
+            if (vertexName != null && vertexName.contains("vertexName:")) {
+                int idx = vertexName.indexOf("vertexName:");
+                if (idx >= 0) {
+                    String rest = vertexName.substring(idx + 11).trim();
+                    int end = rest.indexOf('\n');
+                    vertexName = end > 0 ? rest.substring(0, end).trim() : rest.trim();
+                }
+            }
+
+            // Skip non-verify steps
+            if (vertexName == null || !vertexName.startsWith("verify-")) {
+                continue;
+            }
+
+            VerifyResult result = resultsByVertex.computeIfAbsent(vertexName, k -> new VerifyResult());
+
+            // Count occurrences in message
+            result.okCount += countOccurrences(message, "[OK]");
+            result.warnCount += countOccurrences(message, "[WARN]");
+            result.errorCount += countOccurrences(message, "[ERROR]");
+            result.infoCount += countOccurrences(message, "[INFO]");
+
+            // Extract special info (like document count, cluster health)
+            extractSpecialInfo(message, result);
+        }
+
+        // Build summary output
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n");
+        sb.append("============================================================\n");
+        sb.append("                 VERIFICATION SUMMARY\n");
+        sb.append("============================================================\n");
+        sb.append("\n");
+        sb.append(String.format("| %-35s | %-20s |\n", "Item", "Status"));
+        sb.append("|-------------------------------------|----------------------|\n");
+
+        // Mapping from vertex names to display names and aggregation
+        String[][] mappings = {
+            {"verify-repos", "Document repositories"},
+            {"verify-utility-cli", "Utility-cli"},
+            {"verify-utility-sau3", "Utility-sau3"},
+            {"verify-builds", "Docusaurus builds"},
+            {"verify-public-html", "public_html deploy"},
+            {"verify-apache", "Apache2 + UserDir"},
+            {"verify-opensearch-install", "OpenSearch install"},
+            {"verify-opensearch-running", "OpenSearch status"},
+            {"verify-docusearch-build", "quarkus-docusearch build"},
+            {"verify-docusearch-running", "quarkus-docusearch server"},
+            {"verify-search-index", "Search index"},
+            {"verify-web-access", "Web access"},
+        };
+
+        int totalOk = 0, totalWarn = 0, totalError = 0;
+        List<String> errorDetails = new ArrayList<>();
+        List<String> warnDetails = new ArrayList<>();
+
+        for (String[] mapping : mappings) {
+            String vertexName = mapping[0];
+            String displayName = mapping[1];
+            VerifyResult result = resultsByVertex.get(vertexName);
+
+            if (result == null) {
+                sb.append(String.format("| %-35s | %-20s |\n", displayName, "-"));
+                continue;
+            }
+
+            totalOk += result.okCount;
+            totalWarn += result.warnCount;
+            totalError += result.errorCount;
+
+            String status = formatStatus(result);
+            sb.append(String.format("| %-35s | %-20s |\n", displayName, status));
+
+            // Collect error/warning details
+            if (result.errorCount > 0) {
+                errorDetails.add(displayName + ": " + result.errorCount + " error(s)");
+            }
+            if (result.warnCount > 0) {
+                warnDetails.add(displayName + ": " + result.warnCount + " warning(s)");
+            }
+        }
+
+        sb.append("|-------------------------------------|----------------------|\n");
+        sb.append(String.format("| %-35s | %d OK, %d WARN, %d ERR |\n",
+            "TOTAL", totalOk, totalWarn, totalError));
+        sb.append("============================================================\n");
+
+        // Show error details if any
+        if (!errorDetails.isEmpty()) {
+            sb.append("\n--- Errors ---\n");
+            for (String detail : errorDetails) {
+                sb.append("  * ").append(detail).append("\n");
+            }
+        }
+
+        // Show warning details if any
+        if (!warnDetails.isEmpty()) {
+            sb.append("\n--- Warnings ---\n");
+            for (String detail : warnDetails) {
+                sb.append("  * ").append(detail).append("\n");
+            }
+        }
+
+        sb.append("\n");
+        if (totalError == 0 && totalWarn == 0) {
+            sb.append("All checks passed!\n");
+        } else if (totalError > 0) {
+            sb.append("To fix issues, run:\n");
+            sb.append("  ./actor_iac.java --dir ./docu-search --workflow main-setup\n");
+        }
+
+        String summary = sb.toString();
+        System.out.println(summary);
+        return new ActionResult(true, summary);
+    }
+
+    /**
+     * Formats the status string for a verification result.
+     */
+    private String formatStatus(VerifyResult result) {
+        if (result.errorCount > 0) {
+            if (result.okCount > 0) {
+                return String.format("%d OK, %d ERROR", result.okCount, result.errorCount);
+            }
+            return "ERROR";
+        }
+        if (result.warnCount > 0) {
+            if (result.okCount > 0) {
+                return String.format("%d OK, %d WARN", result.okCount, result.warnCount);
+            }
+            return "WARN";
+        }
+        if (result.okCount > 0) {
+            String extra = result.extraInfo != null ? " " + result.extraInfo : "";
+            return result.okCount + " OK" + extra;
+        }
+        return "OK";
+    }
+
+    /**
+     * Extracts special information from log messages (like document count, cluster health).
+     */
+    private void extractSpecialInfo(String message, VerifyResult result) {
+        // Extract document count from search index
+        if (message.contains("documents")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)\\s+documents").matcher(message);
+            if (m.find()) {
+                result.extraInfo = "(" + m.group(1) + " docs)";
+            }
+        }
+        // Extract cluster health
+        if (message.contains("Cluster health:")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Cluster health:\\s*(\\w+)").matcher(message);
+            if (m.find()) {
+                result.extraInfo = "(" + m.group(1) + ")";
+            }
+        }
+        // Extract web access count
+        if (message.contains("Accessible at")) {
+            // Count from "X / Y" pattern is handled by OK count
+        }
+    }
+
+    /**
+     * Counts occurrences of a substring in a string.
+     */
+    private int countOccurrences(String text, String sub) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf(sub, idx)) != -1) {
+            count++;
+            idx += sub.length();
+        }
+        return count;
+    }
+
+    /**
+     * Helper class to hold verification results for a step.
+     */
+    private static class VerifyResult {
+        int okCount = 0;
+        int warnCount = 0;
+        int errorCount = 0;
+        int infoCount = 0;
+        String extraInfo = null;
     }
 
 }
