@@ -29,6 +29,8 @@ import java.util.List;
 public class SessionSummary {
     private final long sessionId;
     private final String workflowName;
+    private final String overlayName;
+    private final String inventoryName;
     private final LocalDateTime startedAt;
     private final LocalDateTime endedAt;
     private final int nodeCount;
@@ -39,12 +41,15 @@ public class SessionSummary {
     private final int totalLogEntries;
     private final int errorCount;
 
-    public SessionSummary(long sessionId, String workflowName, LocalDateTime startedAt,
+    public SessionSummary(long sessionId, String workflowName, String overlayName,
+                          String inventoryName, LocalDateTime startedAt,
                           LocalDateTime endedAt, int nodeCount, SessionStatus status,
                           int successCount, int failedCount, List<String> failedNodes,
                           int totalLogEntries, int errorCount) {
         this.sessionId = sessionId;
         this.workflowName = workflowName;
+        this.overlayName = overlayName;
+        this.inventoryName = inventoryName;
         this.startedAt = startedAt;
         this.endedAt = endedAt;
         this.nodeCount = nodeCount;
@@ -58,6 +63,8 @@ public class SessionSummary {
 
     public long getSessionId() { return sessionId; }
     public String getWorkflowName() { return workflowName; }
+    public String getOverlayName() { return overlayName; }
+    public String getInventoryName() { return inventoryName; }
     public LocalDateTime getStartedAt() { return startedAt; }
     public LocalDateTime getEndedAt() { return endedAt; }
     public int getNodeCount() { return nodeCount; }
@@ -79,6 +86,12 @@ public class SessionSummary {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("Session #").append(sessionId).append(": ").append(workflowName).append("\n");
+        if (overlayName != null) {
+            sb.append("  Overlay:  ").append(overlayName).append("\n");
+        }
+        if (inventoryName != null) {
+            sb.append("  Inventory: ").append(inventoryName).append("\n");
+        }
         sb.append("  Started:  ").append(startedAt != null ? startedAt.toString().replace("T", " ") : "N/A").append("\n");
         sb.append("  Ended:    ").append(endedAt != null ? endedAt.toString().replace("T", " ") : "N/A").append("\n");
 

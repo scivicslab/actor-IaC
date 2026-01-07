@@ -58,7 +58,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "logs",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC logs 2.9.0",
+    version = "actor-IaC logs 2.10.0",
     description = "Query workflow execution logs from H2 database."
 )
 public class LogsCLI implements Callable<Integer> {
@@ -113,6 +113,30 @@ public class LogsCLI implements Callable<Integer> {
     private boolean listSessions;
 
     @Option(
+        names = {"-w", "--workflow"},
+        description = "Filter sessions by workflow name"
+    )
+    private String workflowFilter;
+
+    @Option(
+        names = {"-o", "--overlay"},
+        description = "Filter sessions by overlay name"
+    )
+    private String overlayFilter;
+
+    @Option(
+        names = {"-i", "--inventory"},
+        description = "Filter sessions by inventory name"
+    )
+    private String inventoryFilter;
+
+    @Option(
+        names = {"--after"},
+        description = "Filter sessions started after this time (ISO format: YYYY-MM-DDTHH:mm:ss)"
+    )
+    private String startedAfter;
+
+    @Option(
         names = {"--limit"},
         description = "Maximum number of entries to show",
         defaultValue = "100"
@@ -161,21 +185,45 @@ public class LogsCLI implements Callable<Integer> {
     }
 
     private Integer listRecentSessions(H2LogReader reader) {
-        List<SessionSummary> sessions = reader.listSessions(limit);
+        // Parse startedAfter if provided
+        LocalDateTime afterTime = null;
+        if (startedAfter != null) {
+            try {
+                afterTime = LocalDateTime.parse(startedAfter);
+            } catch (Exception e) {
+                System.err.println("Invalid date format. Use ISO format: YYYY-MM-DDTHH:mm:ss");
+                return 1;
+            }
+        }
+
+        // Apply filters if any are specified
+        List<SessionSummary> sessions;
+        if (workflowFilter != null || overlayFilter != null || inventoryFilter != null || afterTime != null) {
+            sessions = reader.listSessionsFiltered(workflowFilter, overlayFilter, inventoryFilter, afterTime, limit);
+        } else {
+            sessions = reader.listSessions(limit);
+        }
+
         if (sessions.isEmpty()) {
             System.out.println("No sessions found.");
             return 0;
         }
 
-        System.out.println("Recent Sessions:");
-        System.out.println("=".repeat(70));
+        System.out.println("Sessions:");
+        System.out.println("=".repeat(80));
         for (SessionSummary summary : sessions) {
             System.out.printf("#%-4d %-30s %-10s%n",
                     summary.getSessionId(),
                     summary.getWorkflowName(),
                     summary.getStatus());
-            System.out.printf("      Started: %s%n", formatTimestamp(summary.getStartedAt()));
-            System.out.println("-".repeat(70));
+            if (summary.getOverlayName() != null) {
+                System.out.printf("      Overlay:   %s%n", summary.getOverlayName());
+            }
+            if (summary.getInventoryName() != null) {
+                System.out.printf("      Inventory: %s%n", summary.getInventoryName());
+            }
+            System.out.printf("      Started:   %s%n", formatTimestamp(summary.getStartedAt()));
+            System.out.println("-".repeat(80));
         }
         return 0;
     }

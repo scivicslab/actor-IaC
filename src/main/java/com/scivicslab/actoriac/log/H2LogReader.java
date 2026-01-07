@@ -116,6 +116,8 @@ public class H2LogReader implements AutoCloseable {
     public SessionSummary getSummary(long sessionId) {
         try {
             String workflowName = null;
+            String overlayName = null;
+            String inventoryName = null;
             LocalDateTime startedAt = null;
             LocalDateTime endedAt = null;
             int nodeCount = 0;
@@ -127,6 +129,8 @@ public class H2LogReader implements AutoCloseable {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         workflowName = rs.getString("workflow_name");
+                        overlayName = rs.getString("overlay_name");
+                        inventoryName = rs.getString("inventory_name");
                         Timestamp ts = rs.getTimestamp("started_at");
                         startedAt = ts != null ? ts.toLocalDateTime() : null;
                         ts = rs.getTimestamp("ended_at");
@@ -177,9 +181,9 @@ public class H2LogReader implements AutoCloseable {
                 }
             }
 
-            return new SessionSummary(sessionId, workflowName, startedAt, endedAt,
-                    nodeCount, status, successCount, failedCount, failedNodes,
-                    totalLogEntries, errorCount);
+            return new SessionSummary(sessionId, workflowName, overlayName, inventoryName,
+                    startedAt, endedAt, nodeCount, status, successCount, failedCount,
+                    failedNodes, totalLogEntries, errorCount);
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get session summary", e);
@@ -224,6 +228,107 @@ public class H2LogReader implements AutoCloseable {
             throw new RuntimeException("Failed to list sessions", e);
         }
         return sessions;
+    }
+
+    /**
+     * Lists sessions filtered by criteria.
+     *
+     * @param workflowName filter by workflow name (null to skip)
+     * @param overlayName filter by overlay name (null to skip)
+     * @param inventoryName filter by inventory name (null to skip)
+     * @param startedAfter filter by start time (null to skip)
+     * @param limit maximum number of sessions to return
+     * @return list of session summaries matching the criteria
+     */
+    public List<SessionSummary> listSessionsFiltered(String workflowName, String overlayName,
+                                                      String inventoryName, LocalDateTime startedAfter,
+                                                      int limit) {
+        List<SessionSummary> sessions = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT id FROM sessions WHERE 1=1");
+
+        if (workflowName != null) {
+            sql.append(" AND workflow_name = ?");
+        }
+        if (overlayName != null) {
+            sql.append(" AND overlay_name = ?");
+        }
+        if (inventoryName != null) {
+            sql.append(" AND inventory_name = ?");
+        }
+        if (startedAfter != null) {
+            sql.append(" AND started_at >= ?");
+        }
+        sql.append(" ORDER BY started_at DESC LIMIT ?");
+
+        try (PreparedStatement ps = connection.prepareStatement(sql.toString())) {
+            int idx = 1;
+            if (workflowName != null) {
+                ps.setString(idx++, workflowName);
+            }
+            if (overlayName != null) {
+                ps.setString(idx++, overlayName);
+            }
+            if (inventoryName != null) {
+                ps.setString(idx++, inventoryName);
+            }
+            if (startedAfter != null) {
+                ps.setTimestamp(idx++, Timestamp.valueOf(startedAfter));
+            }
+            ps.setInt(idx, limit);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    sessions.add(getSummary(rs.getLong("id")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to list sessions", e);
+        }
+        return sessions;
+    }
+
+    /**
+     * Lists sessions filtered by workflow name.
+     *
+     * @param workflowName the workflow name to filter by
+     * @param limit maximum number of sessions to return
+     * @return list of session summaries for the specified workflow
+     */
+    public List<SessionSummary> listSessionsByWorkflow(String workflowName, int limit) {
+        return listSessionsFiltered(workflowName, null, null, null, limit);
+    }
+
+    /**
+     * Lists sessions filtered by overlay name.
+     *
+     * @param overlayName the overlay name to filter by
+     * @param limit maximum number of sessions to return
+     * @return list of session summaries for the specified overlay
+     */
+    public List<SessionSummary> listSessionsByOverlay(String overlayName, int limit) {
+        return listSessionsFiltered(null, overlayName, null, null, limit);
+    }
+
+    /**
+     * Lists sessions filtered by inventory name.
+     *
+     * @param inventoryName the inventory name to filter by
+     * @param limit maximum number of sessions to return
+     * @return list of session summaries for the specified inventory
+     */
+    public List<SessionSummary> listSessionsByInventory(String inventoryName, int limit) {
+        return listSessionsFiltered(null, null, inventoryName, null, limit);
+    }
+
+    /**
+     * Lists sessions started after the specified time.
+     *
+     * @param startedAfter only include sessions started after this time
+     * @param limit maximum number of sessions to return
+     * @return list of session summaries started after the specified time
+     */
+    public List<SessionSummary> listSessionsAfter(LocalDateTime startedAfter, int limit) {
+        return listSessionsFiltered(null, null, null, startedAfter, limit);
     }
 
     private LogEntry mapLogEntry(ResultSet rs) throws SQLException {

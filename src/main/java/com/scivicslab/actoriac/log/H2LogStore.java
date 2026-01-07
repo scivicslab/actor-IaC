@@ -101,10 +101,20 @@ public class H2LogStore implements DistributedLogStore {
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     ended_at TIMESTAMP,
                     workflow_name VARCHAR(255),
+                    overlay_name VARCHAR(255),
+                    inventory_name VARCHAR(255),
                     node_count INT,
                     status VARCHAR(20) DEFAULT 'RUNNING'
                 )
                 """);
+
+            // Add columns if they don't exist (migration for existing databases)
+            try {
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS overlay_name VARCHAR(255)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS inventory_name VARCHAR(255)");
+            } catch (SQLException e) {
+                // Ignore if columns already exist
+            }
 
             // Logs table
             // vertex_name and action_name use CLOB to store long YAML snippets
@@ -142,6 +152,10 @@ public class H2LogStore implements DistributedLogStore {
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_node ON logs(node_id)");
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)");
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_workflow ON sessions(workflow_name)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_overlay ON sessions(overlay_name)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_inventory ON sessions(inventory_name)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)");
         }
     }
 
@@ -188,11 +202,18 @@ public class H2LogStore implements DistributedLogStore {
 
     @Override
     public long startSession(String workflowName, int nodeCount) {
+        return startSession(workflowName, null, null, nodeCount);
+    }
+
+    @Override
+    public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount) {
         try (PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO sessions (workflow_name, node_count) VALUES (?, ?)",
+                "INSERT INTO sessions (workflow_name, overlay_name, inventory_name, node_count) VALUES (?, ?, ?, ?)",
                 Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, workflowName);
-            ps.setInt(2, nodeCount);
+            ps.setString(2, overlayName);
+            ps.setString(3, inventoryName);
+            ps.setInt(4, nodeCount);
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -307,6 +328,8 @@ public class H2LogStore implements DistributedLogStore {
         try {
             // Get session info
             String workflowName = null;
+            String overlayName = null;
+            String inventoryName = null;
             LocalDateTime startedAt = null;
             LocalDateTime endedAt = null;
             int nodeCount = 0;
@@ -318,6 +341,8 @@ public class H2LogStore implements DistributedLogStore {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
                         workflowName = rs.getString("workflow_name");
+                        overlayName = rs.getString("overlay_name");
+                        inventoryName = rs.getString("inventory_name");
                         Timestamp ts = rs.getTimestamp("started_at");
                         startedAt = ts != null ? ts.toLocalDateTime() : null;
                         ts = rs.getTimestamp("ended_at");
@@ -368,9 +393,9 @@ public class H2LogStore implements DistributedLogStore {
                 }
             }
 
-            return new SessionSummary(sessionId, workflowName, startedAt, endedAt,
-                    nodeCount, status, successCount, failedCount, failedNodes,
-                    totalLogEntries, errorCount);
+            return new SessionSummary(sessionId, workflowName, overlayName, inventoryName,
+                    startedAt, endedAt, nodeCount, status, successCount, failedCount,
+                    failedNodes, totalLogEntries, errorCount);
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get session summary", e);

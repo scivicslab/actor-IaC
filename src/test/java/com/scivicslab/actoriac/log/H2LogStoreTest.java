@@ -212,4 +212,46 @@ class H2LogStoreTest {
         List<LogEntry> logs = logStore.getLogsByLevel(sessionId, LogLevel.DEBUG);
         assertEquals(200, logs.size(), "Should have 200 log entries (2 per node)");
     }
+
+    @Test
+    @DisplayName("Should start session with overlay and inventory names")
+    void testStartSessionWithOverlayAndInventory() {
+        long sessionId = logStore.startSession("deploy-workflow", "production", "servers.ini", 5);
+        assertTrue(sessionId > 0, "Session ID should be positive");
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+        assertEquals("deploy-workflow", summary.getWorkflowName());
+        assertEquals("production", summary.getOverlayName());
+        assertEquals("servers.ini", summary.getInventoryName());
+        assertEquals(5, summary.getNodeCount());
+    }
+
+    @Test
+    @DisplayName("Should start session with null overlay and inventory")
+    void testStartSessionWithNullOverlayAndInventory() {
+        long sessionId = logStore.startSession("local-workflow", null, null, 1);
+        assertTrue(sessionId > 0, "Session ID should be positive");
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+        assertEquals("local-workflow", summary.getWorkflowName());
+        assertNull(summary.getOverlayName());
+        assertNull(summary.getInventoryName());
+    }
+
+    @Test
+    @DisplayName("Should include overlay and inventory in session summary toString")
+    void testSessionSummaryToStringWithOverlayAndInventory() throws InterruptedException {
+        long sessionId = logStore.startSession("test-workflow", "staging", "hosts.yml", 2);
+
+        logStore.log(sessionId, "node-001", LogLevel.INFO, "Started");
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+        String summaryStr = summary.toString();
+
+        assertTrue(summaryStr.contains("Overlay:  staging"), "Summary should include overlay name");
+        assertTrue(summaryStr.contains("Inventory: hosts.yml"), "Summary should include inventory name");
+    }
 }

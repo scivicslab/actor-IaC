@@ -84,7 +84,7 @@ import picocli.CommandLine.Parameters;
 @Command(
     name = "actor-iac",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC 2.9.0",
+    version = "actor-IaC 2.10.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format.",
     subcommands = {LogsCLI.class, WorkflowCLI.ListWorkflowsCommand.class}
 )
@@ -568,7 +568,9 @@ public class WorkflowCLI implements Callable<Integer> {
 
         // Start log session if log database is configured
         if (logStore != null) {
-            sessionId = logStore.startSession(workflowName, 1); // nodeCount will be updated later
+            String overlayName = overlayDir != null ? overlayDir.getName() : null;
+            String inventoryName = inventoryFile != null ? inventoryFile.getName() : null;
+            sessionId = logStore.startSession(workflowName, overlayName, inventoryName, 1); // nodeCount will be updated later
             logStore.log(sessionId, "cli", LogLevel.INFO, "Starting workflow: " + workflowName);
         }
 

@@ -39,6 +39,17 @@ public interface DistributedLogStore extends AutoCloseable {
     long startSession(String workflowName, int nodeCount);
 
     /**
+     * Starts a new workflow execution session with overlay and inventory info.
+     *
+     * @param workflowName name of the workflow being executed
+     * @param overlayName name of the overlay being used (may be null)
+     * @param inventoryName name of the inventory file being used (may be null)
+     * @param nodeCount number of nodes participating in this session
+     * @return session ID for subsequent log entries
+     */
+    long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount);
+
+    /**
      * Records a log entry.
      *
      * @param sessionId session ID from startSession()
