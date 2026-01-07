@@ -144,6 +144,12 @@ public class LogsCLI implements Callable<Integer> {
     private String since;
 
     @Option(
+        names = {"--ended-since"},
+        description = "Filter sessions ended within the specified duration (e.g., 1h, 12h, 1d)"
+    )
+    private String endedSince;
+
+    @Option(
         names = {"--limit"},
         description = "Maximum number of entries to show",
         defaultValue = "100"
@@ -202,27 +208,37 @@ public class LogsCLI implements Callable<Integer> {
     }
 
     private Integer listRecentSessions(H2LogReader reader) {
-        // Parse time filter (--since takes precedence over --after)
-        LocalDateTime afterTime = null;
+        // Parse start time filter (--since takes precedence over --after)
+        LocalDateTime startedAfterTime = null;
         if (since != null) {
-            afterTime = parseSince(since);
-            if (afterTime == null) {
+            startedAfterTime = parseSince(since);
+            if (startedAfterTime == null) {
                 System.err.println("Invalid --since format. Use: 12h, 1d, 3d, 1w (h=hours, d=days, w=weeks)");
                 return 1;
             }
         } else if (startedAfter != null) {
             try {
-                afterTime = LocalDateTime.parse(startedAfter);
+                startedAfterTime = LocalDateTime.parse(startedAfter);
             } catch (Exception e) {
                 System.err.println("Invalid date format. Use ISO format: YYYY-MM-DDTHH:mm:ss");
                 return 1;
             }
         }
 
+        // Parse end time filter
+        LocalDateTime endedAfterTime = null;
+        if (endedSince != null) {
+            endedAfterTime = parseSince(endedSince);
+            if (endedAfterTime == null) {
+                System.err.println("Invalid --ended-since format. Use: 1h, 12h, 1d, 3d (h=hours, d=days, w=weeks)");
+                return 1;
+            }
+        }
+
         // Apply filters if any are specified
         List<SessionSummary> sessions;
-        if (workflowFilter != null || overlayFilter != null || inventoryFilter != null || afterTime != null) {
-            sessions = reader.listSessionsFiltered(workflowFilter, overlayFilter, inventoryFilter, afterTime, limit);
+        if (workflowFilter != null || overlayFilter != null || inventoryFilter != null || startedAfterTime != null || endedAfterTime != null) {
+            sessions = reader.listSessionsFiltered(workflowFilter, overlayFilter, inventoryFilter, startedAfterTime, endedAfterTime, limit);
         } else {
             sessions = reader.listSessions(limit);
         }

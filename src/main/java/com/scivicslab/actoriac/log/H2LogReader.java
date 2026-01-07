@@ -243,6 +243,23 @@ public class H2LogReader implements AutoCloseable {
     public List<SessionSummary> listSessionsFiltered(String workflowName, String overlayName,
                                                       String inventoryName, LocalDateTime startedAfter,
                                                       int limit) {
+        return listSessionsFiltered(workflowName, overlayName, inventoryName, startedAfter, null, limit);
+    }
+
+    /**
+     * Lists sessions filtered by criteria including end time.
+     *
+     * @param workflowName filter by workflow name (null to skip)
+     * @param overlayName filter by overlay name (null to skip)
+     * @param inventoryName filter by inventory name (null to skip)
+     * @param startedAfter filter by start time (null to skip)
+     * @param endedAfter filter by end time (null to skip)
+     * @param limit maximum number of sessions to return
+     * @return list of session summaries matching the criteria
+     */
+    public List<SessionSummary> listSessionsFiltered(String workflowName, String overlayName,
+                                                      String inventoryName, LocalDateTime startedAfter,
+                                                      LocalDateTime endedAfter, int limit) {
         List<SessionSummary> sessions = new ArrayList<>();
         StringBuilder sql = new StringBuilder("SELECT id FROM sessions WHERE 1=1");
 
@@ -257,6 +274,9 @@ public class H2LogReader implements AutoCloseable {
         }
         if (startedAfter != null) {
             sql.append(" AND started_at >= ?");
+        }
+        if (endedAfter != null) {
+            sql.append(" AND ended_at >= ?");
         }
         sql.append(" ORDER BY started_at DESC LIMIT ?");
 
@@ -273,6 +293,9 @@ public class H2LogReader implements AutoCloseable {
             }
             if (startedAfter != null) {
                 ps.setTimestamp(idx++, Timestamp.valueOf(startedAfter));
+            }
+            if (endedAfter != null) {
+                ps.setTimestamp(idx++, Timestamp.valueOf(endedAfter));
             }
             ps.setInt(idx, limit);
 
