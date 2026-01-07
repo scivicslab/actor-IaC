@@ -137,6 +137,12 @@ public class LogsCLI implements Callable<Integer> {
     private String startedAfter;
 
     @Option(
+        names = {"--since"},
+        description = "Filter sessions started within the specified duration (e.g., 12h, 1d, 3d, 1w)"
+    )
+    private String since;
+
+    @Option(
         names = {"--limit"},
         description = "Maximum number of entries to show",
         defaultValue = "100"
@@ -185,9 +191,15 @@ public class LogsCLI implements Callable<Integer> {
     }
 
     private Integer listRecentSessions(H2LogReader reader) {
-        // Parse startedAfter if provided
+        // Parse time filter (--since takes precedence over --after)
         LocalDateTime afterTime = null;
-        if (startedAfter != null) {
+        if (since != null) {
+            afterTime = parseSince(since);
+            if (afterTime == null) {
+                System.err.println("Invalid --since format. Use: 12h, 1d, 3d, 1w (h=hours, d=days, w=weeks)");
+                return 1;
+            }
+        } else if (startedAfter != null) {
             try {
                 afterTime = LocalDateTime.parse(startedAfter);
             } catch (Exception e) {
@@ -299,5 +311,42 @@ public class LogsCLI implements Callable<Integer> {
             return "N/A";
         }
         return timestamp.atZone(SYSTEM_ZONE).format(ISO_FORMATTER);
+    }
+
+    /**
+     * Parses a relative time string into a LocalDateTime.
+     *
+     * <p>Supported formats:</p>
+     * <ul>
+     *   <li>{@code 12h} - 12 hours ago</li>
+     *   <li>{@code 1d} - 1 day ago</li>
+     *   <li>{@code 3d} - 3 days ago</li>
+     *   <li>{@code 1w} - 1 week ago</li>
+     * </ul>
+     *
+     * @param sinceStr the relative time string
+     * @return LocalDateTime representing the calculated time, or null if invalid format
+     */
+    private LocalDateTime parseSince(String sinceStr) {
+        if (sinceStr == null || sinceStr.isEmpty()) {
+            return null;
+        }
+
+        try {
+            String numPart = sinceStr.substring(0, sinceStr.length() - 1);
+            char unit = Character.toLowerCase(sinceStr.charAt(sinceStr.length() - 1));
+            long amount = Long.parseLong(numPart);
+
+            LocalDateTime now = LocalDateTime.now();
+            return switch (unit) {
+                case 'h' -> now.minusHours(amount);
+                case 'd' -> now.minusDays(amount);
+                case 'w' -> now.minusWeeks(amount);
+                case 'm' -> now.minusMinutes(amount);
+                default -> null;
+            };
+        } catch (NumberFormatException | StringIndexOutOfBoundsException e) {
+            return null;
+        }
     }
 }
