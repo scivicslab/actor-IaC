@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 import com.scivicslab.actoriac.log.H2LogReader;
+import com.scivicslab.actoriac.log.H2LogReader.NodeInfo;
 import com.scivicslab.actoriac.log.LogEntry;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.actoriac.log.SessionSummary;
@@ -149,6 +150,12 @@ public class LogsCLI implements Callable<Integer> {
     )
     private int limit;
 
+    @Option(
+        names = {"--list-nodes"},
+        description = "List all nodes in the specified session"
+    )
+    private boolean listNodes;
+
     /**
      * Main entry point for the logs CLI.
      *
@@ -173,6 +180,10 @@ public class LogsCLI implements Callable<Integer> {
             if (targetSession < 0) {
                 System.err.println("No sessions found in database.");
                 return 1;
+            }
+
+            if (listNodes) {
+                return listNodesInSession(reader, targetSession);
             }
 
             if (summaryOnly) {
@@ -237,6 +248,29 @@ public class LogsCLI implements Callable<Integer> {
             System.out.printf("      Started:   %s%n", formatTimestamp(summary.getStartedAt()));
             System.out.println("-".repeat(80));
         }
+        return 0;
+    }
+
+    private Integer listNodesInSession(H2LogReader reader, long targetSession) {
+        List<NodeInfo> nodes = reader.getNodesInSession(targetSession);
+        if (nodes.isEmpty()) {
+            System.out.println("No nodes found in session #" + targetSession);
+            return 0;
+        }
+
+        SessionSummary summary = reader.getSummary(targetSession);
+        System.out.println("Nodes in session #" + targetSession + " (" + summary.getWorkflowName() + "):");
+        System.out.println("=".repeat(70));
+        System.out.printf("%-30s %-10s %-10s%n", "NODE_ID", "STATUS", "LOG_COUNT");
+        System.out.println("-".repeat(70));
+        for (NodeInfo node : nodes) {
+            System.out.printf("%-30s %-10s %-10d%n",
+                    node.nodeId(),
+                    node.status() != null ? node.status() : "-",
+                    node.logCount());
+        }
+        System.out.println("=".repeat(70));
+        System.out.println("Total: " + nodes.size() + " nodes");
         return 0;
     }
 

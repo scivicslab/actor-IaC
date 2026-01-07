@@ -331,6 +331,51 @@ public class H2LogReader implements AutoCloseable {
         return listSessionsFiltered(null, null, null, startedAfter, limit);
     }
 
+    /**
+     * Information about a node in a session.
+     *
+     * @param nodeId the node identifier
+     * @param status the node status (SUCCESS, FAILED, or null if not yet recorded)
+     * @param logCount the number of log entries for this node
+     */
+    public record NodeInfo(String nodeId, String status, int logCount) {}
+
+    /**
+     * Gets all nodes that participated in a session.
+     *
+     * @param sessionId the session ID
+     * @return list of node information, ordered by node ID
+     */
+    public List<NodeInfo> getNodesInSession(long sessionId) {
+        List<NodeInfo> nodes = new ArrayList<>();
+        String sql = """
+            SELECT l.node_id,
+                   nr.status,
+                   COUNT(l.id) as log_count
+            FROM logs l
+            LEFT JOIN node_results nr ON l.session_id = nr.session_id AND l.node_id = nr.node_id
+            WHERE l.session_id = ?
+            GROUP BY l.node_id, nr.status
+            ORDER BY l.node_id
+            """;
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    nodes.add(new NodeInfo(
+                            rs.getString("node_id"),
+                            rs.getString("status"),
+                            rs.getInt("log_count")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get nodes in session", e);
+        }
+        return nodes;
+    }
+
     private LogEntry mapLogEntry(ResultSet rs) throws SQLException {
         Timestamp ts = rs.getTimestamp("timestamp");
         Integer exitCode = rs.getObject("exit_code") != null ? rs.getInt("exit_code") : null;
