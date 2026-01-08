@@ -179,6 +179,12 @@ public class WorkflowCLI implements Callable<Integer> {
     private boolean listWorkflows;
 
     @Option(
+        names = {"-D", "--describe"},
+        description = "Display workflow step descriptions and exit (requires --workflow)"
+    )
+    private boolean describe;
+
+    @Option(
         names = {"-q", "--quiet"},
         description = "Suppress all console output (stdout/stderr). Logs are still written to database."
     )
@@ -428,6 +434,11 @@ public class WorkflowCLI implements Callable<Integer> {
         if (listWorkflows) {
             printWorkflowList();
             return 0;
+        }
+
+        // Handle --describe option
+        if (describe) {
+            return describeWorkflow();
         }
 
         // Handle --render-to option
@@ -834,6 +845,137 @@ public class WorkflowCLI implements Callable<Integer> {
         }
         System.out.println("-".repeat(90));
         System.out.println("Use -w <File> with the names shown in the 'File (-w)' column.");
+    }
+
+    /**
+     * Displays workflow step descriptions.
+     *
+     * <p>This method loads the specified workflow YAML file and displays
+     * the description field of each step, if present. This is useful for
+     * understanding what each step does without reading the full YAML.</p>
+     *
+     * @return 0 on success, 1 on error
+     */
+    private int describeWorkflow() {
+        if (workflowName == null || workflowName.isBlank()) {
+            System.err.println("Error: --workflow is required with --describe");
+            return 1;
+        }
+
+        File workflowFile = findWorkflowFile(workflowName);
+        if (workflowFile == null) {
+            System.err.println("Workflow not found: " + workflowName);
+            System.err.println("Available workflows: " + workflowCache.keySet());
+            return 1;
+        }
+
+        // Load YAML (with overlay if specified)
+        Map<String, Object> yaml;
+        if (overlayDir != null) {
+            yaml = loadYamlWithOverlay(workflowFile);
+        } else {
+            yaml = loadYamlFile(workflowFile);
+        }
+
+        if (yaml == null) {
+            System.err.println("Failed to load workflow: " + workflowFile);
+            return 1;
+        }
+
+        printWorkflowDescription(workflowFile, yaml);
+        return 0;
+    }
+
+    /**
+     * Prints workflow description in a human-readable format.
+     *
+     * @param file the workflow file
+     * @param yaml the parsed YAML content
+     */
+    @SuppressWarnings("unchecked")
+    private void printWorkflowDescription(File file, Map<String, Object> yaml) {
+        String name = (String) yaml.getOrDefault("name", "(unnamed)");
+
+        System.out.println("Workflow: " + name);
+        System.out.println("File: " + file.getAbsolutePath());
+        if (overlayDir != null) {
+            System.out.println("Overlay: " + overlayDir.getAbsolutePath());
+        }
+        System.out.println();
+        System.out.println("Steps:");
+
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) yaml.get("steps");
+        if (steps == null || steps.isEmpty()) {
+            System.out.println("  (no steps defined)");
+            return;
+        }
+
+        for (Map<String, Object> step : steps) {
+            List<String> states = (List<String>) step.get("states");
+            String vertexName = (String) step.get("vertexName");
+            String description = (String) step.get("description");
+
+            String stateTransition = (states != null && states.size() >= 2)
+                ? states.get(0) + " -> " + states.get(1)
+                : "?";
+
+            String displayName = (vertexName != null) ? vertexName : "(unnamed)";
+
+            System.out.println();
+            System.out.println("  [" + stateTransition + "] " + displayName);
+            if (description != null && !description.isBlank()) {
+                // Support multi-line descriptions with proper indentation
+                for (String line : description.split("\n")) {
+                    System.out.println("    " + line);
+                }
+            } else {
+                System.out.println("    (no description)");
+            }
+        }
+    }
+
+    /**
+     * Loads a YAML file and returns it as a Map.
+     *
+     * @param file the YAML file to load
+     * @return the parsed YAML content, or null on error
+     */
+    private Map<String, Object> loadYamlFile(File file) {
+        try (InputStream is = new FileInputStream(file)) {
+            org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+            return yaml.load(is);
+        } catch (Exception e) {
+            LOG.warning("Failed to load YAML file: " + file + " - " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Loads a YAML file with overlay applied.
+     *
+     * @param workflowFile the workflow file to load
+     * @return the parsed YAML content with overlay applied, or null on error
+     */
+    private Map<String, Object> loadYamlWithOverlay(File workflowFile) {
+        try {
+            WorkflowKustomizer kustomizer = new WorkflowKustomizer();
+            Map<String, Map<String, Object>> workflows = kustomizer.build(overlayDir.toPath());
+
+            // Find the matching workflow by filename
+            String targetName = workflowFile.getName();
+            for (Map.Entry<String, Map<String, Object>> entry : workflows.entrySet()) {
+                if (entry.getKey().equals(targetName)) {
+                    return entry.getValue();
+                }
+            }
+
+            // If not found in overlay results, fall back to raw file
+            LOG.warning("Workflow not found in overlay results, loading raw file: " + targetName);
+            return loadYamlFile(workflowFile);
+        } catch (Exception e) {
+            LOG.warning("Failed to apply overlay, falling back to raw file: " + e.getMessage());
+            return loadYamlFile(workflowFile);
+        }
     }
 
     private static String getBaseName(String fileName) {
