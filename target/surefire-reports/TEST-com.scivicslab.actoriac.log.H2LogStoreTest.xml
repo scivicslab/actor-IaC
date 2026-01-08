@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.scivicslab.actoriac.log.H2LogStoreTest" time="1.949" tests="11" errors="0" skipped="0" failures="0">
+  <properties>
+    <property name="java.specification.version" value="25"/>
+    <property name="sun.jnu.encoding" value="UTF-8"/>
+    <property name="java.class.path" value="/home/devteam/proj-POJO-actor/actor-IaC/target/test-classes:/home/devteam/proj-POJO-actor/actor-IaC/target/classes:/home/devteam/.m2/repository/com/scivicslab/POJO-actor/2.9.0/POJO-actor-2.9.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.20.0/jackson-dataformat-yaml-2.20.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.20.0/jackson-core-2.20.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.20.0/jackson-databind-2.20.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.20/jackson-annotations-2.20.jar:/home/devteam/.m2/repository/org/apache/commons/commons-math3/3.6.1/commons-math3-3.6.1.jar:/home/devteam/.m2/repository/org/apache/commons/commons-jexl3/3.3/commons-jexl3-3.3.jar:/home/devteam/.m2/repository/commons-logging/commons-logging/1.2/commons-logging-1.2.jar:/home/devteam/.m2/repository/org/yaml/snakeyaml/1.28/snakeyaml-1.28.jar:/home/devteam/.m2/repository/org/json/json/20231013/json-20231013.jar:/home/devteam/.m2/repository/com/github/mwiede/jsch/0.2.16/jsch-0.2.16.jar:/home/devteam/.m2/repository/net/i2p/crypto/eddsa/0.3.0/eddsa-0.3.0.jar:/home/devteam/.m2/repository/com/kohlschutter/junixsocket/junixsocket-native-common/2.9.1/junixsocket-native-common-2.9.1.jar:/home/devteam/.m2/repository/com/kohlschutter/junixsocket/junixsocket-common/2.9.1/junixsocket-common-2.9.1.jar:/home/devteam/.m2/repository/info/picocli/picocli/4.7.6/picocli-4.7.6.jar:/home/devteam/.m2/repository/com/github/lalyos/jfiglet/0.0.9/jfiglet-0.0.9.jar:/home/devteam/.m2/repository/com/github/ricksbrown/cowsay/1.1.0/cowsay-1.1.0.jar:/home/devteam/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/home/devteam/.m2/repository/commons-cli/commons-cli/1.4/commons-cli-1.4.jar:/home/devteam/.m2/repository/org/apache/maven/maven-plugin-api/3.6.1/maven-plugin-api-3.6.1.jar:/home/devteam/.m2/repository/org/apache/maven/maven-model/3.6.1/maven-model-3.6.1.jar:/home/devteam/.m2/repository/org/apache/maven/maven-artifact/3.6.1/maven-artifact-3.6.1.jar:/home/devteam/.m2/repository/org/eclipse/sisu/org.eclipse.sisu.plexus/0.3.3/org.eclipse.sisu.plexus-0.3.3.jar:/home/devteam/.m2/repository/javax/enterprise/cdi-api/1.0/cdi-api-1.0.jar:/home/devteam/.m2/repository/javax/annotation/jsr250-api/1.0/jsr250-api-1.0.jar:/home/devteam/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/home/devteam/.m2/repository/org/eclipse/sisu/org.eclipse.sisu.inject/0.3.3/org.eclipse.sisu.inject-0.3.3.jar:/home/devteam/.m2/repository/org/codehaus/plexus/plexus-component-annotations/1.5.5/plexus-component-annotations-1.5.5.jar:/home/devteam/.m2/repository/org/codehaus/plexus/plexus-utils/3.2.0/plexus-utils-3.2.0.jar:/home/devteam/.m2/repository/org/codehaus/plexus/plexus-classworlds/2.6.0/plexus-classworlds-2.6.0.jar:/home/devteam/.m2/repository/com/github/ricksbrown/cowjar/1.1.0/cowjar-1.1.0.jar:/home/devteam/.m2/repository/com/h2database/h2/2.2.224/h2-2.2.224.jar:/home/devteam/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.9.3/junit-jupiter-api-5.9.3.jar:/home/devteam/.m2/repository/org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.jar:/home/devteam/.m2/repository/org/junit/platform/junit-platform-commons/1.9.3/junit-platform-commons-1.9.3.jar:/home/devteam/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/home/devteam/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.9.3/junit-jupiter-engine-5.9.3.jar:/home/devteam/.m2/repository/org/junit/platform/junit-platform-engine/1.9.3/junit-platform-engine-1.9.3.jar:"/>
+    <property name="java.vm.vendor" value="GraalVM Community"/>
+    <property name="sun.arch.data.model" value="64"/>
+    <property name="java.vendor.url" value="https://www.graalvm.org/"/>
+    <property name="user.timezone" value="Asia/Tokyo"/>
+    <property name="os.name" value="Linux"/>
+    <property name="java.vm.specification.version" value="25"/>
+    <property name="sun.java.launcher" value="SUN_STANDARD"/>
+    <property name="user.country" value="US"/>
+    <property name="sun.boot.library.path" value="/home/devteam/.sdkman/candidates/java/25-graalce/lib"/>
+    <property name="sun.java.command" value="/home/devteam/proj-POJO-actor/actor-IaC/target/surefire/surefirebooter-20260108034350196_3.jar /home/devteam/proj-POJO-actor/actor-IaC/target/surefire 2026-01-08T03-43-50_082-jvmRun1 surefire-20260108034350196_1tmp surefire_0-20260108034350196_2tmp"/>
+    <property name="jdk.debug" value="release"/>
+    <property name="test" value="H2LogStoreTest"/>
+    <property name="surefire.test.class.path" value="/home/devteam/proj-POJO-actor/actor-IaC/target/test-classes:/home/devteam/proj-POJO-actor/actor-IaC/target/classes:/home/devteam/.m2/repository/com/scivicslab/POJO-actor/2.9.0/POJO-actor-2.9.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.20.0/jackson-dataformat-yaml-2.20.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.20.0/jackson-core-2.20.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.20.0/jackson-databind-2.20.0.jar:/home/devteam/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.20/jackson-annotations-2.20.jar:/home/devteam/.m2/repository/org/apache/commons/commons-math3/3.6.1/commons-math3-3.6.1.jar:/home/devteam/.m2/repository/org/apache/commons/commons-jexl3/3.3/commons-jexl3-3.3.jar:/home/devteam/.m2/repository/commons-logging/commons-logging/1.2/commons-logging-1.2.jar:/home/devteam/.m2/repository/org/yaml/snakeyaml/1.28/snakeyaml-1.28.jar:/home/devteam/.m2/repository/org/json/json/20231013/json-20231013.jar:/home/devteam/.m2/repository/com/github/mwiede/jsch/0.2.16/jsch-0.2.16.jar:/home/devteam/.m2/repository/net/i2p/crypto/eddsa/0.3.0/eddsa-0.3.0.jar:/home/devteam/.m2/repository/com/kohlschutter/junixsocket/junixsocket-native-common/2.9.1/junixsocket-native-common-2.9.1.jar:/home/devteam/.m2/repository/com/kohlschutter/junixsocket/junixsocket-common/2.9.1/junixsocket-common-2.9.1.jar:/home/devteam/.m2/repository/info/picocli/picocli/4.7.6/picocli-4.7.6.jar:/home/devteam/.m2/repository/com/github/lalyos/jfiglet/0.0.9/jfiglet-0.0.9.jar:/home/devteam/.m2/repository/com/github/ricksbrown/cowsay/1.1.0/cowsay-1.1.0.jar:/home/devteam/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/home/devteam/.m2/repository/commons-cli/commons-cli/1.4/commons-cli-1.4.jar:/home/devteam/.m2/repository/org/apache/maven/maven-plugin-api/3.6.1/maven-plugin-api-3.6.1.jar:/home/devteam/.m2/repository/org/apache/maven/maven-model/3.6.1/maven-model-3.6.1.jar:/home/devteam/.m2/repository/org/apache/maven/maven-artifact/3.6.1/maven-artifact-3.6.1.jar:/home/devteam/.m2/repository/org/eclipse/sisu/org.eclipse.sisu.plexus/0.3.3/org.eclipse.sisu.plexus-0.3.3.jar:/home/devteam/.m2/repository/javax/enterprise/cdi-api/1.0/cdi-api-1.0.jar:/home/devteam/.m2/repository/javax/annotation/jsr250-api/1.0/jsr250-api-1.0.jar:/home/devteam/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/home/devteam/.m2/repository/org/eclipse/sisu/org.eclipse.sisu.inject/0.3.3/org.eclipse.sisu.inject-0.3.3.jar:/home/devteam/.m2/repository/org/codehaus/plexus/plexus-component-annotations/1.5.5/plexus-component-annotations-1.5.5.jar:/home/devteam/.m2/repository/org/codehaus/plexus/plexus-utils/3.2.0/plexus-utils-3.2.0.jar:/home/devteam/.m2/repository/org/codehaus/plexus/plexus-classworlds/2.6.0/plexus-classworlds-2.6.0.jar:/home/devteam/.m2/repository/com/github/ricksbrown/cowjar/1.1.0/cowjar-1.1.0.jar:/home/devteam/.m2/repository/com/h2database/h2/2.2.224/h2-2.2.224.jar:/home/devteam/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.9.3/junit-jupiter-api-5.9.3.jar:/home/devteam/.m2/repository/org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.jar:/home/devteam/.m2/repository/org/junit/platform/junit-platform-commons/1.9.3/junit-platform-commons-1.9.3.jar:/home/devteam/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/home/devteam/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.9.3/junit-jupiter-engine-5.9.3.jar:/home/devteam/.m2/repository/org/junit/platform/junit-platform-engine/1.9.3/junit-platform-engine-1.9.3.jar:"/>
+    <property name="sun.cpu.endian" value="little"/>
+    <property name="user.home" value="/home/devteam"/>
+    <property name="user.language" value="en"/>
+    <property name="java.specification.vendor" value="Oracle Corporation"/>
+    <property name="java.version.date" value="2025-09-16"/>
+    <property name="java.home" value="/home/devteam/.sdkman/candidates/java/25-graalce"/>
+    <property name="file.separator" value="/"/>
+    <property name="basedir" value="/home/devteam/proj-POJO-actor/actor-IaC"/>
+    <property name="java.vm.compressedOopsMode" value="Zero based"/>
+    <property name="line.separator" value="&#10;"/>
+    <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
+    <property name="java.specification.name" value="Java Platform API Specification"/>
+    <property name="logback.configurationFile" value="src/test/resources/logback-test.xml"/>
+    <property name="surefire.real.class.path" value="/home/devteam/proj-POJO-actor/actor-IaC/target/surefire/surefirebooter-20260108034350196_3.jar"/>
+    <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
+    <property name="java.runtime.version" value="25+37-jvmci-b01"/>
+    <property name="user.name" value="devteam"/>
+    <property name="stdout.encoding" value="UTF-8"/>
+    <property name="path.separator" value=":"/>
+    <property name="os.version" value="6.8.0-90-generic"/>
+    <property name="java.runtime.name" value="OpenJDK Runtime Environment"/>
+    <property name="file.encoding" value="UTF-8"/>
+    <property name="java.vm.name" value="OpenJDK 64-Bit Server VM"/>
+    <property name="java.vendor.version" value="GraalVM CE 25+37.1"/>
+    <property name="localRepository" value="/home/devteam/.m2/repository"/>
+    <property name="java.vendor.url.bug" value="https://github.com/oracle/graal/issues"/>
+    <property name="java.io.tmpdir" value="/tmp"/>
+    <property name="java.version" value="25"/>
+    <property name="user.dir" value="/home/devteam/proj-POJO-actor/actor-IaC"/>
+    <property name="os.arch" value="amd64"/>
+    <property name="java.vm.specification.name" value="Java Virtual Machine Specification"/>
+    <property name="native.encoding" value="UTF-8"/>
+    <property name="java.library.path" value="/usr/java/packages/lib:/usr/lib64:/lib64:/lib:/usr/lib"/>
+    <property name="java.vm.info" value="mixed mode, sharing"/>
+    <property name="stderr.encoding" value="UTF-8"/>
+    <property name="java.vendor" value="GraalVM Community"/>
+    <property name="java.vm.version" value="25+37-jvmci-b01"/>
+    <property name="stdin.encoding" value="UTF-8"/>
+    <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
+    <property name="java.class.version" value="69.0"/>
+  </properties>
+  <testcase name="testStartSession" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.123"/>
+  <testcase name="testSessionSummary" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.218"/>
+  <testcase name="testStartSessionWithOverlayAndInventory" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.006"/>
+  <testcase name="testStartSessionWithNullOverlayAndInventory" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.006"/>
+  <testcase name="testConcurrentLogging" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.545"/>
+  <testcase name="testListSessions" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.007"/>
+  <testcase name="testGetLogsByLevel" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.206"/>
+  <testcase name="testSessionSummaryToStringWithOverlayAndInventory" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.207"/>
+  <testcase name="testLogAndRetrieveByNode" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.204"/>
+  <testcase name="testNodeResults" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.206"/>
+  <testcase name="testLogAction" classname="com.scivicslab.actoriac.log.H2LogStoreTest" time="0.205"/>
+</testsuite>
