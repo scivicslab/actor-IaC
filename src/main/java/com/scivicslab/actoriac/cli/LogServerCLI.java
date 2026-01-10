@@ -120,9 +120,41 @@ public class LogServerCLI implements Callable<Integer> {
     )
     private Integer infoPort;
 
+    @Option(
+        names = {"--auto-shutdown"},
+        description = "Enable automatic shutdown when no connections for --idle-timeout seconds"
+    )
+    private boolean autoShutdown;
+
+    @Option(
+        names = {"--idle-timeout"},
+        description = "Idle timeout in seconds for auto-shutdown (default: ${DEFAULT-VALUE})",
+        defaultValue = "300"
+    )
+    private long idleTimeoutSeconds;
+
+    @Option(
+        names = {"--check-interval"},
+        description = "Connection check interval in seconds (default: ${DEFAULT-VALUE})",
+        defaultValue = "60"
+    )
+    private long checkIntervalSeconds;
+
     private Server tcpServer;
     private HttpServer httpServer;
     private OffsetDateTime startedAt;
+
+    /** ActorSystem for actor-based shutdown management */
+    private com.scivicslab.pojoactor.core.ActorSystem actorSystem;
+
+    /** The log server actor (used when --auto-shutdown is enabled) */
+    private com.scivicslab.pojoactor.core.ActorRef<LogServerActor> logServerActorRef;
+
+    /** The connection watcher actor */
+    private ConnectionWatcherActor connectionWatcher;
+
+    /** Scheduler for periodic connection checks */
+    private java.util.concurrent.ScheduledExecutorService scheduler;
 
     /** Default offset from TCP port to HTTP port */
     private static final int HTTP_PORT_OFFSET = 1000;
@@ -138,12 +170,96 @@ public class LogServerCLI implements Callable<Integer> {
             return findLogServers();
         }
 
+        // Calculate HTTP port
+        int httpPort = (infoPort != null) ? infoPort : port + HTTP_PORT_OFFSET;
+
+        // Choose between actor mode (with auto-shutdown) and legacy mode
+        if (autoShutdown) {
+            return runWithActorMode(httpPort);
+        } else {
+            return runLegacyMode(httpPort);
+        }
+    }
+
+    /**
+     * Runs the log server with actor-based auto-shutdown.
+     *
+     * <p>Architecture:</p>
+     * <pre>
+     * ActorSystem
+     *   ├── LogServerActor (wraps H2 TCP + HTTP servers)
+     *   └── ConnectionWatcherActor (monitors and triggers shutdown)
+     * </pre>
+     */
+    private Integer runWithActorMode(int httpPort) {
+        try {
+            // Create ActorSystem
+            actorSystem = new com.scivicslab.pojoactor.core.ActorSystem("log-server", 2);
+
+            // Create LogServerActor POJO
+            LogServerActor logServerPojo = new LogServerActor(port, httpPort, dbPath, verbose);
+
+            // Wrap with ActorRef
+            logServerActorRef = actorSystem.actorOf("log-server", logServerPojo);
+
+            // Start the server via actor
+            logServerActorRef.ask(server -> {
+                try {
+                    server.start(shutdownLatch);
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to start server", e);
+                }
+                return null;
+            }).join();
+
+            // Print connection info
+            printConnectionInfo(httpPort);
+            System.out.println("  Auto-shutdown: enabled (idle timeout: " + idleTimeoutSeconds + "s)");
+
+            // Create and start ConnectionWatcher
+            connectionWatcher = new ConnectionWatcherActor(
+                logServerActorRef,
+                checkIntervalSeconds,
+                idleTimeoutSeconds,
+                verbose
+            );
+
+            // Create scheduler for watcher
+            scheduler = java.util.concurrent.Executors.newScheduledThreadPool(1, r -> {
+                Thread t = new Thread(r, "ConnectionWatcher");
+                t.setDaemon(true);
+                return t;
+            });
+
+            connectionWatcher.start(scheduler);
+
+            // Register shutdown hook
+            Runtime.getRuntime().addShutdownHook(new Thread(this::shutdownActorMode, "LogServer-Shutdown"));
+
+            System.out.println("\nServer is running with auto-shutdown enabled.");
+            System.out.println("Will shutdown after " + idleTimeoutSeconds + " seconds of no connections.");
+
+            // Wait for shutdown signal (from either Ctrl+C or auto-shutdown)
+            shutdownLatch.await();
+
+            return 0;
+
+        } catch (Exception e) {
+            System.err.println("Failed to start log server: " + e.getMessage());
+            if (verbose) {
+                e.printStackTrace();
+            }
+            return 1;
+        }
+    }
+
+    /**
+     * Runs the log server in legacy mode (no auto-shutdown).
+     */
+    private Integer runLegacyMode(int httpPort) {
         try {
             // Record start time
             startedAt = OffsetDateTime.now();
-
-            // Calculate HTTP port
-            int httpPort = (infoPort != null) ? infoPort : port + HTTP_PORT_OFFSET;
 
             // Build server arguments (localhost only - no remote connections needed)
             String[] serverArgs = new String[]{
@@ -381,6 +497,42 @@ public class LogServerCLI implements Callable<Integer> {
         }
         shutdownLatch.countDown();
         System.out.println("Servers stopped.");
+    }
+
+    /**
+     * Shuts down the server when running in actor mode.
+     */
+    private void shutdownActorMode() {
+        System.out.println("\nShutting down (actor mode)...");
+
+        // Stop the watcher first
+        if (connectionWatcher != null) {
+            connectionWatcher.stop();
+        }
+
+        // Stop the scheduler
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+        }
+
+        // Stop the log server via actor
+        if (logServerActorRef != null) {
+            try {
+                logServerActorRef.ask(server -> {
+                    server.stop();
+                    return null;
+                }).join();
+            } catch (Exception e) {
+                // Server might already be stopped
+            }
+        }
+
+        // Terminate actor system
+        if (actorSystem != null) {
+            actorSystem.terminate();
+        }
+
+        System.out.println("Servers stopped (actor mode).");
     }
 
     /**
