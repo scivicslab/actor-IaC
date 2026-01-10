@@ -18,12 +18,15 @@ actor-IaC is an Infrastructure as Code tool built on top of the POJO-actor workf
 - **Type-Safe**: Fully type-safe actor-based API using `ActorRef<Node>` and `ActorRef<Cluster>`
 - **HashiCorp Vault Integration**: Secure secret management for SSH keys and sudo passwords
 - **Sudo Support**: Execute commands with sudo privileges using Vault-managed passwords
+- **H2 Database Logging**: Persistent execution logs with session management
+- **Log Server Mode**: Centralized logging for parallel workflow execution
+- **CLI Tool**: Full command-line interface for workflow execution and log management
 
 ## Requirements
 
 - Java 21 or higher
 - Maven 3.6+
-- POJO-actor 2.7.0
+- POJO-actor 2.10.0
 - SSH access to target nodes
 
 ## Core Components
@@ -207,6 +210,165 @@ mvn clean test
 
 # Build JAR
 mvn clean package
+```
+
+## Command Line Interface
+
+actor-IaC provides a comprehensive CLI for workflow execution and log management.
+
+### Quick Start
+
+```bash
+# Run a workflow
+./actor_iac.java run -d ./workflows -w deploy -i inventory.ini -g webservers
+
+# List available workflows
+./actor_iac.java list -d ./workflows
+
+# Search execution logs
+./actor_iac.java log-search --db ./logs/actor-iac-logs --list
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `run` | Execute a workflow |
+| `list` | List available workflows in a directory |
+| `describe` | Display workflow structure and transitions |
+| `log-search` | Search and query execution logs |
+| `log-serve` | Start H2 TCP server for centralized logging |
+| `log-merge` | Merge scattered log databases into one |
+
+### run - Execute Workflow
+
+```bash
+./actor_iac.java run -d <dir> -w <workflow> [options]
+```
+
+**Options:**
+- `-d, --dir` : Directory containing workflow files (required)
+- `-w, --workflow` : Workflow file name without extension (required)
+- `-i, --inventory` : Ansible inventory file path
+- `-g, --group` : Target host group from inventory
+- `-o, --overlay` : YAML overlay file for environment-specific config
+- `--log-db` : H2 database path for logging (default: `<workflow-dir>/actor-iac-logs`)
+- `--log-serve` : Connect to H2 log server (e.g., `localhost:29090`)
+- `-v, --verbose` : Enable verbose output
+
+**Examples:**
+```bash
+# Basic workflow execution
+./actor_iac.java run -d ./workflows -w deploy
+
+# With inventory and group
+./actor_iac.java run -d ./workflows -w deploy -i inventory.ini -g webservers
+
+# With overlay for production
+./actor_iac.java run -d ./workflows -w deploy -o overlays/production.yaml
+
+# With centralized log server
+./actor_iac.java run -d ./workflows -w deploy --log-serve=localhost:29090
+```
+
+### log-serve - Centralized Log Server
+
+Start an H2 TCP server for centralized logging from multiple parallel workflows.
+
+```bash
+./actor_iac.java log-serve --db <path> [options]
+```
+
+**Options:**
+- `--db` : Database file path without extension (default: `./actor-iac-logs`)
+- `-p, --port` : TCP port (default: `29090`)
+- `--find` : Scan for running log servers on localhost
+- `-v, --verbose` : Enable verbose output
+
+**Examples:**
+```bash
+# Start log server
+./actor_iac.java log-serve --db ./logs/shared-logs
+
+# Start on custom port
+./actor_iac.java log-serve --db ./logs/shared-logs --port 29091
+
+# Find running log servers
+./actor_iac.java log-serve --find
+```
+
+**Architecture:**
+```
+[Operation Terminal]
+├── H2 Log Server (localhost:29090)
+├── Workflow Process A ──→ TCP write
+├── Workflow Process B ──→ TCP write
+└── Workflow Process C ──→ TCP write
+```
+
+### log-search - Query Logs
+
+Search and display execution logs from the H2 database.
+
+```bash
+./actor_iac.java log-search --db <path> [options]
+```
+
+**Options:**
+- `--db` : H2 database path (required)
+- `--server` : H2 log server address (e.g., `localhost:29090`)
+- `-s, --session` : Session ID to query (default: latest)
+- `-n, --node` : Filter by node ID
+- `--level` : Minimum log level (DEBUG, INFO, WARN, ERROR)
+- `--list` : List recent sessions
+- `--list-nodes` : List nodes in a session
+- `--summary` : Show session summary only
+- `-w, --workflow` : Filter sessions by workflow name
+- `--since` : Filter sessions started within duration (e.g., `12h`, `1d`, `1w`)
+- `--limit` : Maximum entries to show (default: 100)
+
+**Examples:**
+```bash
+# List all sessions
+./actor_iac.java log-search --db ./logs/actor-iac-logs --list
+
+# Show logs for latest session
+./actor_iac.java log-search --db ./logs/actor-iac-logs
+
+# Filter by node and level
+./actor_iac.java log-search --db ./logs/actor-iac-logs -s 42 -n web1.example.com --level ERROR
+
+# Query via log server
+./actor_iac.java log-search --server=localhost:29090 --db ./logs/actor-iac-logs --list
+
+# Sessions from last 24 hours
+./actor_iac.java log-search --db ./logs/actor-iac-logs --list --since 1d
+```
+
+### log-merge - Consolidate Logs
+
+Merge scattered log databases into a single database.
+
+```bash
+./actor_iac.java log-merge --scan <dir> --target <path> [options]
+```
+
+**Options:**
+- `--scan` : Directory to scan for .mv.db files (required)
+- `--target` : Target database path (required)
+- `--dry-run` : Preview without making changes
+- `--skip-duplicates` : Skip sessions that already exist in target
+
+**Examples:**
+```bash
+# Preview merge
+./actor_iac.java log-merge --scan ./workflows --target ./logs/merged --dry-run
+
+# Merge all logs
+./actor_iac.java log-merge --scan ./workflows --target ./logs/merged
+
+# Skip duplicates
+./actor_iac.java log-merge --scan ./workflows --target ./logs/merged --skip-duplicates
 ```
 
 ## Installation
