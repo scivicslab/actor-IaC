@@ -72,7 +72,8 @@ import picocli.CommandLine.Option;
         ListWorkflowsCLI.class,
         DescribeCLI.class,
         LogsCLI.class,
-        LogServerCLI.class
+        LogServerCLI.class,
+        MergeLogsCLI.class
     }
 )
 public class WorkflowCLI implements Callable<Integer> {
@@ -112,6 +113,7 @@ public class WorkflowCLI implements Callable<Integer> {
         System.out.println("  describe     Describe workflow structure");
         System.out.println("  logs         Query execution logs");
         System.out.println("  log-server   Start H2 log server for centralized logging");
+        System.out.println("  merge-logs   Merge scattered log databases into one");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  actor-iac run -d ./workflows -w deploy");
@@ -119,6 +121,7 @@ public class WorkflowCLI implements Callable<Integer> {
         System.out.println("  actor-iac list -d ./workflows");
         System.out.println("  actor-iac logs --db ./logs --list");
         System.out.println("  actor-iac log-server --db ./logs/shared");
+        System.out.println("  actor-iac merge-logs --scan ./workflows --target ./logs/merged");
         System.out.println();
         System.out.println("Use 'actor-iac <command> --help' for more information about a command.");
         return 0;
