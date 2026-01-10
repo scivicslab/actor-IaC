@@ -52,9 +52,9 @@ import picocli.CommandLine.Parameters;
  * @since 2.10.0
  */
 @Command(
-    name = "merge-logs",
+    name = "log-merge",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC merge-logs 2.10.0",
+    version = "actor-IaC log-merge 2.10.0",
     description = "Merge scattered log databases into a single database."
 )
 public class MergeLogsCLI implements Callable<Integer> {

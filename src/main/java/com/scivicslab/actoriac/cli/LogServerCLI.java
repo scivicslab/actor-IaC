@@ -70,10 +70,10 @@ import picocli.CommandLine.Option;
  * @author devteam@scivics-lab.com
  */
 @Command(
-    name = "log-server",
+    name = "log-serve",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC log-server 2.10.0",
-    description = "Start H2 TCP server for centralized workflow logging."
+    version = "actor-IaC log-serve 2.10.0",
+    description = "Serve H2 TCP server for centralized workflow logging."
 )
 public class LogServerCLI implements Callable<Integer> {
 

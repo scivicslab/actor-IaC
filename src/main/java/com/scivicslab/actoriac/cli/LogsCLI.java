@@ -57,10 +57,10 @@ import picocli.CommandLine.Option;
  * @author devteam@scivics-lab.com
  */
 @Command(
-    name = "logs",
+    name = "log-search",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC logs 2.10.0",
-    description = "Query workflow execution logs from H2 database."
+    version = "actor-IaC log-search 2.10.0",
+    description = "Search workflow execution logs from H2 database."
 )
 public class LogsCLI implements Callable<Integer> {
 

@@ -34,3 +34,5 @@ dependency-reduced-pom.xml
 .settings/
 .project
 .classpath
+*.mv.db
+*.trace.db
