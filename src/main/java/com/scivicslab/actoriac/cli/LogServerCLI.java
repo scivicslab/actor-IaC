@@ -19,18 +19,27 @@ package com.scivicslab.actoriac.cli;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.logging.Logger;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 
 import org.h2.tools.Server;
 
@@ -72,7 +81,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "log-serve",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC log-serve 2.10.0",
+    version = "actor-IaC log-serve 2.11.0",
     description = "Serve H2 TCP server for centralized workflow logging."
 )
 public class LogServerCLI implements Callable<Integer> {
@@ -105,7 +114,18 @@ public class LogServerCLI implements Callable<Integer> {
     )
     private boolean find;
 
+    @Option(
+        names = {"--info-port"},
+        description = "HTTP port for info API (default: TCP port + 1000)"
+    )
+    private Integer infoPort;
+
     private Server tcpServer;
+    private HttpServer httpServer;
+    private OffsetDateTime startedAt;
+
+    /** Default offset from TCP port to HTTP port */
+    private static final int HTTP_PORT_OFFSET = 1000;
 
     /** Ports to scan for H2 servers (actor-IaC reserved range: 29090-29100) */
     private static final int[] SCAN_PORTS = {29090, 29091, 29092, 29093, 29094, 29095, 29096, 29097, 29098, 29099, 29100};
@@ -119,6 +139,12 @@ public class LogServerCLI implements Callable<Integer> {
         }
 
         try {
+            // Record start time
+            startedAt = OffsetDateTime.now();
+
+            // Calculate HTTP port
+            int httpPort = (infoPort != null) ? infoPort : port + HTTP_PORT_OFFSET;
+
             // Build server arguments (localhost only - no remote connections needed)
             String[] serverArgs = new String[]{
                 "-tcp",
@@ -133,8 +159,11 @@ public class LogServerCLI implements Callable<Integer> {
             // Initialize database schema
             initializeDatabase();
 
+            // Start HTTP info server
+            startHttpServer(httpPort);
+
             // Print connection info
-            printConnectionInfo();
+            printConnectionInfo(httpPort);
 
             // Register shutdown hook
             Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown, "LogServer-Shutdown"));
@@ -227,29 +256,131 @@ public class LogServerCLI implements Callable<Integer> {
         }
     }
 
-    private void printConnectionInfo() {
+    /**
+     * Starts the HTTP server for the /info API endpoint.
+     */
+    private void startHttpServer(int httpPort) throws IOException {
+        httpServer = HttpServer.create(new InetSocketAddress("localhost", httpPort), 0);
+        httpServer.createContext("/info", this::handleInfoRequest);
+        httpServer.setExecutor(null); // Use default executor
+        httpServer.start();
+
+        if (verbose) {
+            System.out.println("HTTP info server started on port " + httpPort);
+        }
+    }
+
+    /**
+     * Handles GET /info requests, returning server information as JSON.
+     */
+    private void handleInfoRequest(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, -1);
+            return;
+        }
+
+        try {
+            // Get session count from database
+            int sessionCount = getSessionCount();
+
+            // Build JSON response
+            String json = String.format("""
+                {
+                  "server": "actor-iac-log-server",
+                  "version": "2.11.0",
+                  "port": %d,
+                  "db_path": "%s",
+                  "db_file": "%s.mv.db",
+                  "started_at": "%s",
+                  "session_count": %d
+                }
+                """,
+                port,
+                escapeJson(dbPath.getAbsolutePath()),
+                escapeJson(dbPath.getAbsolutePath()),
+                startedAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                sessionCount
+            );
+
+            byte[] response = json.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        } catch (Exception e) {
+            String error = "{\"error\": \"" + escapeJson(e.getMessage()) + "\"}";
+            byte[] response = error.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(500, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        }
+    }
+
+    /**
+     * Gets the current session count from the database.
+     */
+    private int getSessionCount() {
+        String dbUrl = "jdbc:h2:tcp://localhost:" + port + "/" + dbPath.getAbsolutePath();
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sessions")) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            if (verbose) {
+                System.err.println("Failed to get session count: " + e.getMessage());
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Escapes special characters for JSON strings.
+     */
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
+    }
+
+    private void printConnectionInfo(int httpPort) {
         System.out.println();
         System.out.println("=".repeat(60));
         System.out.println("H2 Log Server Started");
         System.out.println("=".repeat(60));
-        System.out.println("  TCP Port:  " + port);
-        System.out.println("  Database:  " + dbPath.getAbsolutePath() + ".mv.db");
+        System.out.println("  TCP Port:   " + port);
+        System.out.println("  HTTP Port:  " + httpPort);
+        System.out.println("  Database:   " + dbPath.getAbsolutePath() + ".mv.db");
         System.out.println();
         System.out.println("Connect from workflows using:");
-        System.out.println("  --log-server=localhost:" + port);
+        System.out.println("  --log-serve=localhost:" + port);
+        System.out.println();
+        System.out.println("Server info API:");
+        System.out.println("  curl http://localhost:" + httpPort + "/info");
         System.out.println();
         System.out.println("Query logs using:");
-        System.out.println("  actor-iac logs --server=localhost:" + port + " --db " + dbPath.getAbsolutePath() + " --list");
+        System.out.println("  actor-iac log-search --server=localhost:" + port + " --db " + dbPath.getAbsolutePath() + " --list");
         System.out.println("=".repeat(60));
     }
 
     private void shutdown() {
-        System.out.println("\nShutting down H2 server...");
+        System.out.println("\nShutting down servers...");
+        if (httpServer != null) {
+            httpServer.stop(0);
+        }
         if (tcpServer != null) {
             tcpServer.stop();
         }
         shutdownLatch.countDown();
-        System.out.println("Server stopped.");
+        System.out.println("Servers stopped.");
     }
 
     /**
@@ -282,19 +413,28 @@ public class LogServerCLI implements Callable<Integer> {
             System.out.println("No H2 log servers found.");
             System.out.println();
             System.out.println("To start a log server:");
-            System.out.println("  ./actor_iac.java log-server --db ./logs/actor-iac-logs");
+            System.out.println("  ./actor_iac.java log-serve --db ./logs/actor-iac-logs");
         } else {
             System.out.println("H2 Log Servers Found:");
             System.out.println("-".repeat(60));
             for (ServerInfo info : h2Servers) {
                 System.out.println("  Port " + info.port + ": H2 Database Server");
+                if (info.hasHttpApi) {
+                    System.out.println("           HTTP API: http://localhost:" + info.httpPort + "/info");
+                    if (info.version != null) {
+                        System.out.println("           Version:  " + info.version);
+                    }
+                }
                 if (info.dbPath != null) {
                     System.out.println("           Database: " + info.dbPath);
                 }
                 if (info.sessionCount >= 0) {
                     System.out.println("           Sessions: " + info.sessionCount);
                 }
-                System.out.println("           Connect:  --log-server=localhost:" + info.port);
+                if (info.startedAt != null) {
+                    System.out.println("           Started:  " + info.startedAt);
+                }
+                System.out.println("           Connect:  --log-serve=localhost:" + info.port);
                 System.out.println();
             }
         }
@@ -318,11 +458,11 @@ public class LogServerCLI implements Callable<Integer> {
             System.out.println();
             System.out.println("All ports in range 29090-29100 are available.");
             System.out.println("Start a log server with:");
-            System.out.println("  ./actor_iac.java log-server --db ./logs/actor-iac-logs");
+            System.out.println("  ./actor_iac.java log-serve --db ./logs/actor-iac-logs");
         } else if (availablePort > 0) {
             System.out.println();
             System.out.println("Next available port: " + availablePort);
-            System.out.println("  ./actor_iac.java log-server --port " + availablePort + " --db ./logs/actor-iac-logs");
+            System.out.println("  ./actor_iac.java log-serve --port " + availablePort + " --db ./logs/actor-iac-logs");
         }
 
         System.out.println();
@@ -376,9 +516,15 @@ public class LogServerCLI implements Callable<Integer> {
 
     /**
      * Tries to get information about a log server's database.
+     * First tries HTTP API, then falls back to database queries.
      */
     private void tryGetLogServerInfo(ServerInfo info) {
-        // Try common database paths
+        // First, try HTTP API (port + 1000)
+        if (tryGetInfoFromHttpApi(info, info.port + HTTP_PORT_OFFSET)) {
+            return;
+        }
+
+        // Fallback: try common database paths via JDBC
         String[] commonPaths = {
             "./actor-iac-logs",
             "./logs/actor-iac-logs",
@@ -401,6 +547,65 @@ public class LogServerCLI implements Callable<Integer> {
                 // This path doesn't have our schema, try next
             }
         }
+    }
+
+    /**
+     * Tries to get server info from HTTP API.
+     *
+     * @return true if successfully got info from API
+     */
+    private boolean tryGetInfoFromHttpApi(ServerInfo info, int httpPort) {
+        try {
+            java.net.URL url = new java.net.URL("http://localhost:" + httpPort + "/info");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(1000);
+            conn.setReadTimeout(1000);
+            conn.setRequestMethod("GET");
+
+            if (conn.getResponseCode() == 200) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    StringBuilder json = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        json.append(line);
+                    }
+
+                    // Parse JSON manually (avoid dependency)
+                    String jsonStr = json.toString();
+                    info.hasHttpApi = true;
+                    info.httpPort = httpPort;
+                    info.dbPath = extractJsonString(jsonStr, "db_path");
+                    info.version = extractJsonString(jsonStr, "version");
+                    info.startedAt = extractJsonString(jsonStr, "started_at");
+                    info.sessionCount = extractJsonInt(jsonStr, "session_count");
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // HTTP API not available
+        }
+        return false;
+    }
+
+    /**
+     * Extracts a string value from JSON.
+     */
+    private String extractJsonString(String json, String key) {
+        String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]+)\"";
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+        java.util.regex.Matcher m = p.matcher(json);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /**
+     * Extracts an integer value from JSON.
+     */
+    private int extractJsonInt(String json, String key) {
+        String pattern = "\"" + key + "\"\\s*:\\s*(\\d+)";
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+        java.util.regex.Matcher m = p.matcher(json);
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
     }
 
     /**
@@ -452,8 +657,12 @@ public class LogServerCLI implements Callable<Integer> {
     private static class ServerInfo {
         final int port;
         boolean isH2Server = false;
+        boolean hasHttpApi = false;
+        int httpPort = -1;
         String dbPath = null;
         int sessionCount = -1;
+        String startedAt = null;
+        String version = null;
         String serviceName = null;
         String processInfo = null;
 

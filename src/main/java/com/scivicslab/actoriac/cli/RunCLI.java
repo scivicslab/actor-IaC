@@ -72,7 +72,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "run",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC run 2.10.0",
+    version = "actor-IaC run 2.11.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
 )
 public class RunCLI implements Callable<Integer> {
@@ -149,12 +149,19 @@ public class RunCLI implements Callable<Integer> {
     private boolean noLogDb;
 
     @Option(
-        names = {"--log-server"},
+        names = {"--log-serve"},
         description = "H2 log server address (host:port, e.g., localhost:29090). " +
                      "Enables multiple workflows to share a single log database. " +
                      "Falls back to embedded mode if server is unreachable."
     )
     private String logServer;
+
+    @Option(
+        names = {"--no-auto-detect"},
+        description = "Disable automatic log server detection. " +
+                     "Always use embedded mode instead of auto-detecting running servers."
+    )
+    private boolean noAutoDetect;
 
     @Option(
         names = {"-k", "--ask-pass"},
@@ -295,19 +302,48 @@ public class RunCLI implements Callable<Integer> {
 
     /**
      * Sets up H2 database for distributed logging.
+     *
+     * <p>Connection priority:</p>
+     * <ol>
+     *   <li>If --log-serve is specified, connect to that server</li>
+     *   <li>If --no-auto-detect is NOT specified and DB file exists, auto-detect matching server</li>
+     *   <li>Otherwise, use embedded mode</li>
+     * </ol>
      */
     private void setupLogDatabase() throws SQLException {
         Path dbPath = logDbPath.toPath();
 
+        // Priority 1: Explicit log server specified
         if (logServer != null && !logServer.isBlank()) {
-            // Use TCP connection with fallback to embedded mode
             logStore = H2LogStore.createWithFallback(logServer, dbPath);
             System.out.println("Log database: " + logServer + " (TCP mode)");
-        } else {
-            // Use embedded mode
-            logStore = new H2LogStore(dbPath);
-            System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
+            return;
         }
+
+        // Priority 2: Auto-detect if enabled and DB file exists
+        if (!noAutoDetect) {
+            java.io.File dbFile = new java.io.File(dbPath.toAbsolutePath() + ".mv.db");
+            if (dbFile.exists()) {
+                LogServerDiscovery discovery = new LogServerDiscovery();
+                LogServerDiscovery.DiscoveryResult result = discovery.discoverServer(dbPath);
+
+                if (result.isFound()) {
+                    // Found matching server, connect to it
+                    logStore = H2LogStore.createWithFallback(result.getServerAddress(), dbPath);
+                    System.out.println("Auto-detected log server at " + result.getServerAddress());
+                    System.out.println("Log database: " + result.getServerAddress() + " (TCP mode)");
+                    return;
+                } else {
+                    // DB exists but no matching server found
+                    System.out.println("Warning: Log database exists but no matching log server found.");
+                    System.out.println("         Consider starting: ./actor_iac.java log-serve --db " + dbPath);
+                }
+            }
+        }
+
+        // Priority 3: Use embedded mode
+        logStore = new H2LogStore(dbPath);
+        System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db (embedded mode)");
     }
 
     /**
