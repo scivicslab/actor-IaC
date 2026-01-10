@@ -17,11 +17,17 @@
 
 package com.scivicslab.actoriac.cli;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.net.Socket;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.logging.Logger;
@@ -42,7 +48,7 @@ import picocli.CommandLine.Option;
  * <h3>Architecture</h3>
  * <pre>
  * [Operation Terminal]
- * ├── H2 Log Server (localhost:9092)
+ * ├── H2 Log Server (localhost:29090)
  * ├── Workflow Process A ──→ TCP write
  * ├── Workflow Process B ──→ TCP write
  * └── Workflow Process C ──→ TCP write
@@ -58,7 +64,7 @@ import picocli.CommandLine.Option;
  * actor-iac log-server --db ./logs/actor-iac-logs
  *
  * # In another terminal, run workflow with --log-server
- * actor-iac -d ./workflows -w deploy --log-server=localhost:9092
+ * actor-iac -d ./workflows -w deploy --log-server=localhost:29090
  * }</pre>
  *
  * @author devteam@scivics-lab.com
@@ -76,7 +82,7 @@ public class LogServerCLI implements Callable<Integer> {
     @Option(
         names = {"-p", "--port"},
         description = "TCP port for H2 server (default: ${DEFAULT-VALUE})",
-        defaultValue = "9092"
+        defaultValue = "29090"
     )
     private int port;
 
@@ -93,11 +99,25 @@ public class LogServerCLI implements Callable<Integer> {
     )
     private boolean verbose;
 
+    @Option(
+        names = {"--find"},
+        description = "Find running H2 log servers on localhost and show port status"
+    )
+    private boolean find;
+
     private Server tcpServer;
+
+    /** Ports to scan for H2 servers (actor-IaC reserved range: 29090-29100) */
+    private static final int[] SCAN_PORTS = {29090, 29091, 29092, 29093, 29094, 29095, 29096, 29097, 29098, 29099, 29100};
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
     @Override
     public Integer call() {
+        // Handle --find option
+        if (find) {
+            return findLogServers();
+        }
+
         try {
             // Build server arguments (localhost only - no remote connections needed)
             String[] serverArgs = new String[]{
@@ -230,5 +250,215 @@ public class LogServerCLI implements Callable<Integer> {
         }
         shutdownLatch.countDown();
         System.out.println("Server stopped.");
+    }
+
+    /**
+     * Finds running H2 log servers on localhost.
+     *
+     * @return exit code (0 = success)
+     */
+    private Integer findLogServers() {
+        System.out.println("=".repeat(60));
+        System.out.println("Scanning for H2 Log Servers on localhost...");
+        System.out.println("=".repeat(60));
+        System.out.println();
+
+        List<ServerInfo> h2Servers = new ArrayList<>();
+        List<ServerInfo> otherServices = new ArrayList<>();
+
+        for (int scanPort : SCAN_PORTS) {
+            ServerInfo info = checkPort(scanPort);
+            if (info != null) {
+                if (info.isH2Server) {
+                    h2Servers.add(info);
+                } else {
+                    otherServices.add(info);
+                }
+            }
+        }
+
+        // Report H2 log servers found
+        if (h2Servers.isEmpty()) {
+            System.out.println("No H2 log servers found.");
+            System.out.println();
+            System.out.println("To start a log server:");
+            System.out.println("  ./actor_iac.java log-server --db ./logs/actor-iac-logs");
+        } else {
+            System.out.println("H2 Log Servers Found:");
+            System.out.println("-".repeat(60));
+            for (ServerInfo info : h2Servers) {
+                System.out.println("  Port " + info.port + ": H2 Database Server");
+                if (info.dbPath != null) {
+                    System.out.println("           Database: " + info.dbPath);
+                }
+                if (info.sessionCount >= 0) {
+                    System.out.println("           Sessions: " + info.sessionCount);
+                }
+                System.out.println("           Connect:  --log-server=localhost:" + info.port);
+                System.out.println();
+            }
+        }
+
+        // Report other services on nearby ports
+        if (!otherServices.isEmpty()) {
+            System.out.println();
+            System.out.println("Other Services on Nearby Ports:");
+            System.out.println("-".repeat(60));
+            for (ServerInfo info : otherServices) {
+                System.out.println("  Port " + info.port + ": " + info.serviceName);
+                if (info.processInfo != null) {
+                    System.out.println("           Process: " + info.processInfo);
+                }
+            }
+        }
+
+        // Suggest available port
+        int availablePort = findAvailablePort();
+        if (availablePort > 0 && h2Servers.isEmpty()) {
+            System.out.println();
+            System.out.println("All ports in range 29090-29100 are available.");
+            System.out.println("Start a log server with:");
+            System.out.println("  ./actor_iac.java log-server --db ./logs/actor-iac-logs");
+        } else if (availablePort > 0) {
+            System.out.println();
+            System.out.println("Next available port: " + availablePort);
+            System.out.println("  ./actor_iac.java log-server --port " + availablePort + " --db ./logs/actor-iac-logs");
+        }
+
+        System.out.println();
+        System.out.println("=".repeat(60));
+
+        return 0;
+    }
+
+    /**
+     * Checks what's running on a port.
+     */
+    private ServerInfo checkPort(int checkPort) {
+        // First, check if port is open
+        try (Socket socket = new Socket("localhost", checkPort)) {
+            socket.setSoTimeout(1000);
+            // Port is open, try to identify the service
+        } catch (Exception e) {
+            // Port not open
+            return null;
+        }
+
+        ServerInfo info = new ServerInfo(checkPort);
+
+        // Try to connect as H2
+        try {
+            // Try to connect to H2 and query session count
+            String url = "jdbc:h2:tcp://localhost:" + checkPort + "/~/.h2/test;IFEXISTS=TRUE";
+            try (Connection conn = DriverManager.getConnection(url)) {
+                info.isH2Server = true;
+                // This DB might not have our schema, but we know it's H2
+            }
+        } catch (SQLException e) {
+            // Check if it's "Database not found" - that still means H2 server is running
+            String msg = e.getMessage();
+            if (msg != null && (msg.contains("Database") || msg.contains("not found") ||
+                    msg.contains("Connection is broken") || msg.contains("90067"))) {
+                info.isH2Server = true;
+            }
+        }
+
+        if (info.isH2Server) {
+            // Try to get info from actor-iac-logs database
+            tryGetLogServerInfo(info);
+        } else {
+            // Try to identify other services using lsof
+            info.serviceName = identifyService(checkPort);
+        }
+
+        return info;
+    }
+
+    /**
+     * Tries to get information about a log server's database.
+     */
+    private void tryGetLogServerInfo(ServerInfo info) {
+        // Try common database paths
+        String[] commonPaths = {
+            "./actor-iac-logs",
+            "./logs/actor-iac-logs",
+            System.getProperty("user.home") + "/actor-iac-logs"
+        };
+
+        for (String path : commonPaths) {
+            try {
+                String url = "jdbc:h2:tcp://localhost:" + info.port + "/" + path;
+                try (Connection conn = DriverManager.getConnection(url);
+                     Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sessions")) {
+                    if (rs.next()) {
+                        info.sessionCount = rs.getInt(1);
+                        info.dbPath = path;
+                        return;
+                    }
+                }
+            } catch (SQLException e) {
+                // This path doesn't have our schema, try next
+            }
+        }
+    }
+
+    /**
+     * Identifies a service using lsof.
+     */
+    private String identifyService(int checkPort) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("lsof", "-i", ":" + checkPort, "-sTCP:LISTEN");
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("COMMAND")) {
+                        String[] parts = line.split("\\s+");
+                        if (parts.length > 0) {
+                            return parts[0]; // Process name
+                        }
+                    }
+                }
+            }
+            process.waitFor();
+        } catch (Exception e) {
+            // lsof not available or failed
+        }
+
+        return "Unknown service";
+    }
+
+    /**
+     * Finds an available port.
+     */
+    private int findAvailablePort() {
+        for (int scanPort : SCAN_PORTS) {
+            try (Socket socket = new Socket("localhost", scanPort)) {
+                // Port is in use
+            } catch (Exception e) {
+                // Port is available
+                return scanPort;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Information about a service running on a port.
+     */
+    private static class ServerInfo {
+        final int port;
+        boolean isH2Server = false;
+        String dbPath = null;
+        int sessionCount = -1;
+        String serviceName = null;
+        String processInfo = null;
+
+        ServerInfo(int port) {
+            this.port = port;
+        }
     }
 }

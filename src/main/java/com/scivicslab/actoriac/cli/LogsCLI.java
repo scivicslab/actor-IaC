@@ -221,7 +221,7 @@ public class LogsCLI implements Callable<Integer> {
         if (server != null && !server.isBlank()) {
             String[] parts = server.split(":");
             String host = parts[0];
-            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 9092;
+            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 29090;
             return new H2LogReader(host, port, dbPath.getAbsolutePath());
         } else {
             return new H2LogReader(dbPath.toPath());

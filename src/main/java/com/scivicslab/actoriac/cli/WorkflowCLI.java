@@ -162,7 +162,7 @@ public class WorkflowCLI implements Callable<Integer> {
 
     @Option(
         names = {"--log-server"},
-        description = "H2 log server address (host:port, e.g., localhost:9092). " +
+        description = "H2 log server address (host:port, e.g., localhost:29090). " +
                      "Enables multiple workflows to share a single log database. " +
                      "Falls back to embedded mode if server is unreachable."
     )

@@ -53,7 +53,7 @@ public class H2LogStore implements DistributedLogStore {
     private final Thread writerThread;
     private final AtomicBoolean running;
     private static final int BATCH_SIZE = 100;
-    private static final int DEFAULT_TCP_PORT = 9092;
+    private static final int DEFAULT_TCP_PORT = 29090;
 
     /**
      * Creates an H2LogStore with the specified database path.
