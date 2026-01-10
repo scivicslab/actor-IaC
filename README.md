@@ -4,6 +4,7 @@ Infrastructure as Code (IaC) implementation using POJO-actor workflow engine.
 
 [![Java Version](https://img.shields.io/badge/java-21+-blue.svg)](https://openjdk.java.net/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Javadoc](https://img.shields.io/badge/javadoc-2.10.0-brightgreen.svg)](https://scivicslab.github.io/actor-IaC/)
 
 ## Overview
 
