@@ -48,26 +48,24 @@ import com.scivicslab.actoriac.log.DistributedLogStore;
  * <p>NodeGroupInterpreter extends Interpreter, so this class can execute main workflows
  * that orchestrate multiple nodes.</p>
  *
- * <p>Supported actions include:</p>
+ * <p><strong>Supported actions:</strong></p>
+ * <p><em>Workflow actions (from Interpreter):</em></p>
  * <ul>
- * <li><strong>Workflow actions (from Interpreter):</strong></li>
- *   <ul>
  *   <li>{@code runWorkflow} - Loads and runs a workflow file</li>
  *   <li>{@code readYaml} - Reads a YAML workflow definition</li>
  *   <li>{@code runUntilEnd} - Executes the workflow until completion</li>
- *   </ul>
- * <li><strong>NodeGroup actions:</strong></li>
- *   <ul>
+ * </ul>
+ * <p><em>NodeGroup actions:</em></p>
+ * <ul>
  *   <li>{@code hasInventory} - Returns true if inventory is loaded (for conditional branching)</li>
  *   <li>{@code createNodeActors} - Creates child actors for all nodes in a specified group</li>
  *   <li>{@code apply} - Applies an action to child actors matching a wildcard pattern</li>
  *   <li>{@code hasAccumulator} - Returns true if accumulator exists (for idempotent workflows)</li>
  *   <li>{@code createAccumulator} - Creates an accumulator for result collection</li>
  *   <li>{@code getAccumulatorSummary} - Gets the collected results</li>
- *   </ul>
  * </ul>
  *
- * <h3>Node Actor Hierarchy:</h3>
+ * <p><strong>Node Actor Hierarchy:</strong></p>
  * <p>When {@code createNodeActors} is called, it creates a parent-child relationship:</p>
  * <pre>
  * NodeGroup (parent)
@@ -76,7 +74,7 @@ import com.scivicslab.actoriac.log.DistributedLogStore;
  *   └─ node-db-01 (child NodeIIAR)
  * </pre>
  *
- * <h3>Example YAML Workflow:</h3>
+ * <p><strong>Example YAML Workflow:</strong></p>
  * <pre>{@code
  * name: setup-nodegroup
  * steps:

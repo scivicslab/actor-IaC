@@ -62,7 +62,7 @@ public class NodeGroup {
      *
      * <p>This is the recommended way to create NodeGroup instances.</p>
      *
-     * <h3>Example:</h3>
+     * <p><strong>Example:</strong></p>
      * <pre>{@code
      * NodeGroup nodeGroup = new NodeGroup.Builder()
      *     .withInventory(new FileInputStream("inventory.ini"))

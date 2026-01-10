@@ -45,7 +45,7 @@ import picocli.CommandLine.Option;
  * connections are not needed because actor-IaC operates from a single
  * operation terminal.</p>
  *
- * <h3>Architecture</h3>
+ * <p><strong>Architecture:</strong></p>
  * <pre>
  * [Operation Terminal]
  * ├── H2 Log Server (localhost:29090)
@@ -58,7 +58,7 @@ import picocli.CommandLine.Option;
  * [Remote Nodes] ← Don't write directly to log server
  * </pre>
  *
- * <h3>Usage</h3>
+ * <p><strong>Usage:</strong></p>
  * <pre>{@code
  * # Start the log server
  * actor-iac log-server --db ./logs/actor-iac-logs

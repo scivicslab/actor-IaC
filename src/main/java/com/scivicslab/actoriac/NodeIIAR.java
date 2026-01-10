@@ -42,26 +42,24 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  * by name, supporting both workflow execution actions (inherited from Interpreter)
  * and infrastructure actions (SSH command execution).</p>
  *
- * <p>Supported actions include:</p>
+ * <p><strong>Supported actions:</strong></p>
+ * <p><em>Workflow actions (from Interpreter):</em></p>
  * <ul>
- * <li><strong>Workflow actions (from Interpreter):</strong></li>
- *   <ul>
  *   <li>{@code execCode} - Executes the loaded workflow code</li>
  *   <li>{@code readYaml} - Reads a YAML workflow definition from a file path</li>
  *   <li>{@code readJson} - Reads a JSON workflow definition from a file path</li>
  *   <li>{@code readXml} - Reads an XML workflow definition from a file path</li>
  *   <li>{@code reset} - Resets the interpreter state</li>
- *   </ul>
- * <li><strong>Infrastructure actions (Node-specific):</strong></li>
- *   <ul>
+ * </ul>
+ * <p><em>Infrastructure actions (Node-specific):</em></p>
+ * <ul>
  *   <li>{@code executeCommand} - Executes a command and reports to accumulator (default)</li>
  *   <li>{@code executeCommandQuiet} - Executes a command without reporting</li>
  *   <li>{@code executeSudoCommand} - Executes sudo command and reports to accumulator (default)</li>
  *   <li>{@code executeSudoCommandQuiet} - Executes sudo command without reporting</li>
- *   </ul>
  * </ul>
  *
- * <h3>Example YAML Workflow:</h3>
+ * <p><strong>Example YAML Workflow:</strong></p>
  * <pre>{@code
  * name: deploy-application
  * steps:
