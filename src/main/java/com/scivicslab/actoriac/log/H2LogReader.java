@@ -53,6 +53,21 @@ public class H2LogReader implements AutoCloseable {
     }
 
     /**
+     * Opens a remote log database via H2 TCP server.
+     *
+     * <p>Connects to an H2 log server started with the {@code log-server} command.</p>
+     *
+     * @param host H2 server hostname (typically "localhost")
+     * @param port H2 server TCP port
+     * @param dbPath database path on the server
+     * @throws SQLException if database connection fails
+     */
+    public H2LogReader(String host, int port, String dbPath) throws SQLException {
+        String url = "jdbc:h2:tcp://" + host + ":" + port + "/" + dbPath;
+        this.connection = DriverManager.getConnection(url);
+    }
+
+    /**
      * Gets logs filtered by node ID.
      *
      * @param sessionId the session ID

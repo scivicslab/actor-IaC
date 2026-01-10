@@ -86,7 +86,7 @@ import picocli.CommandLine.Parameters;
     mixinStandardHelpOptions = true,
     version = "actor-IaC 2.10.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format.",
-    subcommands = {LogsCLI.class, DescribeCLI.class, WorkflowCLI.ListWorkflowsCommand.class}
+    subcommands = {LogsCLI.class, DescribeCLI.class, WorkflowCLI.ListWorkflowsCommand.class, LogServerCLI.class}
 )
 public class WorkflowCLI implements Callable<Integer> {
 
@@ -159,6 +159,14 @@ public class WorkflowCLI implements Callable<Integer> {
         description = "Disable H2 database logging"
     )
     private boolean noLogDb;
+
+    @Option(
+        names = {"--log-server"},
+        description = "H2 log server address (host:port, e.g., localhost:9092). " +
+                     "Enables multiple workflows to share a single log database. " +
+                     "Falls back to embedded mode if server is unreachable."
+    )
+    private String logServer;
 
     @Option(
         names = {"-k", "--ask-pass"},
@@ -330,13 +338,23 @@ public class WorkflowCLI implements Callable<Integer> {
     /**
      * Sets up H2 database for distributed logging.
      *
+     * <p>If --log-server is specified, attempts to connect to the TCP server.
+     * Falls back to embedded mode if the server is unreachable.</p>
+     *
      * @throws SQLException if database connection fails
      */
     private void setupLogDatabase() throws SQLException {
         Path dbPath = logDbPath.toPath();
-        logStore = new H2LogStore(dbPath);
-        // Note: In quiet mode, System.out is already redirected to null
-        System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
+
+        if (logServer != null && !logServer.isBlank()) {
+            // Use TCP connection with fallback to embedded mode
+            logStore = H2LogStore.createWithFallback(logServer, dbPath);
+            System.out.println("Log database: " + logServer + " (TCP mode)");
+        } else {
+            // Use embedded mode
+            logStore = new H2LogStore(dbPath);
+            System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
+        }
     }
 
     /**

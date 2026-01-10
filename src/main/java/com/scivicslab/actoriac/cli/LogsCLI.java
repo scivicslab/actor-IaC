@@ -83,6 +83,12 @@ public class LogsCLI implements Callable<Integer> {
     private File dbPath;
 
     @Option(
+        names = {"--server"},
+        description = "H2 log server address (host:port). Use with log-server command."
+    )
+    private String server;
+
+    @Option(
         names = {"-s", "--session"},
         description = "Session ID to query (default: latest session)"
     )
@@ -174,9 +180,7 @@ public class LogsCLI implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        Path path = dbPath.toPath();
-
-        try (H2LogReader reader = new H2LogReader(path)) {
+        try (H2LogReader reader = createReader()) {
             if (listSessions) {
                 return listRecentSessions(reader);
             }
@@ -204,6 +208,23 @@ public class LogsCLI implements Callable<Integer> {
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
             return 1;
+        }
+    }
+
+    /**
+     * Creates an H2LogReader, using TCP connection if --server is specified.
+     *
+     * @return H2LogReader instance
+     * @throws SQLException if connection fails
+     */
+    private H2LogReader createReader() throws SQLException {
+        if (server != null && !server.isBlank()) {
+            String[] parts = server.split(":");
+            String host = parts[0];
+            int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 9092;
+            return new H2LogReader(host, port, dbPath.getAbsolutePath());
+        } else {
+            return new H2LogReader(dbPath.toPath());
         }
     }
 

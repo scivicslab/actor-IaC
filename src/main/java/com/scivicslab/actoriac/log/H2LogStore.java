@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
 /**
  * H2 Database implementation of DistributedLogStore.
@@ -45,11 +46,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class H2LogStore implements DistributedLogStore {
 
+    private static final Logger LOG = Logger.getLogger(H2LogStore.class.getName());
+
     private final Connection connection;
     private final BlockingQueue<LogTask> writeQueue;
     private final Thread writerThread;
     private final AtomicBoolean running;
     private static final int BATCH_SIZE = 100;
+    private static final int DEFAULT_TCP_PORT = 9092;
 
     /**
      * Creates an H2LogStore with the specified database path.
@@ -90,6 +94,84 @@ public class H2LogStore implements DistributedLogStore {
         this.writerThread = new Thread(this::writerLoop, "H2LogStore-Writer");
         this.writerThread.setDaemon(true);
         this.writerThread.start();
+    }
+
+    /**
+     * Creates an H2LogStore connected to a remote TCP server.
+     *
+     * <p>The server should be started using the {@code log-server} command
+     * before connecting. Schema is expected to be initialized by the server.</p>
+     *
+     * @param host H2 server hostname (typically "localhost")
+     * @param port H2 server TCP port
+     * @param dbPath database path on the server
+     * @throws SQLException if connection fails
+     */
+    public H2LogStore(String host, int port, String dbPath) throws SQLException {
+        String url = "jdbc:h2:tcp://" + host + ":" + port + "/" + dbPath;
+        this.connection = DriverManager.getConnection(url);
+        this.writeQueue = new LinkedBlockingQueue<>();
+        this.running = new AtomicBoolean(true);
+
+        // Schema should already be initialized by the server
+        verifySchema();
+
+        this.writerThread = new Thread(this::writerLoop, "H2LogStore-Writer");
+        this.writerThread.setDaemon(true);
+        this.writerThread.start();
+    }
+
+    /**
+     * Factory method that attempts TCP connection with fallback to embedded mode.
+     *
+     * <p>If a log server address is specified and reachable, connects via TCP.
+     * Otherwise, falls back to embedded mode with AUTO_SERVER=TRUE.</p>
+     *
+     * @param logServer server address in "host:port" format (may be null)
+     * @param embeddedPath path for embedded database fallback
+     * @return H2LogStore instance
+     * @throws SQLException if both TCP and embedded connections fail
+     */
+    public static H2LogStore createWithFallback(String logServer, Path embeddedPath)
+            throws SQLException {
+        if (logServer != null && !logServer.isBlank()) {
+            try {
+                String[] parts = logServer.split(":");
+                String host = parts[0];
+                int port = parts.length > 1 ? Integer.parseInt(parts[1]) : DEFAULT_TCP_PORT;
+
+                // Use the embedded path as the database name on the server
+                String dbPath = embeddedPath.toAbsolutePath().toString();
+
+                H2LogStore store = new H2LogStore(host, port, dbPath);
+                LOG.info("Connected to log server at " + logServer);
+                return store;
+            } catch (SQLException e) {
+                LOG.warning("Failed to connect to log server '" + logServer +
+                           "', falling back to embedded mode: " + e.getMessage());
+            } catch (NumberFormatException e) {
+                LOG.warning("Invalid log server port in '" + logServer +
+                           "', falling back to embedded mode");
+            }
+        }
+        return new H2LogStore(embeddedPath);
+    }
+
+    /**
+     * Verifies the database schema exists (for TCP connections).
+     *
+     * @throws SQLException if schema is not initialized
+     */
+    private void verifySchema() throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            // Simple check - if this fails, schema doesn't exist
+            stmt.execute("SELECT 1 FROM sessions WHERE 1=0");
+            stmt.execute("SELECT 1 FROM logs WHERE 1=0");
+            stmt.execute("SELECT 1 FROM node_results WHERE 1=0");
+        } catch (SQLException e) {
+            throw new SQLException("Database schema not initialized. " +
+                    "Ensure log-server has been started at least once.", e);
+        }
     }
 
     private void initSchema() throws SQLException {
