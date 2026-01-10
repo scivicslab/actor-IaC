@@ -1,1 +1,0 @@
-/home/devteam/.sdkman/candidates/java/25-graalce/bin/javadoc @options @packages

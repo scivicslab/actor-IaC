@@ -61,782 +61,780 @@
 <span class="source-line-no">048</span><span id="line-48"> * &lt;p&gt;NodeGroupInterpreter extends Interpreter, so this class can execute main workflows</span>
 <span class="source-line-no">049</span><span id="line-49"> * that orchestrate multiple nodes.&lt;/p&gt;</span>
 <span class="source-line-no">050</span><span id="line-50"> *</span>
-<span class="source-line-no">051</span><span id="line-51"> * &lt;p&gt;Supported actions include:&lt;/p&gt;</span>
-<span class="source-line-no">052</span><span id="line-52"> * &lt;ul&gt;</span>
-<span class="source-line-no">053</span><span id="line-53"> * &lt;li&gt;&lt;strong&gt;Workflow actions (from Interpreter):&lt;/strong&gt;&lt;/li&gt;</span>
-<span class="source-line-no">054</span><span id="line-54"> *   &lt;ul&gt;</span>
-<span class="source-line-no">055</span><span id="line-55"> *   &lt;li&gt;{@code runWorkflow} - Loads and runs a workflow file&lt;/li&gt;</span>
-<span class="source-line-no">056</span><span id="line-56"> *   &lt;li&gt;{@code readYaml} - Reads a YAML workflow definition&lt;/li&gt;</span>
-<span class="source-line-no">057</span><span id="line-57"> *   &lt;li&gt;{@code runUntilEnd} - Executes the workflow until completion&lt;/li&gt;</span>
-<span class="source-line-no">058</span><span id="line-58"> *   &lt;/ul&gt;</span>
-<span class="source-line-no">059</span><span id="line-59"> * &lt;li&gt;&lt;strong&gt;NodeGroup actions:&lt;/strong&gt;&lt;/li&gt;</span>
-<span class="source-line-no">060</span><span id="line-60"> *   &lt;ul&gt;</span>
-<span class="source-line-no">061</span><span id="line-61"> *   &lt;li&gt;{@code hasInventory} - Returns true if inventory is loaded (for conditional branching)&lt;/li&gt;</span>
-<span class="source-line-no">062</span><span id="line-62"> *   &lt;li&gt;{@code createNodeActors} - Creates child actors for all nodes in a specified group&lt;/li&gt;</span>
-<span class="source-line-no">063</span><span id="line-63"> *   &lt;li&gt;{@code apply} - Applies an action to child actors matching a wildcard pattern&lt;/li&gt;</span>
-<span class="source-line-no">064</span><span id="line-64"> *   &lt;li&gt;{@code hasAccumulator} - Returns true if accumulator exists (for idempotent workflows)&lt;/li&gt;</span>
-<span class="source-line-no">065</span><span id="line-65"> *   &lt;li&gt;{@code createAccumulator} - Creates an accumulator for result collection&lt;/li&gt;</span>
-<span class="source-line-no">066</span><span id="line-66"> *   &lt;li&gt;{@code getAccumulatorSummary} - Gets the collected results&lt;/li&gt;</span>
-<span class="source-line-no">067</span><span id="line-67"> *   &lt;/ul&gt;</span>
-<span class="source-line-no">068</span><span id="line-68"> * &lt;/ul&gt;</span>
-<span class="source-line-no">069</span><span id="line-69"> *</span>
-<span class="source-line-no">070</span><span id="line-70"> * &lt;h3&gt;Node Actor Hierarchy:&lt;/h3&gt;</span>
-<span class="source-line-no">071</span><span id="line-71"> * &lt;p&gt;When {@code createNodeActors} is called, it creates a parent-child relationship:&lt;/p&gt;</span>
-<span class="source-line-no">072</span><span id="line-72"> * &lt;pre&gt;</span>
-<span class="source-line-no">073</span><span id="line-73"> * NodeGroup (parent)</span>
-<span class="source-line-no">074</span><span id="line-74"> *   ├─ node-web-01 (child NodeIIAR)</span>
-<span class="source-line-no">075</span><span id="line-75"> *   ├─ node-web-02 (child NodeIIAR)</span>
-<span class="source-line-no">076</span><span id="line-76"> *   └─ node-db-01 (child NodeIIAR)</span>
-<span class="source-line-no">077</span><span id="line-77"> * &lt;/pre&gt;</span>
-<span class="source-line-no">078</span><span id="line-78"> *</span>
-<span class="source-line-no">079</span><span id="line-79"> * &lt;h3&gt;Example YAML Workflow:&lt;/h3&gt;</span>
-<span class="source-line-no">080</span><span id="line-80"> * &lt;pre&gt;{@code</span>
-<span class="source-line-no">081</span><span id="line-81"> * name: setup-nodegroup</span>
-<span class="source-line-no">082</span><span id="line-82"> * steps:</span>
-<span class="source-line-no">083</span><span id="line-83"> *   # Step 1: Create node actors</span>
-<span class="source-line-no">084</span><span id="line-84"> *   - states: [0, 1]</span>
-<span class="source-line-no">085</span><span id="line-85"> *     actions:</span>
-<span class="source-line-no">086</span><span id="line-86"> *       - actor: nodeGroup</span>
-<span class="source-line-no">087</span><span id="line-87"> *         method: createNodeActors</span>
-<span class="source-line-no">088</span><span id="line-88"> *         arguments: ["web-servers"]</span>
-<span class="source-line-no">089</span><span id="line-89"> *</span>
-<span class="source-line-no">090</span><span id="line-90"> *   # Step 2: Run workflow on all nodes (load and execute in one step)</span>
-<span class="source-line-no">091</span><span id="line-91"> *   - states: [1, end]</span>
-<span class="source-line-no">092</span><span id="line-92"> *     actions:</span>
-<span class="source-line-no">093</span><span id="line-93"> *       - actor: nodeGroup</span>
-<span class="source-line-no">094</span><span id="line-94"> *         method: apply</span>
-<span class="source-line-no">095</span><span id="line-95"> *         arguments: ['{"actor": "node-*", "method": "runWorkflow", "arguments": ["deploy.yaml"]}']</span>
-<span class="source-line-no">096</span><span id="line-96"> * }&lt;/pre&gt;</span>
-<span class="source-line-no">097</span><span id="line-97"> *</span>
-<span class="source-line-no">098</span><span id="line-98"> * @author devteam@scivics-lab.com</span>
-<span class="source-line-no">099</span><span id="line-99"> */</span>
-<span class="source-line-no">100</span><span id="line-100">public class NodeGroupIIAR extends IIActorRef&lt;NodeGroupInterpreter&gt; {</span>
-<span class="source-line-no">101</span><span id="line-101"></span>
-<span class="source-line-no">102</span><span id="line-102">    Logger logger = null;</span>
-<span class="source-line-no">103</span><span id="line-103">    private LoggingAccumulatorIIAR accumulatorActor = null;</span>
-<span class="source-line-no">104</span><span id="line-104"></span>
-<span class="source-line-no">105</span><span id="line-105">    /**</span>
-<span class="source-line-no">106</span><span id="line-106">     * Constructs a new NodeGroupIIAR with the specified actor name and nodeGroupInterpreter object.</span>
-<span class="source-line-no">107</span><span id="line-107">     *</span>
-<span class="source-line-no">108</span><span id="line-108">     * @param actorName the name of this actor</span>
-<span class="source-line-no">109</span><span id="line-109">     * @param object the {@link NodeGroupInterpreter} instance managed by this actor reference</span>
-<span class="source-line-no">110</span><span id="line-110">     */</span>
-<span class="source-line-no">111</span><span id="line-111">    public NodeGroupIIAR(String actorName, NodeGroupInterpreter object) {</span>
-<span class="source-line-no">112</span><span id="line-112">        super(actorName, object);</span>
-<span class="source-line-no">113</span><span id="line-113">        logger = Logger.getLogger(actorName);</span>
-<span class="source-line-no">114</span><span id="line-114">    }</span>
-<span class="source-line-no">115</span><span id="line-115"></span>
-<span class="source-line-no">116</span><span id="line-116">    /**</span>
-<span class="source-line-no">117</span><span id="line-117">     * Constructs a new NodeGroupIIAR with the specified actor name, nodeGroupInterpreter object,</span>
-<span class="source-line-no">118</span><span id="line-118">     * and actor system.</span>
-<span class="source-line-no">119</span><span id="line-119">     *</span>
-<span class="source-line-no">120</span><span id="line-120">     * @param actorName the name of this actor</span>
-<span class="source-line-no">121</span><span id="line-121">     * @param object the {@link NodeGroupInterpreter} instance managed by this actor reference</span>
-<span class="source-line-no">122</span><span id="line-122">     * @param system the actor system managing this actor</span>
-<span class="source-line-no">123</span><span id="line-123">     */</span>
-<span class="source-line-no">124</span><span id="line-124">    public NodeGroupIIAR(String actorName, NodeGroupInterpreter object, IIActorSystem system) {</span>
-<span class="source-line-no">125</span><span id="line-125">        super(actorName, object, system);</span>
-<span class="source-line-no">126</span><span id="line-126">        logger = Logger.getLogger(actorName);</span>
-<span class="source-line-no">127</span><span id="line-127"></span>
-<span class="source-line-no">128</span><span id="line-128">        // Set the selfActorRef in the Interpreter (NodeGroupInterpreter extends Interpreter)</span>
-<span class="source-line-no">129</span><span id="line-129">        object.setSelfActorRef(this);</span>
-<span class="source-line-no">130</span><span id="line-130">    }</span>
-<span class="source-line-no">131</span><span id="line-131"></span>
-<span class="source-line-no">132</span><span id="line-132">    /**</span>
-<span class="source-line-no">133</span><span id="line-133">     * Invokes an action on the node group by name with the given arguments.</span>
-<span class="source-line-no">134</span><span id="line-134">     *</span>
-<span class="source-line-no">135</span><span id="line-135">     * &lt;p&gt;This method dispatches to specialized handler methods based on the action type:&lt;/p&gt;</span>
-<span class="source-line-no">136</span><span id="line-136">     * &lt;ul&gt;</span>
-<span class="source-line-no">137</span><span id="line-137">     *   &lt;li&gt;Workflow actions: {@link #handleWorkflowAction}&lt;/li&gt;</span>
-<span class="source-line-no">138</span><span id="line-138">     *   &lt;li&gt;NodeGroup-specific actions: {@link #handleNodeGroupAction}&lt;/li&gt;</span>
-<span class="source-line-no">139</span><span id="line-139">     * &lt;/ul&gt;</span>
-<span class="source-line-no">140</span><span id="line-140">     *</span>
-<span class="source-line-no">141</span><span id="line-141">     * @param actionName the name of the action to execute</span>
-<span class="source-line-no">142</span><span id="line-142">     * @param arg the argument string (JSON array format)</span>
-<span class="source-line-no">143</span><span id="line-143">     * @return an {@link ActionResult} indicating success or failure with a message</span>
-<span class="source-line-no">144</span><span id="line-144">     */</span>
-<span class="source-line-no">145</span><span id="line-145">    @Override</span>
-<span class="source-line-no">146</span><span id="line-146">    public ActionResult callByActionName(String actionName, String arg) {</span>
-<span class="source-line-no">147</span><span id="line-147">        logger.fine(String.format("actionName = %s, args = %s", actionName, arg));</span>
-<span class="source-line-no">148</span><span id="line-148"></span>
-<span class="source-line-no">149</span><span id="line-149">        try {</span>
-<span class="source-line-no">150</span><span id="line-150">            // Workflow execution actions (from Interpreter)</span>
-<span class="source-line-no">151</span><span id="line-151">            ActionResult workflowResult = handleWorkflowAction(actionName, arg);</span>
-<span class="source-line-no">152</span><span id="line-152">            if (workflowResult != null) {</span>
-<span class="source-line-no">153</span><span id="line-153">                return workflowResult;</span>
-<span class="source-line-no">154</span><span id="line-154">            }</span>
-<span class="source-line-no">155</span><span id="line-155"></span>
-<span class="source-line-no">156</span><span id="line-156">            // NodeGroup-specific actions</span>
-<span class="source-line-no">157</span><span id="line-157">            ActionResult nodeGroupResult = handleNodeGroupAction(actionName, arg);</span>
-<span class="source-line-no">158</span><span id="line-158">            if (nodeGroupResult != null) {</span>
-<span class="source-line-no">159</span><span id="line-159">                return nodeGroupResult;</span>
-<span class="source-line-no">160</span><span id="line-160">            }</span>
-<span class="source-line-no">161</span><span id="line-161"></span>
-<span class="source-line-no">162</span><span id="line-162">            // Unknown action</span>
-<span class="source-line-no">163</span><span id="line-163">            logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",</span>
-<span class="source-line-no">164</span><span id="line-164">                    this.getName(), actionName, arg));</span>
-<span class="source-line-no">165</span><span id="line-165">            return new ActionResult(false, "Unknown action: " + actionName);</span>
-<span class="source-line-no">166</span><span id="line-166"></span>
-<span class="source-line-no">167</span><span id="line-167">        } catch (InterruptedException e) {</span>
-<span class="source-line-no">168</span><span id="line-168">            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);</span>
-<span class="source-line-no">169</span><span id="line-169">            return new ActionResult(false, "Interrupted: " + e.getMessage());</span>
-<span class="source-line-no">170</span><span id="line-170">        } catch (ExecutionException e) {</span>
-<span class="source-line-no">171</span><span id="line-171">            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);</span>
-<span class="source-line-no">172</span><span id="line-172">            return new ActionResult(false, "Execution error: " + e.getMessage());</span>
-<span class="source-line-no">173</span><span id="line-173">        } catch (Exception e) {</span>
-<span class="source-line-no">174</span><span id="line-174">            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);</span>
-<span class="source-line-no">175</span><span id="line-175">            return new ActionResult(false, "Error: " + e.getMessage());</span>
-<span class="source-line-no">176</span><span id="line-176">        }</span>
-<span class="source-line-no">177</span><span id="line-177">    }</span>
-<span class="source-line-no">178</span><span id="line-178"></span>
-<span class="source-line-no">179</span><span id="line-179">    /**</span>
-<span class="source-line-no">180</span><span id="line-180">     * Handles workflow-related actions (from Interpreter).</span>
-<span class="source-line-no">181</span><span id="line-181">     *</span>
-<span class="source-line-no">182</span><span id="line-182">     * @param actionName the action name</span>
-<span class="source-line-no">183</span><span id="line-183">     * @param arg the argument string</span>
-<span class="source-line-no">184</span><span id="line-184">     * @return ActionResult if handled, null if not a workflow action</span>
-<span class="source-line-no">185</span><span id="line-185">     */</span>
-<span class="source-line-no">186</span><span id="line-186">    private ActionResult handleWorkflowAction(String actionName, String arg)</span>
-<span class="source-line-no">187</span><span id="line-187">            throws InterruptedException, ExecutionException {</span>
-<span class="source-line-no">188</span><span id="line-188"></span>
-<span class="source-line-no">189</span><span id="line-189">        switch (actionName) {</span>
-<span class="source-line-no">190</span><span id="line-190">            case "execCode":</span>
-<span class="source-line-no">191</span><span id="line-191">                return this.ask(n -&gt; n.execCode()).get();</span>
-<span class="source-line-no">192</span><span id="line-192"></span>
-<span class="source-line-no">193</span><span id="line-193">            case "runUntilEnd":</span>
-<span class="source-line-no">194</span><span id="line-194">                int maxIterations = parseMaxIterations(arg, 10000);</span>
-<span class="source-line-no">195</span><span id="line-195">                return this.ask(n -&gt; n.runUntilEnd(maxIterations)).get();</span>
-<span class="source-line-no">196</span><span id="line-196"></span>
-<span class="source-line-no">197</span><span id="line-197">            case "runWorkflow":</span>
-<span class="source-line-no">198</span><span id="line-198">                JSONArray runArgs = new JSONArray(arg);</span>
-<span class="source-line-no">199</span><span id="line-199">                String workflowFile = runArgs.getString(0);</span>
-<span class="source-line-no">200</span><span id="line-200">                int runMaxIterations = runArgs.length() &gt; 1 ? runArgs.getInt(1) : 10000;</span>
-<span class="source-line-no">201</span><span id="line-201">                logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, runMaxIterations));</span>
-<span class="source-line-no">202</span><span id="line-202">                ActionResult result = this.object.runWorkflow(workflowFile, runMaxIterations);</span>
-<span class="source-line-no">203</span><span id="line-203">                logger.info(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));</span>
-<span class="source-line-no">204</span><span id="line-204">                return result;</span>
-<span class="source-line-no">205</span><span id="line-205"></span>
-<span class="source-line-no">206</span><span id="line-206">            case "readYaml":</span>
-<span class="source-line-no">207</span><span id="line-207">                return handleReadYaml(arg);</span>
-<span class="source-line-no">208</span><span id="line-208"></span>
-<span class="source-line-no">209</span><span id="line-209">            default:</span>
-<span class="source-line-no">210</span><span id="line-210">                return null; // Not a workflow action</span>
-<span class="source-line-no">211</span><span id="line-211">        }</span>
-<span class="source-line-no">212</span><span id="line-212">    }</span>
-<span class="source-line-no">213</span><span id="line-213"></span>
-<span class="source-line-no">214</span><span id="line-214">    /**</span>
-<span class="source-line-no">215</span><span id="line-215">     * Handles NodeGroup-specific actions.</span>
-<span class="source-line-no">216</span><span id="line-216">     *</span>
-<span class="source-line-no">217</span><span id="line-217">     * @param actionName the action name</span>
-<span class="source-line-no">218</span><span id="line-218">     * @param arg the argument string</span>
-<span class="source-line-no">219</span><span id="line-219">     * @return ActionResult if handled, null if not a NodeGroup action</span>
-<span class="source-line-no">220</span><span id="line-220">     */</span>
-<span class="source-line-no">221</span><span id="line-221">    private ActionResult handleNodeGroupAction(String actionName, String arg)</span>
-<span class="source-line-no">222</span><span id="line-222">            throws InterruptedException, ExecutionException {</span>
-<span class="source-line-no">223</span><span id="line-223"></span>
-<span class="source-line-no">224</span><span id="line-224">        switch (actionName) {</span>
-<span class="source-line-no">225</span><span id="line-225">            case "hasInventory":</span>
-<span class="source-line-no">226</span><span id="line-226">                boolean hasInv = this.object.getInventory() != null;</span>
-<span class="source-line-no">227</span><span id="line-227">                return new ActionResult(hasInv, hasInv ? "Inventory available" : "No inventory");</span>
-<span class="source-line-no">228</span><span id="line-228"></span>
-<span class="source-line-no">229</span><span id="line-229">            case "createNodeActors":</span>
-<span class="source-line-no">230</span><span id="line-230">                String groupName = extractSingleArgument(arg);</span>
-<span class="source-line-no">231</span><span id="line-231">                createNodeActors(groupName);</span>
-<span class="source-line-no">232</span><span id="line-232">                return new ActionResult(true, String.format("Created node actors for group '%s'", groupName));</span>
-<span class="source-line-no">233</span><span id="line-233"></span>
-<span class="source-line-no">234</span><span id="line-234">            case "apply":</span>
-<span class="source-line-no">235</span><span id="line-235">                return apply(arg);</span>
-<span class="source-line-no">236</span><span id="line-236"></span>
-<span class="source-line-no">237</span><span id="line-237">            case "executeCommandOnAllNodes":</span>
-<span class="source-line-no">238</span><span id="line-238">                String command = extractSingleArgument(arg);</span>
-<span class="source-line-no">239</span><span id="line-239">                List&lt;String&gt; results = executeCommandOnAllNodes(command);</span>
-<span class="source-line-no">240</span><span id="line-240">                return new ActionResult(true,</span>
-<span class="source-line-no">241</span><span id="line-241">                    String.format("Executed command on %d nodes: %s", results.size(), results));</span>
-<span class="source-line-no">242</span><span id="line-242"></span>
-<span class="source-line-no">243</span><span id="line-243">            case "hasAccumulator":</span>
-<span class="source-line-no">244</span><span id="line-244">                boolean hasAcc = accumulatorActor != null;</span>
-<span class="source-line-no">245</span><span id="line-245">                return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");</span>
-<span class="source-line-no">246</span><span id="line-246"></span>
-<span class="source-line-no">247</span><span id="line-247">            case "createAccumulator":</span>
-<span class="source-line-no">248</span><span id="line-248">                String type = extractSingleArgument(arg);</span>
-<span class="source-line-no">249</span><span id="line-249">                createAccumulator(type);</span>
-<span class="source-line-no">250</span><span id="line-250">                return new ActionResult(true, String.format("Created %s accumulator", type));</span>
-<span class="source-line-no">251</span><span id="line-251"></span>
-<span class="source-line-no">252</span><span id="line-252">            case "getAccumulatorSummary":</span>
-<span class="source-line-no">253</span><span id="line-253">                return getAccumulatorSummary();</span>
-<span class="source-line-no">254</span><span id="line-254"></span>
-<span class="source-line-no">255</span><span id="line-255">            case "printSessionSummary":</span>
-<span class="source-line-no">256</span><span id="line-256">                return printSessionSummary();</span>
-<span class="source-line-no">257</span><span id="line-257"></span>
-<span class="source-line-no">258</span><span id="line-258">            case "doNothing":</span>
-<span class="source-line-no">259</span><span id="line-259">                return new ActionResult(true, arg);</span>
-<span class="source-line-no">260</span><span id="line-260"></span>
-<span class="source-line-no">261</span><span id="line-261">            default:</span>
-<span class="source-line-no">262</span><span id="line-262">                return null; // Not a NodeGroup action</span>
-<span class="source-line-no">263</span><span id="line-263">        }</span>
-<span class="source-line-no">264</span><span id="line-264">    }</span>
+<span class="source-line-no">051</span><span id="line-51"> * &lt;p&gt;&lt;strong&gt;Supported actions:&lt;/strong&gt;&lt;/p&gt;</span>
+<span class="source-line-no">052</span><span id="line-52"> * &lt;p&gt;&lt;em&gt;Workflow actions (from Interpreter):&lt;/em&gt;&lt;/p&gt;</span>
+<span class="source-line-no">053</span><span id="line-53"> * &lt;ul&gt;</span>
+<span class="source-line-no">054</span><span id="line-54"> *   &lt;li&gt;{@code runWorkflow} - Loads and runs a workflow file&lt;/li&gt;</span>
+<span class="source-line-no">055</span><span id="line-55"> *   &lt;li&gt;{@code readYaml} - Reads a YAML workflow definition&lt;/li&gt;</span>
+<span class="source-line-no">056</span><span id="line-56"> *   &lt;li&gt;{@code runUntilEnd} - Executes the workflow until completion&lt;/li&gt;</span>
+<span class="source-line-no">057</span><span id="line-57"> * &lt;/ul&gt;</span>
+<span class="source-line-no">058</span><span id="line-58"> * &lt;p&gt;&lt;em&gt;NodeGroup actions:&lt;/em&gt;&lt;/p&gt;</span>
+<span class="source-line-no">059</span><span id="line-59"> * &lt;ul&gt;</span>
+<span class="source-line-no">060</span><span id="line-60"> *   &lt;li&gt;{@code hasInventory} - Returns true if inventory is loaded (for conditional branching)&lt;/li&gt;</span>
+<span class="source-line-no">061</span><span id="line-61"> *   &lt;li&gt;{@code createNodeActors} - Creates child actors for all nodes in a specified group&lt;/li&gt;</span>
+<span class="source-line-no">062</span><span id="line-62"> *   &lt;li&gt;{@code apply} - Applies an action to child actors matching a wildcard pattern&lt;/li&gt;</span>
+<span class="source-line-no">063</span><span id="line-63"> *   &lt;li&gt;{@code hasAccumulator} - Returns true if accumulator exists (for idempotent workflows)&lt;/li&gt;</span>
+<span class="source-line-no">064</span><span id="line-64"> *   &lt;li&gt;{@code createAccumulator} - Creates an accumulator for result collection&lt;/li&gt;</span>
+<span class="source-line-no">065</span><span id="line-65"> *   &lt;li&gt;{@code getAccumulatorSummary} - Gets the collected results&lt;/li&gt;</span>
+<span class="source-line-no">066</span><span id="line-66"> * &lt;/ul&gt;</span>
+<span class="source-line-no">067</span><span id="line-67"> *</span>
+<span class="source-line-no">068</span><span id="line-68"> * &lt;p&gt;&lt;strong&gt;Node Actor Hierarchy:&lt;/strong&gt;&lt;/p&gt;</span>
+<span class="source-line-no">069</span><span id="line-69"> * &lt;p&gt;When {@code createNodeActors} is called, it creates a parent-child relationship:&lt;/p&gt;</span>
+<span class="source-line-no">070</span><span id="line-70"> * &lt;pre&gt;</span>
+<span class="source-line-no">071</span><span id="line-71"> * NodeGroup (parent)</span>
+<span class="source-line-no">072</span><span id="line-72"> *   ├─ node-web-01 (child NodeIIAR)</span>
+<span class="source-line-no">073</span><span id="line-73"> *   ├─ node-web-02 (child NodeIIAR)</span>
+<span class="source-line-no">074</span><span id="line-74"> *   └─ node-db-01 (child NodeIIAR)</span>
+<span class="source-line-no">075</span><span id="line-75"> * &lt;/pre&gt;</span>
+<span class="source-line-no">076</span><span id="line-76"> *</span>
+<span class="source-line-no">077</span><span id="line-77"> * &lt;p&gt;&lt;strong&gt;Example YAML Workflow:&lt;/strong&gt;&lt;/p&gt;</span>
+<span class="source-line-no">078</span><span id="line-78"> * &lt;pre&gt;{@code</span>
+<span class="source-line-no">079</span><span id="line-79"> * name: setup-nodegroup</span>
+<span class="source-line-no">080</span><span id="line-80"> * steps:</span>
+<span class="source-line-no">081</span><span id="line-81"> *   # Step 1: Create node actors</span>
+<span class="source-line-no">082</span><span id="line-82"> *   - states: [0, 1]</span>
+<span class="source-line-no">083</span><span id="line-83"> *     actions:</span>
+<span class="source-line-no">084</span><span id="line-84"> *       - actor: nodeGroup</span>
+<span class="source-line-no">085</span><span id="line-85"> *         method: createNodeActors</span>
+<span class="source-line-no">086</span><span id="line-86"> *         arguments: ["web-servers"]</span>
+<span class="source-line-no">087</span><span id="line-87"> *</span>
+<span class="source-line-no">088</span><span id="line-88"> *   # Step 2: Run workflow on all nodes (load and execute in one step)</span>
+<span class="source-line-no">089</span><span id="line-89"> *   - states: [1, end]</span>
+<span class="source-line-no">090</span><span id="line-90"> *     actions:</span>
+<span class="source-line-no">091</span><span id="line-91"> *       - actor: nodeGroup</span>
+<span class="source-line-no">092</span><span id="line-92"> *         method: apply</span>
+<span class="source-line-no">093</span><span id="line-93"> *         arguments: ['{"actor": "node-*", "method": "runWorkflow", "arguments": ["deploy.yaml"]}']</span>
+<span class="source-line-no">094</span><span id="line-94"> * }&lt;/pre&gt;</span>
+<span class="source-line-no">095</span><span id="line-95"> *</span>
+<span class="source-line-no">096</span><span id="line-96"> * @author devteam@scivics-lab.com</span>
+<span class="source-line-no">097</span><span id="line-97"> */</span>
+<span class="source-line-no">098</span><span id="line-98">public class NodeGroupIIAR extends IIActorRef&lt;NodeGroupInterpreter&gt; {</span>
+<span class="source-line-no">099</span><span id="line-99"></span>
+<span class="source-line-no">100</span><span id="line-100">    Logger logger = null;</span>
+<span class="source-line-no">101</span><span id="line-101">    private LoggingAccumulatorIIAR accumulatorActor = null;</span>
+<span class="source-line-no">102</span><span id="line-102"></span>
+<span class="source-line-no">103</span><span id="line-103">    /**</span>
+<span class="source-line-no">104</span><span id="line-104">     * Constructs a new NodeGroupIIAR with the specified actor name and nodeGroupInterpreter object.</span>
+<span class="source-line-no">105</span><span id="line-105">     *</span>
+<span class="source-line-no">106</span><span id="line-106">     * @param actorName the name of this actor</span>
+<span class="source-line-no">107</span><span id="line-107">     * @param object the {@link NodeGroupInterpreter} instance managed by this actor reference</span>
+<span class="source-line-no">108</span><span id="line-108">     */</span>
+<span class="source-line-no">109</span><span id="line-109">    public NodeGroupIIAR(String actorName, NodeGroupInterpreter object) {</span>
+<span class="source-line-no">110</span><span id="line-110">        super(actorName, object);</span>
+<span class="source-line-no">111</span><span id="line-111">        logger = Logger.getLogger(actorName);</span>
+<span class="source-line-no">112</span><span id="line-112">    }</span>
+<span class="source-line-no">113</span><span id="line-113"></span>
+<span class="source-line-no">114</span><span id="line-114">    /**</span>
+<span class="source-line-no">115</span><span id="line-115">     * Constructs a new NodeGroupIIAR with the specified actor name, nodeGroupInterpreter object,</span>
+<span class="source-line-no">116</span><span id="line-116">     * and actor system.</span>
+<span class="source-line-no">117</span><span id="line-117">     *</span>
+<span class="source-line-no">118</span><span id="line-118">     * @param actorName the name of this actor</span>
+<span class="source-line-no">119</span><span id="line-119">     * @param object the {@link NodeGroupInterpreter} instance managed by this actor reference</span>
+<span class="source-line-no">120</span><span id="line-120">     * @param system the actor system managing this actor</span>
+<span class="source-line-no">121</span><span id="line-121">     */</span>
+<span class="source-line-no">122</span><span id="line-122">    public NodeGroupIIAR(String actorName, NodeGroupInterpreter object, IIActorSystem system) {</span>
+<span class="source-line-no">123</span><span id="line-123">        super(actorName, object, system);</span>
+<span class="source-line-no">124</span><span id="line-124">        logger = Logger.getLogger(actorName);</span>
+<span class="source-line-no">125</span><span id="line-125"></span>
+<span class="source-line-no">126</span><span id="line-126">        // Set the selfActorRef in the Interpreter (NodeGroupInterpreter extends Interpreter)</span>
+<span class="source-line-no">127</span><span id="line-127">        object.setSelfActorRef(this);</span>
+<span class="source-line-no">128</span><span id="line-128">    }</span>
+<span class="source-line-no">129</span><span id="line-129"></span>
+<span class="source-line-no">130</span><span id="line-130">    /**</span>
+<span class="source-line-no">131</span><span id="line-131">     * Invokes an action on the node group by name with the given arguments.</span>
+<span class="source-line-no">132</span><span id="line-132">     *</span>
+<span class="source-line-no">133</span><span id="line-133">     * &lt;p&gt;This method dispatches to specialized handler methods based on the action type:&lt;/p&gt;</span>
+<span class="source-line-no">134</span><span id="line-134">     * &lt;ul&gt;</span>
+<span class="source-line-no">135</span><span id="line-135">     *   &lt;li&gt;Workflow actions: {@link #handleWorkflowAction}&lt;/li&gt;</span>
+<span class="source-line-no">136</span><span id="line-136">     *   &lt;li&gt;NodeGroup-specific actions: {@link #handleNodeGroupAction}&lt;/li&gt;</span>
+<span class="source-line-no">137</span><span id="line-137">     * &lt;/ul&gt;</span>
+<span class="source-line-no">138</span><span id="line-138">     *</span>
+<span class="source-line-no">139</span><span id="line-139">     * @param actionName the name of the action to execute</span>
+<span class="source-line-no">140</span><span id="line-140">     * @param arg the argument string (JSON array format)</span>
+<span class="source-line-no">141</span><span id="line-141">     * @return an {@link ActionResult} indicating success or failure with a message</span>
+<span class="source-line-no">142</span><span id="line-142">     */</span>
+<span class="source-line-no">143</span><span id="line-143">    @Override</span>
+<span class="source-line-no">144</span><span id="line-144">    public ActionResult callByActionName(String actionName, String arg) {</span>
+<span class="source-line-no">145</span><span id="line-145">        logger.fine(String.format("actionName = %s, args = %s", actionName, arg));</span>
+<span class="source-line-no">146</span><span id="line-146"></span>
+<span class="source-line-no">147</span><span id="line-147">        try {</span>
+<span class="source-line-no">148</span><span id="line-148">            // Workflow execution actions (from Interpreter)</span>
+<span class="source-line-no">149</span><span id="line-149">            ActionResult workflowResult = handleWorkflowAction(actionName, arg);</span>
+<span class="source-line-no">150</span><span id="line-150">            if (workflowResult != null) {</span>
+<span class="source-line-no">151</span><span id="line-151">                return workflowResult;</span>
+<span class="source-line-no">152</span><span id="line-152">            }</span>
+<span class="source-line-no">153</span><span id="line-153"></span>
+<span class="source-line-no">154</span><span id="line-154">            // NodeGroup-specific actions</span>
+<span class="source-line-no">155</span><span id="line-155">            ActionResult nodeGroupResult = handleNodeGroupAction(actionName, arg);</span>
+<span class="source-line-no">156</span><span id="line-156">            if (nodeGroupResult != null) {</span>
+<span class="source-line-no">157</span><span id="line-157">                return nodeGroupResult;</span>
+<span class="source-line-no">158</span><span id="line-158">            }</span>
+<span class="source-line-no">159</span><span id="line-159"></span>
+<span class="source-line-no">160</span><span id="line-160">            // Unknown action</span>
+<span class="source-line-no">161</span><span id="line-161">            logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",</span>
+<span class="source-line-no">162</span><span id="line-162">                    this.getName(), actionName, arg));</span>
+<span class="source-line-no">163</span><span id="line-163">            return new ActionResult(false, "Unknown action: " + actionName);</span>
+<span class="source-line-no">164</span><span id="line-164"></span>
+<span class="source-line-no">165</span><span id="line-165">        } catch (InterruptedException e) {</span>
+<span class="source-line-no">166</span><span id="line-166">            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);</span>
+<span class="source-line-no">167</span><span id="line-167">            return new ActionResult(false, "Interrupted: " + e.getMessage());</span>
+<span class="source-line-no">168</span><span id="line-168">        } catch (ExecutionException e) {</span>
+<span class="source-line-no">169</span><span id="line-169">            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);</span>
+<span class="source-line-no">170</span><span id="line-170">            return new ActionResult(false, "Execution error: " + e.getMessage());</span>
+<span class="source-line-no">171</span><span id="line-171">        } catch (Exception e) {</span>
+<span class="source-line-no">172</span><span id="line-172">            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);</span>
+<span class="source-line-no">173</span><span id="line-173">            return new ActionResult(false, "Error: " + e.getMessage());</span>
+<span class="source-line-no">174</span><span id="line-174">        }</span>
+<span class="source-line-no">175</span><span id="line-175">    }</span>
+<span class="source-line-no">176</span><span id="line-176"></span>
+<span class="source-line-no">177</span><span id="line-177">    /**</span>
+<span class="source-line-no">178</span><span id="line-178">     * Handles workflow-related actions (from Interpreter).</span>
+<span class="source-line-no">179</span><span id="line-179">     *</span>
+<span class="source-line-no">180</span><span id="line-180">     * @param actionName the action name</span>
+<span class="source-line-no">181</span><span id="line-181">     * @param arg the argument string</span>
+<span class="source-line-no">182</span><span id="line-182">     * @return ActionResult if handled, null if not a workflow action</span>
+<span class="source-line-no">183</span><span id="line-183">     */</span>
+<span class="source-line-no">184</span><span id="line-184">    private ActionResult handleWorkflowAction(String actionName, String arg)</span>
+<span class="source-line-no">185</span><span id="line-185">            throws InterruptedException, ExecutionException {</span>
+<span class="source-line-no">186</span><span id="line-186"></span>
+<span class="source-line-no">187</span><span id="line-187">        switch (actionName) {</span>
+<span class="source-line-no">188</span><span id="line-188">            case "execCode":</span>
+<span class="source-line-no">189</span><span id="line-189">                return this.ask(n -&gt; n.execCode()).get();</span>
+<span class="source-line-no">190</span><span id="line-190"></span>
+<span class="source-line-no">191</span><span id="line-191">            case "runUntilEnd":</span>
+<span class="source-line-no">192</span><span id="line-192">                int maxIterations = parseMaxIterations(arg, 10000);</span>
+<span class="source-line-no">193</span><span id="line-193">                return this.ask(n -&gt; n.runUntilEnd(maxIterations)).get();</span>
+<span class="source-line-no">194</span><span id="line-194"></span>
+<span class="source-line-no">195</span><span id="line-195">            case "runWorkflow":</span>
+<span class="source-line-no">196</span><span id="line-196">                JSONArray runArgs = new JSONArray(arg);</span>
+<span class="source-line-no">197</span><span id="line-197">                String workflowFile = runArgs.getString(0);</span>
+<span class="source-line-no">198</span><span id="line-198">                int runMaxIterations = runArgs.length() &gt; 1 ? runArgs.getInt(1) : 10000;</span>
+<span class="source-line-no">199</span><span id="line-199">                logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, runMaxIterations));</span>
+<span class="source-line-no">200</span><span id="line-200">                ActionResult result = this.object.runWorkflow(workflowFile, runMaxIterations);</span>
+<span class="source-line-no">201</span><span id="line-201">                logger.info(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));</span>
+<span class="source-line-no">202</span><span id="line-202">                return result;</span>
+<span class="source-line-no">203</span><span id="line-203"></span>
+<span class="source-line-no">204</span><span id="line-204">            case "readYaml":</span>
+<span class="source-line-no">205</span><span id="line-205">                return handleReadYaml(arg);</span>
+<span class="source-line-no">206</span><span id="line-206"></span>
+<span class="source-line-no">207</span><span id="line-207">            default:</span>
+<span class="source-line-no">208</span><span id="line-208">                return null; // Not a workflow action</span>
+<span class="source-line-no">209</span><span id="line-209">        }</span>
+<span class="source-line-no">210</span><span id="line-210">    }</span>
+<span class="source-line-no">211</span><span id="line-211"></span>
+<span class="source-line-no">212</span><span id="line-212">    /**</span>
+<span class="source-line-no">213</span><span id="line-213">     * Handles NodeGroup-specific actions.</span>
+<span class="source-line-no">214</span><span id="line-214">     *</span>
+<span class="source-line-no">215</span><span id="line-215">     * @param actionName the action name</span>
+<span class="source-line-no">216</span><span id="line-216">     * @param arg the argument string</span>
+<span class="source-line-no">217</span><span id="line-217">     * @return ActionResult if handled, null if not a NodeGroup action</span>
+<span class="source-line-no">218</span><span id="line-218">     */</span>
+<span class="source-line-no">219</span><span id="line-219">    private ActionResult handleNodeGroupAction(String actionName, String arg)</span>
+<span class="source-line-no">220</span><span id="line-220">            throws InterruptedException, ExecutionException {</span>
+<span class="source-line-no">221</span><span id="line-221"></span>
+<span class="source-line-no">222</span><span id="line-222">        switch (actionName) {</span>
+<span class="source-line-no">223</span><span id="line-223">            case "hasInventory":</span>
+<span class="source-line-no">224</span><span id="line-224">                boolean hasInv = this.object.getInventory() != null;</span>
+<span class="source-line-no">225</span><span id="line-225">                return new ActionResult(hasInv, hasInv ? "Inventory available" : "No inventory");</span>
+<span class="source-line-no">226</span><span id="line-226"></span>
+<span class="source-line-no">227</span><span id="line-227">            case "createNodeActors":</span>
+<span class="source-line-no">228</span><span id="line-228">                String groupName = extractSingleArgument(arg);</span>
+<span class="source-line-no">229</span><span id="line-229">                createNodeActors(groupName);</span>
+<span class="source-line-no">230</span><span id="line-230">                return new ActionResult(true, String.format("Created node actors for group '%s'", groupName));</span>
+<span class="source-line-no">231</span><span id="line-231"></span>
+<span class="source-line-no">232</span><span id="line-232">            case "apply":</span>
+<span class="source-line-no">233</span><span id="line-233">                return apply(arg);</span>
+<span class="source-line-no">234</span><span id="line-234"></span>
+<span class="source-line-no">235</span><span id="line-235">            case "executeCommandOnAllNodes":</span>
+<span class="source-line-no">236</span><span id="line-236">                String command = extractSingleArgument(arg);</span>
+<span class="source-line-no">237</span><span id="line-237">                List&lt;String&gt; results = executeCommandOnAllNodes(command);</span>
+<span class="source-line-no">238</span><span id="line-238">                return new ActionResult(true,</span>
+<span class="source-line-no">239</span><span id="line-239">                    String.format("Executed command on %d nodes: %s", results.size(), results));</span>
+<span class="source-line-no">240</span><span id="line-240"></span>
+<span class="source-line-no">241</span><span id="line-241">            case "hasAccumulator":</span>
+<span class="source-line-no">242</span><span id="line-242">                boolean hasAcc = accumulatorActor != null;</span>
+<span class="source-line-no">243</span><span id="line-243">                return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");</span>
+<span class="source-line-no">244</span><span id="line-244"></span>
+<span class="source-line-no">245</span><span id="line-245">            case "createAccumulator":</span>
+<span class="source-line-no">246</span><span id="line-246">                String type = extractSingleArgument(arg);</span>
+<span class="source-line-no">247</span><span id="line-247">                createAccumulator(type);</span>
+<span class="source-line-no">248</span><span id="line-248">                return new ActionResult(true, String.format("Created %s accumulator", type));</span>
+<span class="source-line-no">249</span><span id="line-249"></span>
+<span class="source-line-no">250</span><span id="line-250">            case "getAccumulatorSummary":</span>
+<span class="source-line-no">251</span><span id="line-251">                return getAccumulatorSummary();</span>
+<span class="source-line-no">252</span><span id="line-252"></span>
+<span class="source-line-no">253</span><span id="line-253">            case "printSessionSummary":</span>
+<span class="source-line-no">254</span><span id="line-254">                return printSessionSummary();</span>
+<span class="source-line-no">255</span><span id="line-255"></span>
+<span class="source-line-no">256</span><span id="line-256">            case "doNothing":</span>
+<span class="source-line-no">257</span><span id="line-257">                return new ActionResult(true, arg);</span>
+<span class="source-line-no">258</span><span id="line-258"></span>
+<span class="source-line-no">259</span><span id="line-259">            default:</span>
+<span class="source-line-no">260</span><span id="line-260">                return null; // Not a NodeGroup action</span>
+<span class="source-line-no">261</span><span id="line-261">        }</span>
+<span class="source-line-no">262</span><span id="line-262">    }</span>
+<span class="source-line-no">263</span><span id="line-263"></span>
+<span class="source-line-no">264</span><span id="line-264">    // --- Helper methods ---</span>
 <span class="source-line-no">265</span><span id="line-265"></span>
-<span class="source-line-no">266</span><span id="line-266">    // --- Helper methods ---</span>
-<span class="source-line-no">267</span><span id="line-267"></span>
-<span class="source-line-no">268</span><span id="line-268">    private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {</span>
-<span class="source-line-no">269</span><span id="line-269">        String filePath = extractSingleArgument(arg);</span>
-<span class="source-line-no">270</span><span id="line-270">        try {</span>
-<span class="source-line-no">271</span><span id="line-271">            String overlayPath = this.object.getOverlayDir();</span>
-<span class="source-line-no">272</span><span id="line-272">            if (overlayPath != null) {</span>
-<span class="source-line-no">273</span><span id="line-273">                java.nio.file.Path yamlPath = java.nio.file.Path.of(filePath);</span>
-<span class="source-line-no">274</span><span id="line-274">                java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);</span>
-<span class="source-line-no">275</span><span id="line-275">                this.tell(n -&gt; {</span>
-<span class="source-line-no">276</span><span id="line-276">                    try {</span>
-<span class="source-line-no">277</span><span id="line-277">                        n.readYaml(yamlPath, overlayDir);</span>
-<span class="source-line-no">278</span><span id="line-278">                    } catch (java.io.IOException e) {</span>
-<span class="source-line-no">279</span><span id="line-279">                        throw new RuntimeException(e);</span>
-<span class="source-line-no">280</span><span id="line-280">                    }</span>
-<span class="source-line-no">281</span><span id="line-281">                }).get();</span>
-<span class="source-line-no">282</span><span id="line-282">                return new ActionResult(true, "YAML loaded with overlay: " + overlayPath);</span>
-<span class="source-line-no">283</span><span id="line-283">            } else {</span>
-<span class="source-line-no">284</span><span id="line-284">                try (java.io.InputStream input = new java.io.FileInputStream(new java.io.File(filePath))) {</span>
-<span class="source-line-no">285</span><span id="line-285">                    this.tell(n -&gt; n.readYaml(input)).get();</span>
-<span class="source-line-no">286</span><span id="line-286">                    return new ActionResult(true, "YAML loaded successfully");</span>
-<span class="source-line-no">287</span><span id="line-287">                }</span>
-<span class="source-line-no">288</span><span id="line-288">            }</span>
-<span class="source-line-no">289</span><span id="line-289">        } catch (java.io.FileNotFoundException e) {</span>
-<span class="source-line-no">290</span><span id="line-290">            logger.log(Level.SEVERE, String.format("file not found: %s", filePath), e);</span>
-<span class="source-line-no">291</span><span id="line-291">            return new ActionResult(false, "File not found: " + filePath);</span>
-<span class="source-line-no">292</span><span id="line-292">        } catch (java.io.IOException e) {</span>
-<span class="source-line-no">293</span><span id="line-293">            logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e);</span>
-<span class="source-line-no">294</span><span id="line-294">            return new ActionResult(false, "IO error: " + filePath);</span>
-<span class="source-line-no">295</span><span id="line-295">        } catch (RuntimeException e) {</span>
-<span class="source-line-no">296</span><span id="line-296">            if (e.getCause() instanceof java.io.IOException) {</span>
-<span class="source-line-no">297</span><span id="line-297">                logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e.getCause());</span>
-<span class="source-line-no">298</span><span id="line-298">                return new ActionResult(false, "IO error: " + filePath);</span>
-<span class="source-line-no">299</span><span id="line-299">            }</span>
-<span class="source-line-no">300</span><span id="line-300">            throw e;</span>
-<span class="source-line-no">301</span><span id="line-301">        }</span>
-<span class="source-line-no">302</span><span id="line-302">    }</span>
-<span class="source-line-no">303</span><span id="line-303"></span>
-<span class="source-line-no">304</span><span id="line-304">    private int parseMaxIterations(String arg, int defaultValue) {</span>
-<span class="source-line-no">305</span><span id="line-305">        if (arg != null &amp;&amp; !arg.isEmpty() &amp;&amp; !arg.equals("[]")) {</span>
-<span class="source-line-no">306</span><span id="line-306">            try {</span>
-<span class="source-line-no">307</span><span id="line-307">                JSONArray args = new JSONArray(arg);</span>
-<span class="source-line-no">308</span><span id="line-308">                if (args.length() &gt; 0) {</span>
-<span class="source-line-no">309</span><span id="line-309">                    return args.getInt(0);</span>
-<span class="source-line-no">310</span><span id="line-310">                }</span>
-<span class="source-line-no">311</span><span id="line-311">            } catch (Exception e) {</span>
-<span class="source-line-no">312</span><span id="line-312">                // Use default if parsing fails</span>
-<span class="source-line-no">313</span><span id="line-313">            }</span>
-<span class="source-line-no">314</span><span id="line-314">        }</span>
-<span class="source-line-no">315</span><span id="line-315">        return defaultValue;</span>
-<span class="source-line-no">316</span><span id="line-316">    }</span>
-<span class="source-line-no">317</span><span id="line-317"></span>
-<span class="source-line-no">318</span><span id="line-318">    /**</span>
-<span class="source-line-no">319</span><span id="line-319">     * Creates child node actors for all nodes in the specified group.</span>
-<span class="source-line-no">320</span><span id="line-320">     *</span>
-<span class="source-line-no">321</span><span id="line-321">     * &lt;p&gt;This method creates Node POJOs using the NodeGroup's inventory,</span>
-<span class="source-line-no">322</span><span id="line-322">     * wraps each in a NodeInterpreter (for workflow capabilities),</span>
-<span class="source-line-no">323</span><span id="line-323">     * then wraps in a NodeIIAR, and registers them as children of this actor</span>
-<span class="source-line-no">324</span><span id="line-324">     * using the parent-child relationship mechanism.&lt;/p&gt;</span>
-<span class="source-line-no">325</span><span id="line-325">     *</span>
-<span class="source-line-no">326</span><span id="line-326">     * &lt;p&gt;Special handling for "local" group: creates a localhost node without</span>
-<span class="source-line-no">327</span><span id="line-327">     * requiring an inventory file. This is useful for development and testing.&lt;/p&gt;</span>
-<span class="source-line-no">328</span><span id="line-328">     *</span>
-<span class="source-line-no">329</span><span id="line-329">     * @param groupName the name of the group from the inventory file, or "local" for localhost</span>
-<span class="source-line-no">330</span><span id="line-330">     */</span>
-<span class="source-line-no">331</span><span id="line-331">    private void createNodeActors(String groupName) {</span>
-<span class="source-line-no">332</span><span id="line-332">        // Direct execution (no tell().get() to avoid deadlock when called from workflow)</span>
-<span class="source-line-no">333</span><span id="line-333">        IIActorSystem sys = (IIActorSystem) this.system();</span>
-<span class="source-line-no">334</span><span id="line-334">        NodeGroupInterpreter nodeGroupInterpreter = this.object;</span>
-<span class="source-line-no">335</span><span id="line-335"></span>
-<span class="source-line-no">336</span><span id="line-336">        // Create Node POJOs for the group</span>
-<span class="source-line-no">337</span><span id="line-337">        // Special handling for "local" group: create localhost node without inventory</span>
-<span class="source-line-no">338</span><span id="line-338">        List&lt;Node&gt; nodes;</span>
-<span class="source-line-no">339</span><span id="line-339">        if ("local".equals(groupName)) {</span>
-<span class="source-line-no">340</span><span id="line-340">            nodes = nodeGroupInterpreter.createLocalNode();</span>
-<span class="source-line-no">341</span><span id="line-341">        } else {</span>
-<span class="source-line-no">342</span><span id="line-342">            nodes = nodeGroupInterpreter.createNodesForGroup(groupName);</span>
-<span class="source-line-no">343</span><span id="line-343">        }</span>
-<span class="source-line-no">344</span><span id="line-344"></span>
-<span class="source-line-no">345</span><span id="line-345">        // Create child actors for each node</span>
-<span class="source-line-no">346</span><span id="line-346">        for (Node node : nodes) {</span>
-<span class="source-line-no">347</span><span id="line-347">            String nodeName = "node-" + node.getHostname();</span>
-<span class="source-line-no">348</span><span id="line-348"></span>
-<span class="source-line-no">349</span><span id="line-349">            // Wrap Node in NodeInterpreter to add workflow capabilities</span>
-<span class="source-line-no">350</span><span id="line-350">            NodeInterpreter nodeInterpreter = new NodeInterpreter(node, sys);</span>
-<span class="source-line-no">351</span><span id="line-351"></span>
-<span class="source-line-no">352</span><span id="line-352">            // Propagate workflowBaseDir to child interpreter</span>
-<span class="source-line-no">353</span><span id="line-353">            if (nodeGroupInterpreter.getWorkflowBaseDir() != null) {</span>
-<span class="source-line-no">354</span><span id="line-354">                nodeInterpreter.setWorkflowBaseDir(nodeGroupInterpreter.getWorkflowBaseDir());</span>
-<span class="source-line-no">355</span><span id="line-355">            }</span>
-<span class="source-line-no">356</span><span id="line-356"></span>
-<span class="source-line-no">357</span><span id="line-357">            // Propagate overlayDir to child interpreter</span>
-<span class="source-line-no">358</span><span id="line-358">            if (nodeGroupInterpreter.getOverlayDir() != null) {</span>
-<span class="source-line-no">359</span><span id="line-359">                nodeInterpreter.setOverlayDir(nodeGroupInterpreter.getOverlayDir());</span>
-<span class="source-line-no">360</span><span id="line-360">            }</span>
-<span class="source-line-no">361</span><span id="line-361"></span>
-<span class="source-line-no">362</span><span id="line-362">            // Create child actor using ActorRef.createChild()</span>
-<span class="source-line-no">363</span><span id="line-363">            // This establishes parent-child relationship</span>
-<span class="source-line-no">364</span><span id="line-364">            this.createChild(nodeName, nodeInterpreter);</span>
-<span class="source-line-no">365</span><span id="line-365"></span>
-<span class="source-line-no">366</span><span id="line-366">            // Also wrap in NodeIIAR and add to system for workflow execution</span>
-<span class="source-line-no">367</span><span id="line-367">            NodeIIAR nodeActor = new NodeIIAR(nodeName, nodeInterpreter, sys);</span>
-<span class="source-line-no">368</span><span id="line-368">            sys.addIIActor(nodeActor);</span>
-<span class="source-line-no">369</span><span id="line-369"></span>
-<span class="source-line-no">370</span><span id="line-370">            logger.fine(String.format("Created child node actor: %s", nodeName));</span>
-<span class="source-line-no">371</span><span id="line-371">        }</span>
-<span class="source-line-no">372</span><span id="line-372">        logger.info(String.format("Created %d node actors for group '%s'", nodes.size(), groupName));</span>
-<span class="source-line-no">373</span><span id="line-373">    }</span>
-<span class="source-line-no">374</span><span id="line-374"></span>
-<span class="source-line-no">375</span><span id="line-375">    /**</span>
-<span class="source-line-no">376</span><span id="line-376">     * Applies an action to child actors matching a wildcard pattern.</span>
-<span class="source-line-no">377</span><span id="line-377">     *</span>
-<span class="source-line-no">378</span><span id="line-378">     * &lt;p&gt;This method parses an action definition JSON and executes the specified</span>
-<span class="source-line-no">379</span><span id="line-379">     * method on all child actors whose names match the pattern.&lt;/p&gt;</span>
-<span class="source-line-no">380</span><span id="line-380">     *</span>
-<span class="source-line-no">381</span><span id="line-381">     * &lt;p&gt;Action definition format:&lt;/p&gt;</span>
-<span class="source-line-no">382</span><span id="line-382">     * &lt;pre&gt;{@code</span>
-<span class="source-line-no">383</span><span id="line-383">     * {</span>
-<span class="source-line-no">384</span><span id="line-384">     *   "actor": "node-*",           // Wildcard pattern for actor names</span>
-<span class="source-line-no">385</span><span id="line-385">     *   "method": "executeCommand",  // Method to call</span>
-<span class="source-line-no">386</span><span id="line-386">     *   "arguments": ["ls -la"]      // Arguments (optional)</span>
-<span class="source-line-no">387</span><span id="line-387">     * }</span>
-<span class="source-line-no">388</span><span id="line-388">     * }&lt;/pre&gt;</span>
-<span class="source-line-no">389</span><span id="line-389">     *</span>
-<span class="source-line-no">390</span><span id="line-390">     * &lt;p&gt;Supported wildcard patterns:&lt;/p&gt;</span>
-<span class="source-line-no">391</span><span id="line-391">     * &lt;ul&gt;</span>
-<span class="source-line-no">392</span><span id="line-392">     * &lt;li&gt;{@code *} - Matches all child actors&lt;/li&gt;</span>
-<span class="source-line-no">393</span><span id="line-393">     * &lt;li&gt;{@code node-*} - Matches actors starting with "node-"&lt;/li&gt;</span>
-<span class="source-line-no">394</span><span id="line-394">     * &lt;li&gt;{@code *-web} - Matches actors ending with "-web"&lt;/li&gt;</span>
-<span class="source-line-no">395</span><span id="line-395">     * &lt;/ul&gt;</span>
-<span class="source-line-no">396</span><span id="line-396">     *</span>
-<span class="source-line-no">397</span><span id="line-397">     * @param actionDef JSON string defining the action to apply</span>
-<span class="source-line-no">398</span><span id="line-398">     * @return ActionResult indicating success or failure</span>
-<span class="source-line-no">399</span><span id="line-399">     */</span>
-<span class="source-line-no">400</span><span id="line-400">    private ActionResult apply(String actionDef) {</span>
-<span class="source-line-no">401</span><span id="line-401">        try {</span>
-<span class="source-line-no">402</span><span id="line-402">            JSONObject action = new JSONObject(actionDef);</span>
-<span class="source-line-no">403</span><span id="line-403">            String actorPattern = action.getString("actor");</span>
-<span class="source-line-no">404</span><span id="line-404">            String method = action.getString("method");</span>
-<span class="source-line-no">405</span><span id="line-405">            JSONArray argsArray = action.optJSONArray("arguments");</span>
-<span class="source-line-no">406</span><span id="line-406">            String args = argsArray != null ? argsArray.toString() : "[]";</span>
-<span class="source-line-no">407</span><span id="line-407"></span>
-<span class="source-line-no">408</span><span id="line-408">            // Find matching child actors</span>
-<span class="source-line-no">409</span><span id="line-409">            List&lt;IIActorRef&lt;?&gt;&gt; matchedActors = findMatchingChildActors(actorPattern);</span>
-<span class="source-line-no">410</span><span id="line-410"></span>
-<span class="source-line-no">411</span><span id="line-411">            if (matchedActors.isEmpty()) {</span>
-<span class="source-line-no">412</span><span id="line-412">                return new ActionResult(false, "No actors matched pattern: " + actorPattern);</span>
-<span class="source-line-no">413</span><span id="line-413">            }</span>
-<span class="source-line-no">414</span><span id="line-414"></span>
-<span class="source-line-no">415</span><span id="line-415">            logger.info(String.format("Applying method '%s' to %d actors matching '%s'",</span>
-<span class="source-line-no">416</span><span id="line-416">                method, matchedActors.size(), actorPattern));</span>
-<span class="source-line-no">417</span><span id="line-417"></span>
-<span class="source-line-no">418</span><span id="line-418">            // Apply action to each matching actor (continue on failure, report all errors)</span>
-<span class="source-line-no">419</span><span id="line-419">            int successCount = 0;</span>
-<span class="source-line-no">420</span><span id="line-420">            List&lt;String&gt; failures = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">421</span><span id="line-421">            for (IIActorRef&lt;?&gt; actor : matchedActors) {</span>
-<span class="source-line-no">422</span><span id="line-422">                ActionResult result = actor.callByActionName(method, args);</span>
-<span class="source-line-no">423</span><span id="line-423">                if (!result.isSuccess()) {</span>
-<span class="source-line-no">424</span><span id="line-424">                    failures.add(String.format("%s: %s", actor.getName(), result.getResult()));</span>
-<span class="source-line-no">425</span><span id="line-425">                    logger.warning(String.format("Failed on %s: %s", actor.getName(), result.getResult()));</span>
-<span class="source-line-no">426</span><span id="line-426">                } else {</span>
-<span class="source-line-no">427</span><span id="line-427">                    successCount++;</span>
-<span class="source-line-no">428</span><span id="line-428">                    logger.fine(String.format("Applied to %s: %s", actor.getName(), result.getResult()));</span>
-<span class="source-line-no">429</span><span id="line-429">                }</span>
-<span class="source-line-no">430</span><span id="line-430">            }</span>
-<span class="source-line-no">431</span><span id="line-431"></span>
-<span class="source-line-no">432</span><span id="line-432">            if (failures.isEmpty()) {</span>
-<span class="source-line-no">433</span><span id="line-433">                return new ActionResult(true,</span>
-<span class="source-line-no">434</span><span id="line-434">                    String.format("Applied to %d actors", successCount));</span>
-<span class="source-line-no">435</span><span id="line-435">            } else {</span>
-<span class="source-line-no">436</span><span id="line-436">                return new ActionResult(false,</span>
-<span class="source-line-no">437</span><span id="line-437">                    String.format("Applied to %d/%d actors. Failures: %s",</span>
-<span class="source-line-no">438</span><span id="line-438">                        successCount, matchedActors.size(), String.join("; ", failures)));</span>
-<span class="source-line-no">439</span><span id="line-439">            }</span>
-<span class="source-line-no">440</span><span id="line-440"></span>
-<span class="source-line-no">441</span><span id="line-441">        } catch (Exception e) {</span>
-<span class="source-line-no">442</span><span id="line-442">            logger.log(Level.SEVERE, "Error in apply: " + actionDef, e);</span>
-<span class="source-line-no">443</span><span id="line-443">            return new ActionResult(false, "Error: " + e.getMessage());</span>
-<span class="source-line-no">444</span><span id="line-444">        }</span>
-<span class="source-line-no">445</span><span id="line-445">    }</span>
-<span class="source-line-no">446</span><span id="line-446"></span>
-<span class="source-line-no">447</span><span id="line-447">    /**</span>
-<span class="source-line-no">448</span><span id="line-448">     * Finds child actors matching a wildcard pattern.</span>
-<span class="source-line-no">449</span><span id="line-449">     *</span>
-<span class="source-line-no">450</span><span id="line-450">     * @param pattern the wildcard pattern (e.g., "node-*", "*-web", "*")</span>
-<span class="source-line-no">451</span><span id="line-451">     * @return list of matching child actors</span>
-<span class="source-line-no">452</span><span id="line-452">     */</span>
-<span class="source-line-no">453</span><span id="line-453">    private List&lt;IIActorRef&lt;?&gt;&gt; findMatchingChildActors(String pattern) {</span>
-<span class="source-line-no">454</span><span id="line-454">        List&lt;IIActorRef&lt;?&gt;&gt; matched = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">455</span><span id="line-455">        IIActorSystem system = (IIActorSystem) this.system();</span>
-<span class="source-line-no">456</span><span id="line-456"></span>
-<span class="source-line-no">457</span><span id="line-457">        if (system == null) {</span>
-<span class="source-line-no">458</span><span id="line-458">            return matched;</span>
-<span class="source-line-no">459</span><span id="line-459">        }</span>
+<span class="source-line-no">266</span><span id="line-266">    private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {</span>
+<span class="source-line-no">267</span><span id="line-267">        String filePath = extractSingleArgument(arg);</span>
+<span class="source-line-no">268</span><span id="line-268">        try {</span>
+<span class="source-line-no">269</span><span id="line-269">            String overlayPath = this.object.getOverlayDir();</span>
+<span class="source-line-no">270</span><span id="line-270">            if (overlayPath != null) {</span>
+<span class="source-line-no">271</span><span id="line-271">                java.nio.file.Path yamlPath = java.nio.file.Path.of(filePath);</span>
+<span class="source-line-no">272</span><span id="line-272">                java.nio.file.Path overlayDir = java.nio.file.Path.of(overlayPath);</span>
+<span class="source-line-no">273</span><span id="line-273">                this.tell(n -&gt; {</span>
+<span class="source-line-no">274</span><span id="line-274">                    try {</span>
+<span class="source-line-no">275</span><span id="line-275">                        n.readYaml(yamlPath, overlayDir);</span>
+<span class="source-line-no">276</span><span id="line-276">                    } catch (java.io.IOException e) {</span>
+<span class="source-line-no">277</span><span id="line-277">                        throw new RuntimeException(e);</span>
+<span class="source-line-no">278</span><span id="line-278">                    }</span>
+<span class="source-line-no">279</span><span id="line-279">                }).get();</span>
+<span class="source-line-no">280</span><span id="line-280">                return new ActionResult(true, "YAML loaded with overlay: " + overlayPath);</span>
+<span class="source-line-no">281</span><span id="line-281">            } else {</span>
+<span class="source-line-no">282</span><span id="line-282">                try (java.io.InputStream input = new java.io.FileInputStream(new java.io.File(filePath))) {</span>
+<span class="source-line-no">283</span><span id="line-283">                    this.tell(n -&gt; n.readYaml(input)).get();</span>
+<span class="source-line-no">284</span><span id="line-284">                    return new ActionResult(true, "YAML loaded successfully");</span>
+<span class="source-line-no">285</span><span id="line-285">                }</span>
+<span class="source-line-no">286</span><span id="line-286">            }</span>
+<span class="source-line-no">287</span><span id="line-287">        } catch (java.io.FileNotFoundException e) {</span>
+<span class="source-line-no">288</span><span id="line-288">            logger.log(Level.SEVERE, String.format("file not found: %s", filePath), e);</span>
+<span class="source-line-no">289</span><span id="line-289">            return new ActionResult(false, "File not found: " + filePath);</span>
+<span class="source-line-no">290</span><span id="line-290">        } catch (java.io.IOException e) {</span>
+<span class="source-line-no">291</span><span id="line-291">            logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e);</span>
+<span class="source-line-no">292</span><span id="line-292">            return new ActionResult(false, "IO error: " + filePath);</span>
+<span class="source-line-no">293</span><span id="line-293">        } catch (RuntimeException e) {</span>
+<span class="source-line-no">294</span><span id="line-294">            if (e.getCause() instanceof java.io.IOException) {</span>
+<span class="source-line-no">295</span><span id="line-295">                logger.log(Level.SEVERE, String.format("IOException: %s", filePath), e.getCause());</span>
+<span class="source-line-no">296</span><span id="line-296">                return new ActionResult(false, "IO error: " + filePath);</span>
+<span class="source-line-no">297</span><span id="line-297">            }</span>
+<span class="source-line-no">298</span><span id="line-298">            throw e;</span>
+<span class="source-line-no">299</span><span id="line-299">        }</span>
+<span class="source-line-no">300</span><span id="line-300">    }</span>
+<span class="source-line-no">301</span><span id="line-301"></span>
+<span class="source-line-no">302</span><span id="line-302">    private int parseMaxIterations(String arg, int defaultValue) {</span>
+<span class="source-line-no">303</span><span id="line-303">        if (arg != null &amp;&amp; !arg.isEmpty() &amp;&amp; !arg.equals("[]")) {</span>
+<span class="source-line-no">304</span><span id="line-304">            try {</span>
+<span class="source-line-no">305</span><span id="line-305">                JSONArray args = new JSONArray(arg);</span>
+<span class="source-line-no">306</span><span id="line-306">                if (args.length() &gt; 0) {</span>
+<span class="source-line-no">307</span><span id="line-307">                    return args.getInt(0);</span>
+<span class="source-line-no">308</span><span id="line-308">                }</span>
+<span class="source-line-no">309</span><span id="line-309">            } catch (Exception e) {</span>
+<span class="source-line-no">310</span><span id="line-310">                // Use default if parsing fails</span>
+<span class="source-line-no">311</span><span id="line-311">            }</span>
+<span class="source-line-no">312</span><span id="line-312">        }</span>
+<span class="source-line-no">313</span><span id="line-313">        return defaultValue;</span>
+<span class="source-line-no">314</span><span id="line-314">    }</span>
+<span class="source-line-no">315</span><span id="line-315"></span>
+<span class="source-line-no">316</span><span id="line-316">    /**</span>
+<span class="source-line-no">317</span><span id="line-317">     * Creates child node actors for all nodes in the specified group.</span>
+<span class="source-line-no">318</span><span id="line-318">     *</span>
+<span class="source-line-no">319</span><span id="line-319">     * &lt;p&gt;This method creates Node POJOs using the NodeGroup's inventory,</span>
+<span class="source-line-no">320</span><span id="line-320">     * wraps each in a NodeInterpreter (for workflow capabilities),</span>
+<span class="source-line-no">321</span><span id="line-321">     * then wraps in a NodeIIAR, and registers them as children of this actor</span>
+<span class="source-line-no">322</span><span id="line-322">     * using the parent-child relationship mechanism.&lt;/p&gt;</span>
+<span class="source-line-no">323</span><span id="line-323">     *</span>
+<span class="source-line-no">324</span><span id="line-324">     * &lt;p&gt;Special handling for "local" group: creates a localhost node without</span>
+<span class="source-line-no">325</span><span id="line-325">     * requiring an inventory file. This is useful for development and testing.&lt;/p&gt;</span>
+<span class="source-line-no">326</span><span id="line-326">     *</span>
+<span class="source-line-no">327</span><span id="line-327">     * @param groupName the name of the group from the inventory file, or "local" for localhost</span>
+<span class="source-line-no">328</span><span id="line-328">     */</span>
+<span class="source-line-no">329</span><span id="line-329">    private void createNodeActors(String groupName) {</span>
+<span class="source-line-no">330</span><span id="line-330">        // Direct execution (no tell().get() to avoid deadlock when called from workflow)</span>
+<span class="source-line-no">331</span><span id="line-331">        IIActorSystem sys = (IIActorSystem) this.system();</span>
+<span class="source-line-no">332</span><span id="line-332">        NodeGroupInterpreter nodeGroupInterpreter = this.object;</span>
+<span class="source-line-no">333</span><span id="line-333"></span>
+<span class="source-line-no">334</span><span id="line-334">        // Create Node POJOs for the group</span>
+<span class="source-line-no">335</span><span id="line-335">        // Special handling for "local" group: create localhost node without inventory</span>
+<span class="source-line-no">336</span><span id="line-336">        List&lt;Node&gt; nodes;</span>
+<span class="source-line-no">337</span><span id="line-337">        if ("local".equals(groupName)) {</span>
+<span class="source-line-no">338</span><span id="line-338">            nodes = nodeGroupInterpreter.createLocalNode();</span>
+<span class="source-line-no">339</span><span id="line-339">        } else {</span>
+<span class="source-line-no">340</span><span id="line-340">            nodes = nodeGroupInterpreter.createNodesForGroup(groupName);</span>
+<span class="source-line-no">341</span><span id="line-341">        }</span>
+<span class="source-line-no">342</span><span id="line-342"></span>
+<span class="source-line-no">343</span><span id="line-343">        // Create child actors for each node</span>
+<span class="source-line-no">344</span><span id="line-344">        for (Node node : nodes) {</span>
+<span class="source-line-no">345</span><span id="line-345">            String nodeName = "node-" + node.getHostname();</span>
+<span class="source-line-no">346</span><span id="line-346"></span>
+<span class="source-line-no">347</span><span id="line-347">            // Wrap Node in NodeInterpreter to add workflow capabilities</span>
+<span class="source-line-no">348</span><span id="line-348">            NodeInterpreter nodeInterpreter = new NodeInterpreter(node, sys);</span>
+<span class="source-line-no">349</span><span id="line-349"></span>
+<span class="source-line-no">350</span><span id="line-350">            // Propagate workflowBaseDir to child interpreter</span>
+<span class="source-line-no">351</span><span id="line-351">            if (nodeGroupInterpreter.getWorkflowBaseDir() != null) {</span>
+<span class="source-line-no">352</span><span id="line-352">                nodeInterpreter.setWorkflowBaseDir(nodeGroupInterpreter.getWorkflowBaseDir());</span>
+<span class="source-line-no">353</span><span id="line-353">            }</span>
+<span class="source-line-no">354</span><span id="line-354"></span>
+<span class="source-line-no">355</span><span id="line-355">            // Propagate overlayDir to child interpreter</span>
+<span class="source-line-no">356</span><span id="line-356">            if (nodeGroupInterpreter.getOverlayDir() != null) {</span>
+<span class="source-line-no">357</span><span id="line-357">                nodeInterpreter.setOverlayDir(nodeGroupInterpreter.getOverlayDir());</span>
+<span class="source-line-no">358</span><span id="line-358">            }</span>
+<span class="source-line-no">359</span><span id="line-359"></span>
+<span class="source-line-no">360</span><span id="line-360">            // Create child actor using ActorRef.createChild()</span>
+<span class="source-line-no">361</span><span id="line-361">            // This establishes parent-child relationship</span>
+<span class="source-line-no">362</span><span id="line-362">            this.createChild(nodeName, nodeInterpreter);</span>
+<span class="source-line-no">363</span><span id="line-363"></span>
+<span class="source-line-no">364</span><span id="line-364">            // Also wrap in NodeIIAR and add to system for workflow execution</span>
+<span class="source-line-no">365</span><span id="line-365">            NodeIIAR nodeActor = new NodeIIAR(nodeName, nodeInterpreter, sys);</span>
+<span class="source-line-no">366</span><span id="line-366">            sys.addIIActor(nodeActor);</span>
+<span class="source-line-no">367</span><span id="line-367"></span>
+<span class="source-line-no">368</span><span id="line-368">            logger.fine(String.format("Created child node actor: %s", nodeName));</span>
+<span class="source-line-no">369</span><span id="line-369">        }</span>
+<span class="source-line-no">370</span><span id="line-370">        logger.info(String.format("Created %d node actors for group '%s'", nodes.size(), groupName));</span>
+<span class="source-line-no">371</span><span id="line-371">    }</span>
+<span class="source-line-no">372</span><span id="line-372"></span>
+<span class="source-line-no">373</span><span id="line-373">    /**</span>
+<span class="source-line-no">374</span><span id="line-374">     * Applies an action to child actors matching a wildcard pattern.</span>
+<span class="source-line-no">375</span><span id="line-375">     *</span>
+<span class="source-line-no">376</span><span id="line-376">     * &lt;p&gt;This method parses an action definition JSON and executes the specified</span>
+<span class="source-line-no">377</span><span id="line-377">     * method on all child actors whose names match the pattern.&lt;/p&gt;</span>
+<span class="source-line-no">378</span><span id="line-378">     *</span>
+<span class="source-line-no">379</span><span id="line-379">     * &lt;p&gt;Action definition format:&lt;/p&gt;</span>
+<span class="source-line-no">380</span><span id="line-380">     * &lt;pre&gt;{@code</span>
+<span class="source-line-no">381</span><span id="line-381">     * {</span>
+<span class="source-line-no">382</span><span id="line-382">     *   "actor": "node-*",           // Wildcard pattern for actor names</span>
+<span class="source-line-no">383</span><span id="line-383">     *   "method": "executeCommand",  // Method to call</span>
+<span class="source-line-no">384</span><span id="line-384">     *   "arguments": ["ls -la"]      // Arguments (optional)</span>
+<span class="source-line-no">385</span><span id="line-385">     * }</span>
+<span class="source-line-no">386</span><span id="line-386">     * }&lt;/pre&gt;</span>
+<span class="source-line-no">387</span><span id="line-387">     *</span>
+<span class="source-line-no">388</span><span id="line-388">     * &lt;p&gt;Supported wildcard patterns:&lt;/p&gt;</span>
+<span class="source-line-no">389</span><span id="line-389">     * &lt;ul&gt;</span>
+<span class="source-line-no">390</span><span id="line-390">     * &lt;li&gt;{@code *} - Matches all child actors&lt;/li&gt;</span>
+<span class="source-line-no">391</span><span id="line-391">     * &lt;li&gt;{@code node-*} - Matches actors starting with "node-"&lt;/li&gt;</span>
+<span class="source-line-no">392</span><span id="line-392">     * &lt;li&gt;{@code *-web} - Matches actors ending with "-web"&lt;/li&gt;</span>
+<span class="source-line-no">393</span><span id="line-393">     * &lt;/ul&gt;</span>
+<span class="source-line-no">394</span><span id="line-394">     *</span>
+<span class="source-line-no">395</span><span id="line-395">     * @param actionDef JSON string defining the action to apply</span>
+<span class="source-line-no">396</span><span id="line-396">     * @return ActionResult indicating success or failure</span>
+<span class="source-line-no">397</span><span id="line-397">     */</span>
+<span class="source-line-no">398</span><span id="line-398">    private ActionResult apply(String actionDef) {</span>
+<span class="source-line-no">399</span><span id="line-399">        try {</span>
+<span class="source-line-no">400</span><span id="line-400">            JSONObject action = new JSONObject(actionDef);</span>
+<span class="source-line-no">401</span><span id="line-401">            String actorPattern = action.getString("actor");</span>
+<span class="source-line-no">402</span><span id="line-402">            String method = action.getString("method");</span>
+<span class="source-line-no">403</span><span id="line-403">            JSONArray argsArray = action.optJSONArray("arguments");</span>
+<span class="source-line-no">404</span><span id="line-404">            String args = argsArray != null ? argsArray.toString() : "[]";</span>
+<span class="source-line-no">405</span><span id="line-405"></span>
+<span class="source-line-no">406</span><span id="line-406">            // Find matching child actors</span>
+<span class="source-line-no">407</span><span id="line-407">            List&lt;IIActorRef&lt;?&gt;&gt; matchedActors = findMatchingChildActors(actorPattern);</span>
+<span class="source-line-no">408</span><span id="line-408"></span>
+<span class="source-line-no">409</span><span id="line-409">            if (matchedActors.isEmpty()) {</span>
+<span class="source-line-no">410</span><span id="line-410">                return new ActionResult(false, "No actors matched pattern: " + actorPattern);</span>
+<span class="source-line-no">411</span><span id="line-411">            }</span>
+<span class="source-line-no">412</span><span id="line-412"></span>
+<span class="source-line-no">413</span><span id="line-413">            logger.info(String.format("Applying method '%s' to %d actors matching '%s'",</span>
+<span class="source-line-no">414</span><span id="line-414">                method, matchedActors.size(), actorPattern));</span>
+<span class="source-line-no">415</span><span id="line-415"></span>
+<span class="source-line-no">416</span><span id="line-416">            // Apply action to each matching actor (continue on failure, report all errors)</span>
+<span class="source-line-no">417</span><span id="line-417">            int successCount = 0;</span>
+<span class="source-line-no">418</span><span id="line-418">            List&lt;String&gt; failures = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">419</span><span id="line-419">            for (IIActorRef&lt;?&gt; actor : matchedActors) {</span>
+<span class="source-line-no">420</span><span id="line-420">                ActionResult result = actor.callByActionName(method, args);</span>
+<span class="source-line-no">421</span><span id="line-421">                if (!result.isSuccess()) {</span>
+<span class="source-line-no">422</span><span id="line-422">                    failures.add(String.format("%s: %s", actor.getName(), result.getResult()));</span>
+<span class="source-line-no">423</span><span id="line-423">                    logger.warning(String.format("Failed on %s: %s", actor.getName(), result.getResult()));</span>
+<span class="source-line-no">424</span><span id="line-424">                } else {</span>
+<span class="source-line-no">425</span><span id="line-425">                    successCount++;</span>
+<span class="source-line-no">426</span><span id="line-426">                    logger.fine(String.format("Applied to %s: %s", actor.getName(), result.getResult()));</span>
+<span class="source-line-no">427</span><span id="line-427">                }</span>
+<span class="source-line-no">428</span><span id="line-428">            }</span>
+<span class="source-line-no">429</span><span id="line-429"></span>
+<span class="source-line-no">430</span><span id="line-430">            if (failures.isEmpty()) {</span>
+<span class="source-line-no">431</span><span id="line-431">                return new ActionResult(true,</span>
+<span class="source-line-no">432</span><span id="line-432">                    String.format("Applied to %d actors", successCount));</span>
+<span class="source-line-no">433</span><span id="line-433">            } else {</span>
+<span class="source-line-no">434</span><span id="line-434">                return new ActionResult(false,</span>
+<span class="source-line-no">435</span><span id="line-435">                    String.format("Applied to %d/%d actors. Failures: %s",</span>
+<span class="source-line-no">436</span><span id="line-436">                        successCount, matchedActors.size(), String.join("; ", failures)));</span>
+<span class="source-line-no">437</span><span id="line-437">            }</span>
+<span class="source-line-no">438</span><span id="line-438"></span>
+<span class="source-line-no">439</span><span id="line-439">        } catch (Exception e) {</span>
+<span class="source-line-no">440</span><span id="line-440">            logger.log(Level.SEVERE, "Error in apply: " + actionDef, e);</span>
+<span class="source-line-no">441</span><span id="line-441">            return new ActionResult(false, "Error: " + e.getMessage());</span>
+<span class="source-line-no">442</span><span id="line-442">        }</span>
+<span class="source-line-no">443</span><span id="line-443">    }</span>
+<span class="source-line-no">444</span><span id="line-444"></span>
+<span class="source-line-no">445</span><span id="line-445">    /**</span>
+<span class="source-line-no">446</span><span id="line-446">     * Finds child actors matching a wildcard pattern.</span>
+<span class="source-line-no">447</span><span id="line-447">     *</span>
+<span class="source-line-no">448</span><span id="line-448">     * @param pattern the wildcard pattern (e.g., "node-*", "*-web", "*")</span>
+<span class="source-line-no">449</span><span id="line-449">     * @return list of matching child actors</span>
+<span class="source-line-no">450</span><span id="line-450">     */</span>
+<span class="source-line-no">451</span><span id="line-451">    private List&lt;IIActorRef&lt;?&gt;&gt; findMatchingChildActors(String pattern) {</span>
+<span class="source-line-no">452</span><span id="line-452">        List&lt;IIActorRef&lt;?&gt;&gt; matched = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">453</span><span id="line-453">        IIActorSystem system = (IIActorSystem) this.system();</span>
+<span class="source-line-no">454</span><span id="line-454"></span>
+<span class="source-line-no">455</span><span id="line-455">        if (system == null) {</span>
+<span class="source-line-no">456</span><span id="line-456">            return matched;</span>
+<span class="source-line-no">457</span><span id="line-457">        }</span>
+<span class="source-line-no">458</span><span id="line-458"></span>
+<span class="source-line-no">459</span><span id="line-459">        List&lt;String&gt; childNames = new ArrayList&lt;&gt;(this.getNamesOfChildren());</span>
 <span class="source-line-no">460</span><span id="line-460"></span>
-<span class="source-line-no">461</span><span id="line-461">        List&lt;String&gt; childNames = new ArrayList&lt;&gt;(this.getNamesOfChildren());</span>
-<span class="source-line-no">462</span><span id="line-462"></span>
-<span class="source-line-no">463</span><span id="line-463">        // Exact match (no wildcard)</span>
-<span class="source-line-no">464</span><span id="line-464">        if (!pattern.contains("*")) {</span>
-<span class="source-line-no">465</span><span id="line-465">            if (childNames.contains(pattern)) {</span>
-<span class="source-line-no">466</span><span id="line-466">                IIActorRef&lt;?&gt; actor = system.getIIActor(pattern);</span>
-<span class="source-line-no">467</span><span id="line-467">                if (actor != null) {</span>
-<span class="source-line-no">468</span><span id="line-468">                    matched.add(actor);</span>
-<span class="source-line-no">469</span><span id="line-469">                }</span>
-<span class="source-line-no">470</span><span id="line-470">            }</span>
-<span class="source-line-no">471</span><span id="line-471">            return matched;</span>
-<span class="source-line-no">472</span><span id="line-472">        }</span>
-<span class="source-line-no">473</span><span id="line-473"></span>
-<span class="source-line-no">474</span><span id="line-474">        // Convert wildcard to regex</span>
-<span class="source-line-no">475</span><span id="line-475">        String regex = pattern</span>
-<span class="source-line-no">476</span><span id="line-476">            .replace(".", "\\.")</span>
-<span class="source-line-no">477</span><span id="line-477">            .replace("*", ".*");</span>
-<span class="source-line-no">478</span><span id="line-478">        Pattern compiled = Pattern.compile(regex);</span>
-<span class="source-line-no">479</span><span id="line-479"></span>
-<span class="source-line-no">480</span><span id="line-480">        for (String childName : childNames) {</span>
-<span class="source-line-no">481</span><span id="line-481">            if (compiled.matcher(childName).matches()) {</span>
-<span class="source-line-no">482</span><span id="line-482">                IIActorRef&lt;?&gt; actor = system.getIIActor(childName);</span>
-<span class="source-line-no">483</span><span id="line-483">                if (actor != null) {</span>
-<span class="source-line-no">484</span><span id="line-484">                    matched.add(actor);</span>
-<span class="source-line-no">485</span><span id="line-485">                }</span>
-<span class="source-line-no">486</span><span id="line-486">            }</span>
-<span class="source-line-no">487</span><span id="line-487">        }</span>
-<span class="source-line-no">488</span><span id="line-488"></span>
-<span class="source-line-no">489</span><span id="line-489">        return matched;</span>
-<span class="source-line-no">490</span><span id="line-490">    }</span>
-<span class="source-line-no">491</span><span id="line-491"></span>
-<span class="source-line-no">492</span><span id="line-492">    /**</span>
-<span class="source-line-no">493</span><span id="line-493">     * Executes a single command on all child node actors.</span>
-<span class="source-line-no">494</span><span id="line-494">     *</span>
-<span class="source-line-no">495</span><span id="line-495">     * @param command the command to execute</span>
-<span class="source-line-no">496</span><span id="line-496">     * @return list of results from each node</span>
-<span class="source-line-no">497</span><span id="line-497">     * @throws ExecutionException if command execution fails</span>
-<span class="source-line-no">498</span><span id="line-498">     * @throws InterruptedException if the operation is interrupted</span>
-<span class="source-line-no">499</span><span id="line-499">     */</span>
-<span class="source-line-no">500</span><span id="line-500">    private List&lt;String&gt; executeCommandOnAllNodes(String command)</span>
-<span class="source-line-no">501</span><span id="line-501">            throws ExecutionException, InterruptedException {</span>
-<span class="source-line-no">502</span><span id="line-502"></span>
-<span class="source-line-no">503</span><span id="line-503">        IIActorSystem system = (IIActorSystem) this.system();</span>
-<span class="source-line-no">504</span><span id="line-504">        List&lt;String&gt; results = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">505</span><span id="line-505"></span>
-<span class="source-line-no">506</span><span id="line-506">        // Get all child node names</span>
-<span class="source-line-no">507</span><span id="line-507">        List&lt;String&gt; childNames = new ArrayList&lt;&gt;(this.getNamesOfChildren());</span>
+<span class="source-line-no">461</span><span id="line-461">        // Exact match (no wildcard)</span>
+<span class="source-line-no">462</span><span id="line-462">        if (!pattern.contains("*")) {</span>
+<span class="source-line-no">463</span><span id="line-463">            if (childNames.contains(pattern)) {</span>
+<span class="source-line-no">464</span><span id="line-464">                IIActorRef&lt;?&gt; actor = system.getIIActor(pattern);</span>
+<span class="source-line-no">465</span><span id="line-465">                if (actor != null) {</span>
+<span class="source-line-no">466</span><span id="line-466">                    matched.add(actor);</span>
+<span class="source-line-no">467</span><span id="line-467">                }</span>
+<span class="source-line-no">468</span><span id="line-468">            }</span>
+<span class="source-line-no">469</span><span id="line-469">            return matched;</span>
+<span class="source-line-no">470</span><span id="line-470">        }</span>
+<span class="source-line-no">471</span><span id="line-471"></span>
+<span class="source-line-no">472</span><span id="line-472">        // Convert wildcard to regex</span>
+<span class="source-line-no">473</span><span id="line-473">        String regex = pattern</span>
+<span class="source-line-no">474</span><span id="line-474">            .replace(".", "\\.")</span>
+<span class="source-line-no">475</span><span id="line-475">            .replace("*", ".*");</span>
+<span class="source-line-no">476</span><span id="line-476">        Pattern compiled = Pattern.compile(regex);</span>
+<span class="source-line-no">477</span><span id="line-477"></span>
+<span class="source-line-no">478</span><span id="line-478">        for (String childName : childNames) {</span>
+<span class="source-line-no">479</span><span id="line-479">            if (compiled.matcher(childName).matches()) {</span>
+<span class="source-line-no">480</span><span id="line-480">                IIActorRef&lt;?&gt; actor = system.getIIActor(childName);</span>
+<span class="source-line-no">481</span><span id="line-481">                if (actor != null) {</span>
+<span class="source-line-no">482</span><span id="line-482">                    matched.add(actor);</span>
+<span class="source-line-no">483</span><span id="line-483">                }</span>
+<span class="source-line-no">484</span><span id="line-484">            }</span>
+<span class="source-line-no">485</span><span id="line-485">        }</span>
+<span class="source-line-no">486</span><span id="line-486"></span>
+<span class="source-line-no">487</span><span id="line-487">        return matched;</span>
+<span class="source-line-no">488</span><span id="line-488">    }</span>
+<span class="source-line-no">489</span><span id="line-489"></span>
+<span class="source-line-no">490</span><span id="line-490">    /**</span>
+<span class="source-line-no">491</span><span id="line-491">     * Executes a single command on all child node actors.</span>
+<span class="source-line-no">492</span><span id="line-492">     *</span>
+<span class="source-line-no">493</span><span id="line-493">     * @param command the command to execute</span>
+<span class="source-line-no">494</span><span id="line-494">     * @return list of results from each node</span>
+<span class="source-line-no">495</span><span id="line-495">     * @throws ExecutionException if command execution fails</span>
+<span class="source-line-no">496</span><span id="line-496">     * @throws InterruptedException if the operation is interrupted</span>
+<span class="source-line-no">497</span><span id="line-497">     */</span>
+<span class="source-line-no">498</span><span id="line-498">    private List&lt;String&gt; executeCommandOnAllNodes(String command)</span>
+<span class="source-line-no">499</span><span id="line-499">            throws ExecutionException, InterruptedException {</span>
+<span class="source-line-no">500</span><span id="line-500"></span>
+<span class="source-line-no">501</span><span id="line-501">        IIActorSystem system = (IIActorSystem) this.system();</span>
+<span class="source-line-no">502</span><span id="line-502">        List&lt;String&gt; results = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">503</span><span id="line-503"></span>
+<span class="source-line-no">504</span><span id="line-504">        // Get all child node names</span>
+<span class="source-line-no">505</span><span id="line-505">        List&lt;String&gt; childNames = new ArrayList&lt;&gt;(this.getNamesOfChildren());</span>
+<span class="source-line-no">506</span><span id="line-506"></span>
+<span class="source-line-no">507</span><span id="line-507">        logger.info(String.format("Executing command on %d nodes: %s", childNames.size(), command));</span>
 <span class="source-line-no">508</span><span id="line-508"></span>
-<span class="source-line-no">509</span><span id="line-509">        logger.info(String.format("Executing command on %d nodes: %s", childNames.size(), command));</span>
-<span class="source-line-no">510</span><span id="line-510"></span>
-<span class="source-line-no">511</span><span id="line-511">        // Execute on each child node</span>
-<span class="source-line-no">512</span><span id="line-512">        for (String childName : childNames) {</span>
-<span class="source-line-no">513</span><span id="line-513">            IIActorRef&lt;?&gt; actorRef = system.getIIActor(childName);</span>
-<span class="source-line-no">514</span><span id="line-514">            if (actorRef == null || !(actorRef instanceof NodeIIAR)) {</span>
-<span class="source-line-no">515</span><span id="line-515">                logger.warning(String.format("Child node actor not found or wrong type: %s", childName));</span>
-<span class="source-line-no">516</span><span id="line-516">                continue;</span>
-<span class="source-line-no">517</span><span id="line-517">            }</span>
-<span class="source-line-no">518</span><span id="line-518">            NodeIIAR nodeActor = (NodeIIAR) actorRef;</span>
-<span class="source-line-no">519</span><span id="line-519"></span>
-<span class="source-line-no">520</span><span id="line-520">            // Execute the command</span>
-<span class="source-line-no">521</span><span id="line-521">            JSONArray commandArgs = new JSONArray();</span>
-<span class="source-line-no">522</span><span id="line-522">            commandArgs.put(command);</span>
-<span class="source-line-no">523</span><span id="line-523">            ActionResult result = nodeActor.callByActionName("executeCommand", commandArgs.toString());</span>
-<span class="source-line-no">524</span><span id="line-524"></span>
-<span class="source-line-no">525</span><span id="line-525">            results.add(String.format("%s: %s", childName, result.getResult()));</span>
-<span class="source-line-no">526</span><span id="line-526">        }</span>
-<span class="source-line-no">527</span><span id="line-527"></span>
-<span class="source-line-no">528</span><span id="line-528">        return results;</span>
-<span class="source-line-no">529</span><span id="line-529">    }</span>
-<span class="source-line-no">530</span><span id="line-530"></span>
-<span class="source-line-no">531</span><span id="line-531">    /**</span>
-<span class="source-line-no">532</span><span id="line-532">     * Extracts a single argument from JSON array format.</span>
-<span class="source-line-no">533</span><span id="line-533">     *</span>
-<span class="source-line-no">534</span><span id="line-534">     * @param arg the JSON array argument string</span>
-<span class="source-line-no">535</span><span id="line-535">     * @return the extracted argument</span>
-<span class="source-line-no">536</span><span id="line-536">     */</span>
-<span class="source-line-no">537</span><span id="line-537">    private String extractSingleArgument(String arg) {</span>
-<span class="source-line-no">538</span><span id="line-538">        try {</span>
-<span class="source-line-no">539</span><span id="line-539">            JSONArray jsonArray = new JSONArray(arg);</span>
-<span class="source-line-no">540</span><span id="line-540">            if (jsonArray.length() == 0) {</span>
-<span class="source-line-no">541</span><span id="line-541">                throw new IllegalArgumentException("Arguments cannot be empty");</span>
-<span class="source-line-no">542</span><span id="line-542">            }</span>
-<span class="source-line-no">543</span><span id="line-543">            return jsonArray.getString(0);</span>
-<span class="source-line-no">544</span><span id="line-544">        } catch (Exception e) {</span>
-<span class="source-line-no">545</span><span id="line-545">            throw new IllegalArgumentException(</span>
-<span class="source-line-no">546</span><span id="line-546">                "Invalid argument format. Expected JSON array: " + arg, e);</span>
-<span class="source-line-no">547</span><span id="line-547">        }</span>
-<span class="source-line-no">548</span><span id="line-548">    }</span>
-<span class="source-line-no">549</span><span id="line-549"></span>
-<span class="source-line-no">550</span><span id="line-550">    /**</span>
-<span class="source-line-no">551</span><span id="line-551">     * Creates an accumulator as a child actor.</span>
-<span class="source-line-no">552</span><span id="line-552">     *</span>
-<span class="source-line-no">553</span><span id="line-553">     * &lt;p&gt;If a log store is configured in the NodeGroupInterpreter, creates a</span>
-<span class="source-line-no">554</span><span id="line-554">     * LoggingAccumulatorIIAR that also writes to the H2 database.&lt;/p&gt;</span>
-<span class="source-line-no">555</span><span id="line-555">     *</span>
-<span class="source-line-no">556</span><span id="line-556">     * @param type the accumulator type ("streaming", "buffered", "table", "json")</span>
-<span class="source-line-no">557</span><span id="line-557">     */</span>
-<span class="source-line-no">558</span><span id="line-558">    private void createAccumulator(String type) {</span>
-<span class="source-line-no">559</span><span id="line-559">        IIActorSystem sys = (IIActorSystem) this.system();</span>
-<span class="source-line-no">560</span><span id="line-560"></span>
-<span class="source-line-no">561</span><span id="line-561">        // Create POJO based on type</span>
-<span class="source-line-no">562</span><span id="line-562">        Accumulator accumulator;</span>
-<span class="source-line-no">563</span><span id="line-563">        switch (type.toLowerCase()) {</span>
-<span class="source-line-no">564</span><span id="line-564">            case "streaming":</span>
-<span class="source-line-no">565</span><span id="line-565">                accumulator = new StreamingAccumulator();</span>
-<span class="source-line-no">566</span><span id="line-566">                break;</span>
-<span class="source-line-no">567</span><span id="line-567">            case "buffered":</span>
-<span class="source-line-no">568</span><span id="line-568">                accumulator = new BufferedAccumulator();</span>
-<span class="source-line-no">569</span><span id="line-569">                break;</span>
-<span class="source-line-no">570</span><span id="line-570">            case "table":</span>
-<span class="source-line-no">571</span><span id="line-571">                accumulator = new TableAccumulator();</span>
-<span class="source-line-no">572</span><span id="line-572">                break;</span>
-<span class="source-line-no">573</span><span id="line-573">            case "json":</span>
-<span class="source-line-no">574</span><span id="line-574">                accumulator = new JsonAccumulator();</span>
-<span class="source-line-no">575</span><span id="line-575">                break;</span>
-<span class="source-line-no">576</span><span id="line-576">            default:</span>
-<span class="source-line-no">577</span><span id="line-577">                throw new IllegalArgumentException("Unknown accumulator type: " + type);</span>
-<span class="source-line-no">578</span><span id="line-578">        }</span>
-<span class="source-line-no">579</span><span id="line-579"></span>
-<span class="source-line-no">580</span><span id="line-580">        // Get logStore and sessionId from NodeGroupInterpreter</span>
-<span class="source-line-no">581</span><span id="line-581">        DistributedLogStore logStore = this.object.getLogStore();</span>
-<span class="source-line-no">582</span><span id="line-582">        long sessionId = this.object.getSessionId();</span>
-<span class="source-line-no">583</span><span id="line-583"></span>
-<span class="source-line-no">584</span><span id="line-584">        // Create LoggingAccumulatorIIAR that also writes to H2 database</span>
-<span class="source-line-no">585</span><span id="line-585">        accumulatorActor = new LoggingAccumulatorIIAR("accumulator", accumulator, sys, logStore, sessionId);</span>
-<span class="source-line-no">586</span><span id="line-586">        this.createChild("accumulator", accumulator);</span>
-<span class="source-line-no">587</span><span id="line-587">        sys.addIIActor(accumulatorActor);</span>
-<span class="source-line-no">588</span><span id="line-588"></span>
-<span class="source-line-no">589</span><span id="line-589">        logger.info(String.format("Created %s accumulator as child actor (logging=%s)",</span>
-<span class="source-line-no">590</span><span id="line-590">            type, logStore != null ? "enabled" : "disabled"));</span>
-<span class="source-line-no">591</span><span id="line-591">    }</span>
-<span class="source-line-no">592</span><span id="line-592"></span>
-<span class="source-line-no">593</span><span id="line-593">    /**</span>
-<span class="source-line-no">594</span><span id="line-594">     * Gets the summary from the accumulator.</span>
-<span class="source-line-no">595</span><span id="line-595">     *</span>
-<span class="source-line-no">596</span><span id="line-596">     * @return ActionResult with the summary or error</span>
-<span class="source-line-no">597</span><span id="line-597">     */</span>
-<span class="source-line-no">598</span><span id="line-598">    private ActionResult getAccumulatorSummary() {</span>
-<span class="source-line-no">599</span><span id="line-599">        if (accumulatorActor == null) {</span>
-<span class="source-line-no">600</span><span id="line-600">            return new ActionResult(false, "No accumulator created");</span>
-<span class="source-line-no">601</span><span id="line-601">        }</span>
-<span class="source-line-no">602</span><span id="line-602">        ActionResult result = accumulatorActor.callByActionName("getSummary", "");</span>
-<span class="source-line-no">603</span><span id="line-603">        // Print the summary to stdout</span>
-<span class="source-line-no">604</span><span id="line-604">        System.out.println(result.getResult());</span>
-<span class="source-line-no">605</span><span id="line-605">        return result;</span>
-<span class="source-line-no">606</span><span id="line-606">    }</span>
-<span class="source-line-no">607</span><span id="line-607"></span>
-<span class="source-line-no">608</span><span id="line-608">    /**</span>
-<span class="source-line-no">609</span><span id="line-609">     * Prints a summary of the current session's verification results.</span>
+<span class="source-line-no">509</span><span id="line-509">        // Execute on each child node</span>
+<span class="source-line-no">510</span><span id="line-510">        for (String childName : childNames) {</span>
+<span class="source-line-no">511</span><span id="line-511">            IIActorRef&lt;?&gt; actorRef = system.getIIActor(childName);</span>
+<span class="source-line-no">512</span><span id="line-512">            if (actorRef == null || !(actorRef instanceof NodeIIAR)) {</span>
+<span class="source-line-no">513</span><span id="line-513">                logger.warning(String.format("Child node actor not found or wrong type: %s", childName));</span>
+<span class="source-line-no">514</span><span id="line-514">                continue;</span>
+<span class="source-line-no">515</span><span id="line-515">            }</span>
+<span class="source-line-no">516</span><span id="line-516">            NodeIIAR nodeActor = (NodeIIAR) actorRef;</span>
+<span class="source-line-no">517</span><span id="line-517"></span>
+<span class="source-line-no">518</span><span id="line-518">            // Execute the command</span>
+<span class="source-line-no">519</span><span id="line-519">            JSONArray commandArgs = new JSONArray();</span>
+<span class="source-line-no">520</span><span id="line-520">            commandArgs.put(command);</span>
+<span class="source-line-no">521</span><span id="line-521">            ActionResult result = nodeActor.callByActionName("executeCommand", commandArgs.toString());</span>
+<span class="source-line-no">522</span><span id="line-522"></span>
+<span class="source-line-no">523</span><span id="line-523">            results.add(String.format("%s: %s", childName, result.getResult()));</span>
+<span class="source-line-no">524</span><span id="line-524">        }</span>
+<span class="source-line-no">525</span><span id="line-525"></span>
+<span class="source-line-no">526</span><span id="line-526">        return results;</span>
+<span class="source-line-no">527</span><span id="line-527">    }</span>
+<span class="source-line-no">528</span><span id="line-528"></span>
+<span class="source-line-no">529</span><span id="line-529">    /**</span>
+<span class="source-line-no">530</span><span id="line-530">     * Extracts a single argument from JSON array format.</span>
+<span class="source-line-no">531</span><span id="line-531">     *</span>
+<span class="source-line-no">532</span><span id="line-532">     * @param arg the JSON array argument string</span>
+<span class="source-line-no">533</span><span id="line-533">     * @return the extracted argument</span>
+<span class="source-line-no">534</span><span id="line-534">     */</span>
+<span class="source-line-no">535</span><span id="line-535">    private String extractSingleArgument(String arg) {</span>
+<span class="source-line-no">536</span><span id="line-536">        try {</span>
+<span class="source-line-no">537</span><span id="line-537">            JSONArray jsonArray = new JSONArray(arg);</span>
+<span class="source-line-no">538</span><span id="line-538">            if (jsonArray.length() == 0) {</span>
+<span class="source-line-no">539</span><span id="line-539">                throw new IllegalArgumentException("Arguments cannot be empty");</span>
+<span class="source-line-no">540</span><span id="line-540">            }</span>
+<span class="source-line-no">541</span><span id="line-541">            return jsonArray.getString(0);</span>
+<span class="source-line-no">542</span><span id="line-542">        } catch (Exception e) {</span>
+<span class="source-line-no">543</span><span id="line-543">            throw new IllegalArgumentException(</span>
+<span class="source-line-no">544</span><span id="line-544">                "Invalid argument format. Expected JSON array: " + arg, e);</span>
+<span class="source-line-no">545</span><span id="line-545">        }</span>
+<span class="source-line-no">546</span><span id="line-546">    }</span>
+<span class="source-line-no">547</span><span id="line-547"></span>
+<span class="source-line-no">548</span><span id="line-548">    /**</span>
+<span class="source-line-no">549</span><span id="line-549">     * Creates an accumulator as a child actor.</span>
+<span class="source-line-no">550</span><span id="line-550">     *</span>
+<span class="source-line-no">551</span><span id="line-551">     * &lt;p&gt;If a log store is configured in the NodeGroupInterpreter, creates a</span>
+<span class="source-line-no">552</span><span id="line-552">     * LoggingAccumulatorIIAR that also writes to the H2 database.&lt;/p&gt;</span>
+<span class="source-line-no">553</span><span id="line-553">     *</span>
+<span class="source-line-no">554</span><span id="line-554">     * @param type the accumulator type ("streaming", "buffered", "table", "json")</span>
+<span class="source-line-no">555</span><span id="line-555">     */</span>
+<span class="source-line-no">556</span><span id="line-556">    private void createAccumulator(String type) {</span>
+<span class="source-line-no">557</span><span id="line-557">        IIActorSystem sys = (IIActorSystem) this.system();</span>
+<span class="source-line-no">558</span><span id="line-558"></span>
+<span class="source-line-no">559</span><span id="line-559">        // Create POJO based on type</span>
+<span class="source-line-no">560</span><span id="line-560">        Accumulator accumulator;</span>
+<span class="source-line-no">561</span><span id="line-561">        switch (type.toLowerCase()) {</span>
+<span class="source-line-no">562</span><span id="line-562">            case "streaming":</span>
+<span class="source-line-no">563</span><span id="line-563">                accumulator = new StreamingAccumulator();</span>
+<span class="source-line-no">564</span><span id="line-564">                break;</span>
+<span class="source-line-no">565</span><span id="line-565">            case "buffered":</span>
+<span class="source-line-no">566</span><span id="line-566">                accumulator = new BufferedAccumulator();</span>
+<span class="source-line-no">567</span><span id="line-567">                break;</span>
+<span class="source-line-no">568</span><span id="line-568">            case "table":</span>
+<span class="source-line-no">569</span><span id="line-569">                accumulator = new TableAccumulator();</span>
+<span class="source-line-no">570</span><span id="line-570">                break;</span>
+<span class="source-line-no">571</span><span id="line-571">            case "json":</span>
+<span class="source-line-no">572</span><span id="line-572">                accumulator = new JsonAccumulator();</span>
+<span class="source-line-no">573</span><span id="line-573">                break;</span>
+<span class="source-line-no">574</span><span id="line-574">            default:</span>
+<span class="source-line-no">575</span><span id="line-575">                throw new IllegalArgumentException("Unknown accumulator type: " + type);</span>
+<span class="source-line-no">576</span><span id="line-576">        }</span>
+<span class="source-line-no">577</span><span id="line-577"></span>
+<span class="source-line-no">578</span><span id="line-578">        // Get logStore and sessionId from NodeGroupInterpreter</span>
+<span class="source-line-no">579</span><span id="line-579">        DistributedLogStore logStore = this.object.getLogStore();</span>
+<span class="source-line-no">580</span><span id="line-580">        long sessionId = this.object.getSessionId();</span>
+<span class="source-line-no">581</span><span id="line-581"></span>
+<span class="source-line-no">582</span><span id="line-582">        // Create LoggingAccumulatorIIAR that also writes to H2 database</span>
+<span class="source-line-no">583</span><span id="line-583">        accumulatorActor = new LoggingAccumulatorIIAR("accumulator", accumulator, sys, logStore, sessionId);</span>
+<span class="source-line-no">584</span><span id="line-584">        this.createChild("accumulator", accumulator);</span>
+<span class="source-line-no">585</span><span id="line-585">        sys.addIIActor(accumulatorActor);</span>
+<span class="source-line-no">586</span><span id="line-586"></span>
+<span class="source-line-no">587</span><span id="line-587">        logger.info(String.format("Created %s accumulator as child actor (logging=%s)",</span>
+<span class="source-line-no">588</span><span id="line-588">            type, logStore != null ? "enabled" : "disabled"));</span>
+<span class="source-line-no">589</span><span id="line-589">    }</span>
+<span class="source-line-no">590</span><span id="line-590"></span>
+<span class="source-line-no">591</span><span id="line-591">    /**</span>
+<span class="source-line-no">592</span><span id="line-592">     * Gets the summary from the accumulator.</span>
+<span class="source-line-no">593</span><span id="line-593">     *</span>
+<span class="source-line-no">594</span><span id="line-594">     * @return ActionResult with the summary or error</span>
+<span class="source-line-no">595</span><span id="line-595">     */</span>
+<span class="source-line-no">596</span><span id="line-596">    private ActionResult getAccumulatorSummary() {</span>
+<span class="source-line-no">597</span><span id="line-597">        if (accumulatorActor == null) {</span>
+<span class="source-line-no">598</span><span id="line-598">            return new ActionResult(false, "No accumulator created");</span>
+<span class="source-line-no">599</span><span id="line-599">        }</span>
+<span class="source-line-no">600</span><span id="line-600">        ActionResult result = accumulatorActor.callByActionName("getSummary", "");</span>
+<span class="source-line-no">601</span><span id="line-601">        // Print the summary to stdout</span>
+<span class="source-line-no">602</span><span id="line-602">        System.out.println(result.getResult());</span>
+<span class="source-line-no">603</span><span id="line-603">        return result;</span>
+<span class="source-line-no">604</span><span id="line-604">    }</span>
+<span class="source-line-no">605</span><span id="line-605"></span>
+<span class="source-line-no">606</span><span id="line-606">    /**</span>
+<span class="source-line-no">607</span><span id="line-607">     * Prints a summary of the current session's verification results.</span>
+<span class="source-line-no">608</span><span id="line-608">     *</span>
+<span class="source-line-no">609</span><span id="line-609">     * &lt;p&gt;Groups results by vertex name (step) and displays a formatted table.&lt;/p&gt;</span>
 <span class="source-line-no">610</span><span id="line-610">     *</span>
-<span class="source-line-no">611</span><span id="line-611">     * &lt;p&gt;Groups results by vertex name (step) and displays a formatted table.&lt;/p&gt;</span>
-<span class="source-line-no">612</span><span id="line-612">     *</span>
-<span class="source-line-no">613</span><span id="line-613">     * @return ActionResult with success status and summary text</span>
-<span class="source-line-no">614</span><span id="line-614">     */</span>
-<span class="source-line-no">615</span><span id="line-615">    private ActionResult printSessionSummary() {</span>
-<span class="source-line-no">616</span><span id="line-616">        DistributedLogStore logStore = this.object.getLogStore();</span>
-<span class="source-line-no">617</span><span id="line-617">        long sessionId = this.object.getSessionId();</span>
-<span class="source-line-no">618</span><span id="line-618"></span>
-<span class="source-line-no">619</span><span id="line-619">        if (logStore == null || sessionId &lt; 0) {</span>
-<span class="source-line-no">620</span><span id="line-620">            String msg = "Log store not available";</span>
-<span class="source-line-no">621</span><span id="line-621">            System.out.println(msg);</span>
-<span class="source-line-no">622</span><span id="line-622">            return new ActionResult(false, msg);</span>
-<span class="source-line-no">623</span><span id="line-623">        }</span>
-<span class="source-line-no">624</span><span id="line-624"></span>
-<span class="source-line-no">625</span><span id="line-625">        // Get all logs for this session</span>
-<span class="source-line-no">626</span><span id="line-626">        List&lt;com.scivicslab.actoriac.log.LogEntry&gt; logs = logStore.getLogsByLevel(sessionId,</span>
-<span class="source-line-no">627</span><span id="line-627">            com.scivicslab.actoriac.log.LogLevel.DEBUG);</span>
-<span class="source-line-no">628</span><span id="line-628"></span>
-<span class="source-line-no">629</span><span id="line-629">        // Group logs by vertex name and count results</span>
-<span class="source-line-no">630</span><span id="line-630">        java.util.Map&lt;String, VerifyResult&gt; resultsByVertex = new java.util.LinkedHashMap&lt;&gt;();</span>
-<span class="source-line-no">631</span><span id="line-631"></span>
-<span class="source-line-no">632</span><span id="line-632">        for (com.scivicslab.actoriac.log.LogEntry entry : logs) {</span>
-<span class="source-line-no">633</span><span id="line-633">            String message = entry.getMessage();</span>
-<span class="source-line-no">634</span><span id="line-634">            String vertexName = entry.getVertexName();</span>
-<span class="source-line-no">635</span><span id="line-635">            if (message == null) continue;</span>
-<span class="source-line-no">636</span><span id="line-636"></span>
-<span class="source-line-no">637</span><span id="line-637">            // Extract vertex name from the message if it contains step info</span>
-<span class="source-line-no">638</span><span id="line-638">            // Format: "- states: [...]\n  vertexName: xxx\n..."</span>
-<span class="source-line-no">639</span><span id="line-639">            if (vertexName != null &amp;&amp; vertexName.contains("vertexName:")) {</span>
-<span class="source-line-no">640</span><span id="line-640">                int idx = vertexName.indexOf("vertexName:");</span>
-<span class="source-line-no">641</span><span id="line-641">                if (idx &gt;= 0) {</span>
-<span class="source-line-no">642</span><span id="line-642">                    String rest = vertexName.substring(idx + 11).trim();</span>
-<span class="source-line-no">643</span><span id="line-643">                    int end = rest.indexOf('\n');</span>
-<span class="source-line-no">644</span><span id="line-644">                    vertexName = end &gt; 0 ? rest.substring(0, end).trim() : rest.trim();</span>
-<span class="source-line-no">645</span><span id="line-645">                }</span>
-<span class="source-line-no">646</span><span id="line-646">            }</span>
-<span class="source-line-no">647</span><span id="line-647"></span>
-<span class="source-line-no">648</span><span id="line-648">            // Skip non-verify steps</span>
-<span class="source-line-no">649</span><span id="line-649">            if (vertexName == null || !vertexName.startsWith("verify-")) {</span>
-<span class="source-line-no">650</span><span id="line-650">                continue;</span>
-<span class="source-line-no">651</span><span id="line-651">            }</span>
+<span class="source-line-no">611</span><span id="line-611">     * @return ActionResult with success status and summary text</span>
+<span class="source-line-no">612</span><span id="line-612">     */</span>
+<span class="source-line-no">613</span><span id="line-613">    private ActionResult printSessionSummary() {</span>
+<span class="source-line-no">614</span><span id="line-614">        DistributedLogStore logStore = this.object.getLogStore();</span>
+<span class="source-line-no">615</span><span id="line-615">        long sessionId = this.object.getSessionId();</span>
+<span class="source-line-no">616</span><span id="line-616"></span>
+<span class="source-line-no">617</span><span id="line-617">        if (logStore == null || sessionId &lt; 0) {</span>
+<span class="source-line-no">618</span><span id="line-618">            String msg = "Log store not available";</span>
+<span class="source-line-no">619</span><span id="line-619">            System.out.println(msg);</span>
+<span class="source-line-no">620</span><span id="line-620">            return new ActionResult(false, msg);</span>
+<span class="source-line-no">621</span><span id="line-621">        }</span>
+<span class="source-line-no">622</span><span id="line-622"></span>
+<span class="source-line-no">623</span><span id="line-623">        // Get all logs for this session</span>
+<span class="source-line-no">624</span><span id="line-624">        List&lt;com.scivicslab.actoriac.log.LogEntry&gt; logs = logStore.getLogsByLevel(sessionId,</span>
+<span class="source-line-no">625</span><span id="line-625">            com.scivicslab.actoriac.log.LogLevel.DEBUG);</span>
+<span class="source-line-no">626</span><span id="line-626"></span>
+<span class="source-line-no">627</span><span id="line-627">        // Group logs by vertex name and count results</span>
+<span class="source-line-no">628</span><span id="line-628">        java.util.Map&lt;String, VerifyResult&gt; resultsByVertex = new java.util.LinkedHashMap&lt;&gt;();</span>
+<span class="source-line-no">629</span><span id="line-629"></span>
+<span class="source-line-no">630</span><span id="line-630">        for (com.scivicslab.actoriac.log.LogEntry entry : logs) {</span>
+<span class="source-line-no">631</span><span id="line-631">            String message = entry.getMessage();</span>
+<span class="source-line-no">632</span><span id="line-632">            String vertexName = entry.getVertexName();</span>
+<span class="source-line-no">633</span><span id="line-633">            if (message == null) continue;</span>
+<span class="source-line-no">634</span><span id="line-634"></span>
+<span class="source-line-no">635</span><span id="line-635">            // Extract vertex name from the message if it contains step info</span>
+<span class="source-line-no">636</span><span id="line-636">            // Format: "- states: [...]\n  vertexName: xxx\n..."</span>
+<span class="source-line-no">637</span><span id="line-637">            if (vertexName != null &amp;&amp; vertexName.contains("vertexName:")) {</span>
+<span class="source-line-no">638</span><span id="line-638">                int idx = vertexName.indexOf("vertexName:");</span>
+<span class="source-line-no">639</span><span id="line-639">                if (idx &gt;= 0) {</span>
+<span class="source-line-no">640</span><span id="line-640">                    String rest = vertexName.substring(idx + 11).trim();</span>
+<span class="source-line-no">641</span><span id="line-641">                    int end = rest.indexOf('\n');</span>
+<span class="source-line-no">642</span><span id="line-642">                    vertexName = end &gt; 0 ? rest.substring(0, end).trim() : rest.trim();</span>
+<span class="source-line-no">643</span><span id="line-643">                }</span>
+<span class="source-line-no">644</span><span id="line-644">            }</span>
+<span class="source-line-no">645</span><span id="line-645"></span>
+<span class="source-line-no">646</span><span id="line-646">            // Skip non-verify steps</span>
+<span class="source-line-no">647</span><span id="line-647">            if (vertexName == null || !vertexName.startsWith("verify-")) {</span>
+<span class="source-line-no">648</span><span id="line-648">                continue;</span>
+<span class="source-line-no">649</span><span id="line-649">            }</span>
+<span class="source-line-no">650</span><span id="line-650"></span>
+<span class="source-line-no">651</span><span id="line-651">            VerifyResult result = resultsByVertex.computeIfAbsent(vertexName, k -&gt; new VerifyResult());</span>
 <span class="source-line-no">652</span><span id="line-652"></span>
-<span class="source-line-no">653</span><span id="line-653">            VerifyResult result = resultsByVertex.computeIfAbsent(vertexName, k -&gt; new VerifyResult());</span>
-<span class="source-line-no">654</span><span id="line-654"></span>
-<span class="source-line-no">655</span><span id="line-655">            // Count occurrences in message</span>
-<span class="source-line-no">656</span><span id="line-656">            result.okCount += countOccurrences(message, "[OK]");</span>
-<span class="source-line-no">657</span><span id="line-657">            result.warnCount += countOccurrences(message, "[WARN]");</span>
-<span class="source-line-no">658</span><span id="line-658">            result.errorCount += countOccurrences(message, "[ERROR]");</span>
-<span class="source-line-no">659</span><span id="line-659">            result.infoCount += countOccurrences(message, "[INFO]");</span>
-<span class="source-line-no">660</span><span id="line-660"></span>
-<span class="source-line-no">661</span><span id="line-661">            // Extract special info (like document count, cluster health)</span>
-<span class="source-line-no">662</span><span id="line-662">            extractSpecialInfo(message, result);</span>
-<span class="source-line-no">663</span><span id="line-663">        }</span>
-<span class="source-line-no">664</span><span id="line-664"></span>
-<span class="source-line-no">665</span><span id="line-665">        // Build summary output</span>
-<span class="source-line-no">666</span><span id="line-666">        StringBuilder sb = new StringBuilder();</span>
-<span class="source-line-no">667</span><span id="line-667">        sb.append("\n");</span>
+<span class="source-line-no">653</span><span id="line-653">            // Count occurrences in message</span>
+<span class="source-line-no">654</span><span id="line-654">            result.okCount += countOccurrences(message, "[OK]");</span>
+<span class="source-line-no">655</span><span id="line-655">            result.warnCount += countOccurrences(message, "[WARN]");</span>
+<span class="source-line-no">656</span><span id="line-656">            result.errorCount += countOccurrences(message, "[ERROR]");</span>
+<span class="source-line-no">657</span><span id="line-657">            result.infoCount += countOccurrences(message, "[INFO]");</span>
+<span class="source-line-no">658</span><span id="line-658"></span>
+<span class="source-line-no">659</span><span id="line-659">            // Extract special info (like document count, cluster health)</span>
+<span class="source-line-no">660</span><span id="line-660">            extractSpecialInfo(message, result);</span>
+<span class="source-line-no">661</span><span id="line-661">        }</span>
+<span class="source-line-no">662</span><span id="line-662"></span>
+<span class="source-line-no">663</span><span id="line-663">        // Build summary output</span>
+<span class="source-line-no">664</span><span id="line-664">        StringBuilder sb = new StringBuilder();</span>
+<span class="source-line-no">665</span><span id="line-665">        sb.append("\n");</span>
+<span class="source-line-no">666</span><span id="line-666">        sb.append("============================================================\n");</span>
+<span class="source-line-no">667</span><span id="line-667">        sb.append("                 VERIFICATION SUMMARY\n");</span>
 <span class="source-line-no">668</span><span id="line-668">        sb.append("============================================================\n");</span>
-<span class="source-line-no">669</span><span id="line-669">        sb.append("                 VERIFICATION SUMMARY\n");</span>
-<span class="source-line-no">670</span><span id="line-670">        sb.append("============================================================\n");</span>
-<span class="source-line-no">671</span><span id="line-671">        sb.append("\n");</span>
-<span class="source-line-no">672</span><span id="line-672">        sb.append(String.format("| %-35s | %-20s |\n", "Item", "Status"));</span>
-<span class="source-line-no">673</span><span id="line-673">        sb.append("|-------------------------------------|----------------------|\n");</span>
-<span class="source-line-no">674</span><span id="line-674"></span>
-<span class="source-line-no">675</span><span id="line-675">        // Mapping from vertex names to display names and aggregation</span>
-<span class="source-line-no">676</span><span id="line-676">        String[][] mappings = {</span>
-<span class="source-line-no">677</span><span id="line-677">            {"verify-repos", "Document repositories"},</span>
-<span class="source-line-no">678</span><span id="line-678">            {"verify-utility-cli", "Utility-cli"},</span>
-<span class="source-line-no">679</span><span id="line-679">            {"verify-utility-sau3", "Utility-sau3"},</span>
-<span class="source-line-no">680</span><span id="line-680">            {"verify-builds", "Docusaurus builds"},</span>
-<span class="source-line-no">681</span><span id="line-681">            {"verify-public-html", "public_html deploy"},</span>
-<span class="source-line-no">682</span><span id="line-682">            {"verify-apache", "Apache2 + UserDir"},</span>
-<span class="source-line-no">683</span><span id="line-683">            {"verify-opensearch-install", "OpenSearch install"},</span>
-<span class="source-line-no">684</span><span id="line-684">            {"verify-opensearch-running", "OpenSearch status"},</span>
-<span class="source-line-no">685</span><span id="line-685">            {"verify-docusearch-build", "quarkus-docusearch build"},</span>
-<span class="source-line-no">686</span><span id="line-686">            {"verify-docusearch-running", "quarkus-docusearch server"},</span>
-<span class="source-line-no">687</span><span id="line-687">            {"verify-search-index", "Search index"},</span>
-<span class="source-line-no">688</span><span id="line-688">            {"verify-web-access", "Web access"},</span>
-<span class="source-line-no">689</span><span id="line-689">        };</span>
-<span class="source-line-no">690</span><span id="line-690"></span>
-<span class="source-line-no">691</span><span id="line-691">        int totalOk = 0, totalWarn = 0, totalError = 0;</span>
-<span class="source-line-no">692</span><span id="line-692">        List&lt;String&gt; errorDetails = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">693</span><span id="line-693">        List&lt;String&gt; warnDetails = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">694</span><span id="line-694"></span>
-<span class="source-line-no">695</span><span id="line-695">        for (String[] mapping : mappings) {</span>
-<span class="source-line-no">696</span><span id="line-696">            String vertexName = mapping[0];</span>
-<span class="source-line-no">697</span><span id="line-697">            String displayName = mapping[1];</span>
-<span class="source-line-no">698</span><span id="line-698">            VerifyResult result = resultsByVertex.get(vertexName);</span>
-<span class="source-line-no">699</span><span id="line-699"></span>
-<span class="source-line-no">700</span><span id="line-700">            if (result == null) {</span>
-<span class="source-line-no">701</span><span id="line-701">                sb.append(String.format("| %-35s | %-20s |\n", displayName, "-"));</span>
-<span class="source-line-no">702</span><span id="line-702">                continue;</span>
-<span class="source-line-no">703</span><span id="line-703">            }</span>
-<span class="source-line-no">704</span><span id="line-704"></span>
-<span class="source-line-no">705</span><span id="line-705">            totalOk += result.okCount;</span>
-<span class="source-line-no">706</span><span id="line-706">            totalWarn += result.warnCount;</span>
-<span class="source-line-no">707</span><span id="line-707">            totalError += result.errorCount;</span>
-<span class="source-line-no">708</span><span id="line-708"></span>
-<span class="source-line-no">709</span><span id="line-709">            String status = formatStatus(result);</span>
-<span class="source-line-no">710</span><span id="line-710">            sb.append(String.format("| %-35s | %-20s |\n", displayName, status));</span>
-<span class="source-line-no">711</span><span id="line-711"></span>
-<span class="source-line-no">712</span><span id="line-712">            // Collect error/warning details</span>
-<span class="source-line-no">713</span><span id="line-713">            if (result.errorCount &gt; 0) {</span>
-<span class="source-line-no">714</span><span id="line-714">                errorDetails.add(displayName + ": " + result.errorCount + " error(s)");</span>
-<span class="source-line-no">715</span><span id="line-715">            }</span>
-<span class="source-line-no">716</span><span id="line-716">            if (result.warnCount &gt; 0) {</span>
-<span class="source-line-no">717</span><span id="line-717">                warnDetails.add(displayName + ": " + result.warnCount + " warning(s)");</span>
-<span class="source-line-no">718</span><span id="line-718">            }</span>
-<span class="source-line-no">719</span><span id="line-719">        }</span>
-<span class="source-line-no">720</span><span id="line-720"></span>
-<span class="source-line-no">721</span><span id="line-721">        sb.append("|-------------------------------------|----------------------|\n");</span>
-<span class="source-line-no">722</span><span id="line-722">        sb.append(String.format("| %-35s | %d OK, %d WARN, %d ERR |\n",</span>
-<span class="source-line-no">723</span><span id="line-723">            "TOTAL", totalOk, totalWarn, totalError));</span>
-<span class="source-line-no">724</span><span id="line-724">        sb.append("============================================================\n");</span>
-<span class="source-line-no">725</span><span id="line-725"></span>
-<span class="source-line-no">726</span><span id="line-726">        // Show error details if any</span>
-<span class="source-line-no">727</span><span id="line-727">        if (!errorDetails.isEmpty()) {</span>
-<span class="source-line-no">728</span><span id="line-728">            sb.append("\n--- Errors ---\n");</span>
-<span class="source-line-no">729</span><span id="line-729">            for (String detail : errorDetails) {</span>
-<span class="source-line-no">730</span><span id="line-730">                sb.append("  * ").append(detail).append("\n");</span>
-<span class="source-line-no">731</span><span id="line-731">            }</span>
-<span class="source-line-no">732</span><span id="line-732">        }</span>
-<span class="source-line-no">733</span><span id="line-733"></span>
-<span class="source-line-no">734</span><span id="line-734">        // Show warning details if any</span>
-<span class="source-line-no">735</span><span id="line-735">        if (!warnDetails.isEmpty()) {</span>
-<span class="source-line-no">736</span><span id="line-736">            sb.append("\n--- Warnings ---\n");</span>
-<span class="source-line-no">737</span><span id="line-737">            for (String detail : warnDetails) {</span>
-<span class="source-line-no">738</span><span id="line-738">                sb.append("  * ").append(detail).append("\n");</span>
-<span class="source-line-no">739</span><span id="line-739">            }</span>
-<span class="source-line-no">740</span><span id="line-740">        }</span>
-<span class="source-line-no">741</span><span id="line-741"></span>
-<span class="source-line-no">742</span><span id="line-742">        sb.append("\n");</span>
-<span class="source-line-no">743</span><span id="line-743">        if (totalError == 0 &amp;&amp; totalWarn == 0) {</span>
-<span class="source-line-no">744</span><span id="line-744">            sb.append("All checks passed!\n");</span>
-<span class="source-line-no">745</span><span id="line-745">        } else if (totalError &gt; 0) {</span>
-<span class="source-line-no">746</span><span id="line-746">            sb.append("To fix issues, run:\n");</span>
-<span class="source-line-no">747</span><span id="line-747">            sb.append("  ./actor_iac.java --dir ./docu-search --workflow main-setup\n");</span>
-<span class="source-line-no">748</span><span id="line-748">        }</span>
-<span class="source-line-no">749</span><span id="line-749"></span>
-<span class="source-line-no">750</span><span id="line-750">        String summary = sb.toString();</span>
-<span class="source-line-no">751</span><span id="line-751">        System.out.println(summary);</span>
-<span class="source-line-no">752</span><span id="line-752">        return new ActionResult(true, summary);</span>
-<span class="source-line-no">753</span><span id="line-753">    }</span>
-<span class="source-line-no">754</span><span id="line-754"></span>
-<span class="source-line-no">755</span><span id="line-755">    /**</span>
-<span class="source-line-no">756</span><span id="line-756">     * Formats the status string for a verification result.</span>
-<span class="source-line-no">757</span><span id="line-757">     */</span>
-<span class="source-line-no">758</span><span id="line-758">    private String formatStatus(VerifyResult result) {</span>
-<span class="source-line-no">759</span><span id="line-759">        if (result.errorCount &gt; 0) {</span>
-<span class="source-line-no">760</span><span id="line-760">            if (result.okCount &gt; 0) {</span>
-<span class="source-line-no">761</span><span id="line-761">                return String.format("%d OK, %d ERROR", result.okCount, result.errorCount);</span>
-<span class="source-line-no">762</span><span id="line-762">            }</span>
-<span class="source-line-no">763</span><span id="line-763">            return "ERROR";</span>
-<span class="source-line-no">764</span><span id="line-764">        }</span>
-<span class="source-line-no">765</span><span id="line-765">        if (result.warnCount &gt; 0) {</span>
-<span class="source-line-no">766</span><span id="line-766">            if (result.okCount &gt; 0) {</span>
-<span class="source-line-no">767</span><span id="line-767">                return String.format("%d OK, %d WARN", result.okCount, result.warnCount);</span>
-<span class="source-line-no">768</span><span id="line-768">            }</span>
-<span class="source-line-no">769</span><span id="line-769">            return "WARN";</span>
-<span class="source-line-no">770</span><span id="line-770">        }</span>
-<span class="source-line-no">771</span><span id="line-771">        if (result.okCount &gt; 0) {</span>
-<span class="source-line-no">772</span><span id="line-772">            String extra = result.extraInfo != null ? " " + result.extraInfo : "";</span>
-<span class="source-line-no">773</span><span id="line-773">            return result.okCount + " OK" + extra;</span>
-<span class="source-line-no">774</span><span id="line-774">        }</span>
-<span class="source-line-no">775</span><span id="line-775">        return "OK";</span>
-<span class="source-line-no">776</span><span id="line-776">    }</span>
-<span class="source-line-no">777</span><span id="line-777"></span>
-<span class="source-line-no">778</span><span id="line-778">    /**</span>
-<span class="source-line-no">779</span><span id="line-779">     * Extracts special information from log messages (like document count, cluster health).</span>
-<span class="source-line-no">780</span><span id="line-780">     */</span>
-<span class="source-line-no">781</span><span id="line-781">    private void extractSpecialInfo(String message, VerifyResult result) {</span>
-<span class="source-line-no">782</span><span id="line-782">        // Extract document count from search index</span>
-<span class="source-line-no">783</span><span id="line-783">        if (message.contains("documents")) {</span>
-<span class="source-line-no">784</span><span id="line-784">            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)\\s+documents").matcher(message);</span>
-<span class="source-line-no">785</span><span id="line-785">            if (m.find()) {</span>
-<span class="source-line-no">786</span><span id="line-786">                result.extraInfo = "(" + m.group(1) + " docs)";</span>
-<span class="source-line-no">787</span><span id="line-787">            }</span>
-<span class="source-line-no">788</span><span id="line-788">        }</span>
-<span class="source-line-no">789</span><span id="line-789">        // Extract cluster health</span>
-<span class="source-line-no">790</span><span id="line-790">        if (message.contains("Cluster health:")) {</span>
-<span class="source-line-no">791</span><span id="line-791">            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Cluster health:\\s*(\\w+)").matcher(message);</span>
-<span class="source-line-no">792</span><span id="line-792">            if (m.find()) {</span>
-<span class="source-line-no">793</span><span id="line-793">                result.extraInfo = "(" + m.group(1) + ")";</span>
-<span class="source-line-no">794</span><span id="line-794">            }</span>
-<span class="source-line-no">795</span><span id="line-795">        }</span>
-<span class="source-line-no">796</span><span id="line-796">        // Extract web access count</span>
-<span class="source-line-no">797</span><span id="line-797">        if (message.contains("Accessible at")) {</span>
-<span class="source-line-no">798</span><span id="line-798">            // Count from "X / Y" pattern is handled by OK count</span>
-<span class="source-line-no">799</span><span id="line-799">        }</span>
-<span class="source-line-no">800</span><span id="line-800">    }</span>
-<span class="source-line-no">801</span><span id="line-801"></span>
-<span class="source-line-no">802</span><span id="line-802">    /**</span>
-<span class="source-line-no">803</span><span id="line-803">     * Counts occurrences of a substring in a string.</span>
-<span class="source-line-no">804</span><span id="line-804">     */</span>
-<span class="source-line-no">805</span><span id="line-805">    private int countOccurrences(String text, String sub) {</span>
-<span class="source-line-no">806</span><span id="line-806">        int count = 0;</span>
-<span class="source-line-no">807</span><span id="line-807">        int idx = 0;</span>
-<span class="source-line-no">808</span><span id="line-808">        while ((idx = text.indexOf(sub, idx)) != -1) {</span>
-<span class="source-line-no">809</span><span id="line-809">            count++;</span>
-<span class="source-line-no">810</span><span id="line-810">            idx += sub.length();</span>
-<span class="source-line-no">811</span><span id="line-811">        }</span>
-<span class="source-line-no">812</span><span id="line-812">        return count;</span>
-<span class="source-line-no">813</span><span id="line-813">    }</span>
-<span class="source-line-no">814</span><span id="line-814"></span>
-<span class="source-line-no">815</span><span id="line-815">    /**</span>
-<span class="source-line-no">816</span><span id="line-816">     * Helper class to hold verification results for a step.</span>
-<span class="source-line-no">817</span><span id="line-817">     */</span>
-<span class="source-line-no">818</span><span id="line-818">    private static class VerifyResult {</span>
-<span class="source-line-no">819</span><span id="line-819">        int okCount = 0;</span>
-<span class="source-line-no">820</span><span id="line-820">        int warnCount = 0;</span>
-<span class="source-line-no">821</span><span id="line-821">        int errorCount = 0;</span>
-<span class="source-line-no">822</span><span id="line-822">        int infoCount = 0;</span>
-<span class="source-line-no">823</span><span id="line-823">        String extraInfo = null;</span>
-<span class="source-line-no">824</span><span id="line-824">    }</span>
-<span class="source-line-no">825</span><span id="line-825"></span>
-<span class="source-line-no">826</span><span id="line-826">}</span>
+<span class="source-line-no">669</span><span id="line-669">        sb.append("\n");</span>
+<span class="source-line-no">670</span><span id="line-670">        sb.append(String.format("| %-35s | %-20s |\n", "Item", "Status"));</span>
+<span class="source-line-no">671</span><span id="line-671">        sb.append("|-------------------------------------|----------------------|\n");</span>
+<span class="source-line-no">672</span><span id="line-672"></span>
+<span class="source-line-no">673</span><span id="line-673">        // Mapping from vertex names to display names and aggregation</span>
+<span class="source-line-no">674</span><span id="line-674">        String[][] mappings = {</span>
+<span class="source-line-no">675</span><span id="line-675">            {"verify-repos", "Document repositories"},</span>
+<span class="source-line-no">676</span><span id="line-676">            {"verify-utility-cli", "Utility-cli"},</span>
+<span class="source-line-no">677</span><span id="line-677">            {"verify-utility-sau3", "Utility-sau3"},</span>
+<span class="source-line-no">678</span><span id="line-678">            {"verify-builds", "Docusaurus builds"},</span>
+<span class="source-line-no">679</span><span id="line-679">            {"verify-public-html", "public_html deploy"},</span>
+<span class="source-line-no">680</span><span id="line-680">            {"verify-apache", "Apache2 + UserDir"},</span>
+<span class="source-line-no">681</span><span id="line-681">            {"verify-opensearch-install", "OpenSearch install"},</span>
+<span class="source-line-no">682</span><span id="line-682">            {"verify-opensearch-running", "OpenSearch status"},</span>
+<span class="source-line-no">683</span><span id="line-683">            {"verify-docusearch-build", "quarkus-docusearch build"},</span>
+<span class="source-line-no">684</span><span id="line-684">            {"verify-docusearch-running", "quarkus-docusearch server"},</span>
+<span class="source-line-no">685</span><span id="line-685">            {"verify-search-index", "Search index"},</span>
+<span class="source-line-no">686</span><span id="line-686">            {"verify-web-access", "Web access"},</span>
+<span class="source-line-no">687</span><span id="line-687">        };</span>
+<span class="source-line-no">688</span><span id="line-688"></span>
+<span class="source-line-no">689</span><span id="line-689">        int totalOk = 0, totalWarn = 0, totalError = 0;</span>
+<span class="source-line-no">690</span><span id="line-690">        List&lt;String&gt; errorDetails = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">691</span><span id="line-691">        List&lt;String&gt; warnDetails = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">692</span><span id="line-692"></span>
+<span class="source-line-no">693</span><span id="line-693">        for (String[] mapping : mappings) {</span>
+<span class="source-line-no">694</span><span id="line-694">            String vertexName = mapping[0];</span>
+<span class="source-line-no">695</span><span id="line-695">            String displayName = mapping[1];</span>
+<span class="source-line-no">696</span><span id="line-696">            VerifyResult result = resultsByVertex.get(vertexName);</span>
+<span class="source-line-no">697</span><span id="line-697"></span>
+<span class="source-line-no">698</span><span id="line-698">            if (result == null) {</span>
+<span class="source-line-no">699</span><span id="line-699">                sb.append(String.format("| %-35s | %-20s |\n", displayName, "-"));</span>
+<span class="source-line-no">700</span><span id="line-700">                continue;</span>
+<span class="source-line-no">701</span><span id="line-701">            }</span>
+<span class="source-line-no">702</span><span id="line-702"></span>
+<span class="source-line-no">703</span><span id="line-703">            totalOk += result.okCount;</span>
+<span class="source-line-no">704</span><span id="line-704">            totalWarn += result.warnCount;</span>
+<span class="source-line-no">705</span><span id="line-705">            totalError += result.errorCount;</span>
+<span class="source-line-no">706</span><span id="line-706"></span>
+<span class="source-line-no">707</span><span id="line-707">            String status = formatStatus(result);</span>
+<span class="source-line-no">708</span><span id="line-708">            sb.append(String.format("| %-35s | %-20s |\n", displayName, status));</span>
+<span class="source-line-no">709</span><span id="line-709"></span>
+<span class="source-line-no">710</span><span id="line-710">            // Collect error/warning details</span>
+<span class="source-line-no">711</span><span id="line-711">            if (result.errorCount &gt; 0) {</span>
+<span class="source-line-no">712</span><span id="line-712">                errorDetails.add(displayName + ": " + result.errorCount + " error(s)");</span>
+<span class="source-line-no">713</span><span id="line-713">            }</span>
+<span class="source-line-no">714</span><span id="line-714">            if (result.warnCount &gt; 0) {</span>
+<span class="source-line-no">715</span><span id="line-715">                warnDetails.add(displayName + ": " + result.warnCount + " warning(s)");</span>
+<span class="source-line-no">716</span><span id="line-716">            }</span>
+<span class="source-line-no">717</span><span id="line-717">        }</span>
+<span class="source-line-no">718</span><span id="line-718"></span>
+<span class="source-line-no">719</span><span id="line-719">        sb.append("|-------------------------------------|----------------------|\n");</span>
+<span class="source-line-no">720</span><span id="line-720">        sb.append(String.format("| %-35s | %d OK, %d WARN, %d ERR |\n",</span>
+<span class="source-line-no">721</span><span id="line-721">            "TOTAL", totalOk, totalWarn, totalError));</span>
+<span class="source-line-no">722</span><span id="line-722">        sb.append("============================================================\n");</span>
+<span class="source-line-no">723</span><span id="line-723"></span>
+<span class="source-line-no">724</span><span id="line-724">        // Show error details if any</span>
+<span class="source-line-no">725</span><span id="line-725">        if (!errorDetails.isEmpty()) {</span>
+<span class="source-line-no">726</span><span id="line-726">            sb.append("\n--- Errors ---\n");</span>
+<span class="source-line-no">727</span><span id="line-727">            for (String detail : errorDetails) {</span>
+<span class="source-line-no">728</span><span id="line-728">                sb.append("  * ").append(detail).append("\n");</span>
+<span class="source-line-no">729</span><span id="line-729">            }</span>
+<span class="source-line-no">730</span><span id="line-730">        }</span>
+<span class="source-line-no">731</span><span id="line-731"></span>
+<span class="source-line-no">732</span><span id="line-732">        // Show warning details if any</span>
+<span class="source-line-no">733</span><span id="line-733">        if (!warnDetails.isEmpty()) {</span>
+<span class="source-line-no">734</span><span id="line-734">            sb.append("\n--- Warnings ---\n");</span>
+<span class="source-line-no">735</span><span id="line-735">            for (String detail : warnDetails) {</span>
+<span class="source-line-no">736</span><span id="line-736">                sb.append("  * ").append(detail).append("\n");</span>
+<span class="source-line-no">737</span><span id="line-737">            }</span>
+<span class="source-line-no">738</span><span id="line-738">        }</span>
+<span class="source-line-no">739</span><span id="line-739"></span>
+<span class="source-line-no">740</span><span id="line-740">        sb.append("\n");</span>
+<span class="source-line-no">741</span><span id="line-741">        if (totalError == 0 &amp;&amp; totalWarn == 0) {</span>
+<span class="source-line-no">742</span><span id="line-742">            sb.append("All checks passed!\n");</span>
+<span class="source-line-no">743</span><span id="line-743">        } else if (totalError &gt; 0) {</span>
+<span class="source-line-no">744</span><span id="line-744">            sb.append("To fix issues, run:\n");</span>
+<span class="source-line-no">745</span><span id="line-745">            sb.append("  ./actor_iac.java --dir ./docu-search --workflow main-setup\n");</span>
+<span class="source-line-no">746</span><span id="line-746">        }</span>
+<span class="source-line-no">747</span><span id="line-747"></span>
+<span class="source-line-no">748</span><span id="line-748">        String summary = sb.toString();</span>
+<span class="source-line-no">749</span><span id="line-749">        System.out.println(summary);</span>
+<span class="source-line-no">750</span><span id="line-750">        return new ActionResult(true, summary);</span>
+<span class="source-line-no">751</span><span id="line-751">    }</span>
+<span class="source-line-no">752</span><span id="line-752"></span>
+<span class="source-line-no">753</span><span id="line-753">    /**</span>
+<span class="source-line-no">754</span><span id="line-754">     * Formats the status string for a verification result.</span>
+<span class="source-line-no">755</span><span id="line-755">     */</span>
+<span class="source-line-no">756</span><span id="line-756">    private String formatStatus(VerifyResult result) {</span>
+<span class="source-line-no">757</span><span id="line-757">        if (result.errorCount &gt; 0) {</span>
+<span class="source-line-no">758</span><span id="line-758">            if (result.okCount &gt; 0) {</span>
+<span class="source-line-no">759</span><span id="line-759">                return String.format("%d OK, %d ERROR", result.okCount, result.errorCount);</span>
+<span class="source-line-no">760</span><span id="line-760">            }</span>
+<span class="source-line-no">761</span><span id="line-761">            return "ERROR";</span>
+<span class="source-line-no">762</span><span id="line-762">        }</span>
+<span class="source-line-no">763</span><span id="line-763">        if (result.warnCount &gt; 0) {</span>
+<span class="source-line-no">764</span><span id="line-764">            if (result.okCount &gt; 0) {</span>
+<span class="source-line-no">765</span><span id="line-765">                return String.format("%d OK, %d WARN", result.okCount, result.warnCount);</span>
+<span class="source-line-no">766</span><span id="line-766">            }</span>
+<span class="source-line-no">767</span><span id="line-767">            return "WARN";</span>
+<span class="source-line-no">768</span><span id="line-768">        }</span>
+<span class="source-line-no">769</span><span id="line-769">        if (result.okCount &gt; 0) {</span>
+<span class="source-line-no">770</span><span id="line-770">            String extra = result.extraInfo != null ? " " + result.extraInfo : "";</span>
+<span class="source-line-no">771</span><span id="line-771">            return result.okCount + " OK" + extra;</span>
+<span class="source-line-no">772</span><span id="line-772">        }</span>
+<span class="source-line-no">773</span><span id="line-773">        return "OK";</span>
+<span class="source-line-no">774</span><span id="line-774">    }</span>
+<span class="source-line-no">775</span><span id="line-775"></span>
+<span class="source-line-no">776</span><span id="line-776">    /**</span>
+<span class="source-line-no">777</span><span id="line-777">     * Extracts special information from log messages (like document count, cluster health).</span>
+<span class="source-line-no">778</span><span id="line-778">     */</span>
+<span class="source-line-no">779</span><span id="line-779">    private void extractSpecialInfo(String message, VerifyResult result) {</span>
+<span class="source-line-no">780</span><span id="line-780">        // Extract document count from search index</span>
+<span class="source-line-no">781</span><span id="line-781">        if (message.contains("documents")) {</span>
+<span class="source-line-no">782</span><span id="line-782">            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)\\s+documents").matcher(message);</span>
+<span class="source-line-no">783</span><span id="line-783">            if (m.find()) {</span>
+<span class="source-line-no">784</span><span id="line-784">                result.extraInfo = "(" + m.group(1) + " docs)";</span>
+<span class="source-line-no">785</span><span id="line-785">            }</span>
+<span class="source-line-no">786</span><span id="line-786">        }</span>
+<span class="source-line-no">787</span><span id="line-787">        // Extract cluster health</span>
+<span class="source-line-no">788</span><span id="line-788">        if (message.contains("Cluster health:")) {</span>
+<span class="source-line-no">789</span><span id="line-789">            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Cluster health:\\s*(\\w+)").matcher(message);</span>
+<span class="source-line-no">790</span><span id="line-790">            if (m.find()) {</span>
+<span class="source-line-no">791</span><span id="line-791">                result.extraInfo = "(" + m.group(1) + ")";</span>
+<span class="source-line-no">792</span><span id="line-792">            }</span>
+<span class="source-line-no">793</span><span id="line-793">        }</span>
+<span class="source-line-no">794</span><span id="line-794">        // Extract web access count</span>
+<span class="source-line-no">795</span><span id="line-795">        if (message.contains("Accessible at")) {</span>
+<span class="source-line-no">796</span><span id="line-796">            // Count from "X / Y" pattern is handled by OK count</span>
+<span class="source-line-no">797</span><span id="line-797">        }</span>
+<span class="source-line-no">798</span><span id="line-798">    }</span>
+<span class="source-line-no">799</span><span id="line-799"></span>
+<span class="source-line-no">800</span><span id="line-800">    /**</span>
+<span class="source-line-no">801</span><span id="line-801">     * Counts occurrences of a substring in a string.</span>
+<span class="source-line-no">802</span><span id="line-802">     */</span>
+<span class="source-line-no">803</span><span id="line-803">    private int countOccurrences(String text, String sub) {</span>
+<span class="source-line-no">804</span><span id="line-804">        int count = 0;</span>
+<span class="source-line-no">805</span><span id="line-805">        int idx = 0;</span>
+<span class="source-line-no">806</span><span id="line-806">        while ((idx = text.indexOf(sub, idx)) != -1) {</span>
+<span class="source-line-no">807</span><span id="line-807">            count++;</span>
+<span class="source-line-no">808</span><span id="line-808">            idx += sub.length();</span>
+<span class="source-line-no">809</span><span id="line-809">        }</span>
+<span class="source-line-no">810</span><span id="line-810">        return count;</span>
+<span class="source-line-no">811</span><span id="line-811">    }</span>
+<span class="source-line-no">812</span><span id="line-812"></span>
+<span class="source-line-no">813</span><span id="line-813">    /**</span>
+<span class="source-line-no">814</span><span id="line-814">     * Helper class to hold verification results for a step.</span>
+<span class="source-line-no">815</span><span id="line-815">     */</span>
+<span class="source-line-no">816</span><span id="line-816">    private static class VerifyResult {</span>
+<span class="source-line-no">817</span><span id="line-817">        int okCount = 0;</span>
+<span class="source-line-no">818</span><span id="line-818">        int warnCount = 0;</span>
+<span class="source-line-no">819</span><span id="line-819">        int errorCount = 0;</span>
+<span class="source-line-no">820</span><span id="line-820">        int infoCount = 0;</span>
+<span class="source-line-no">821</span><span id="line-821">        String extraInfo = null;</span>
+<span class="source-line-no">822</span><span id="line-822">    }</span>
+<span class="source-line-no">823</span><span id="line-823"></span>
+<span class="source-line-no">824</span><span id="line-824">}</span>
 
 
 

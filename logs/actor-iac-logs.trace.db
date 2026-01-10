@@ -1,0 +1,21 @@
+2026-01-10 14:59:32.725679+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT COUNT(*) FROM sessions [42104-224]
+2026-01-10 15:18:29.798142+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT * FROM sessions ORDER BY id [42104-224]
+2026-01-10 15:19:47.832245+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT COUNT(*) FROM sessions [42104-224]
+2026-01-10 15:22:21.298309+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT COUNT(*) FROM sessions [42104-224]
+2026-01-10 15:22:51.684659+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT 1 FROM sessions WHERE 1=0 [42104-224]
+2026-01-10 15:23:03.471800+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT 1 FROM sessions WHERE 1=0 [42104-224]
+2026-01-10 15:23:15.735744+09:00 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Table "SESSIONS" not found (this database is empty); SQL statement:
+SELECT 1 FROM sessions WHERE 1=0 [42104-224]
