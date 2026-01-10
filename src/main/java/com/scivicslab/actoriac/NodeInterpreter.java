@@ -17,8 +17,13 @@
 
 package com.scivicslab.actoriac;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -64,6 +69,12 @@ public class NodeInterpreter extends Interpreter {
      * The current vertex YAML snippet (first 10 lines) for accumulator reporting.
      */
     private String currentVertexYaml = "";
+
+    /**
+     * Set of changed document names detected by workflow.
+     * This replaces the /tmp/changed_docs.txt file-based approach.
+     */
+    private final Set<String> changedDocuments = new HashSet<>();
 
     /**
      * Constructs a NodeInterpreter that wraps the specified Node.
@@ -236,5 +247,391 @@ public class NodeInterpreter extends Interpreter {
             logger.log(Level.SEVERE, "Error running workflow with overlay: " + workflowFile, e);
             return new ActionResult(false, "Error: " + e.getMessage());
         }
+    }
+
+    // ========================================================================
+    // Document Change Detection API (replaces /tmp file-based approach)
+    // ========================================================================
+
+    /**
+     * Detects changed documents and stores them in POJO state.
+     *
+     * <p>This method replaces the shell script that wrote to /tmp/changed_docs.txt.
+     * It reads the document list, checks git status for each, and stores changed
+     * document names in the changedDocuments set.</p>
+     *
+     * @param docListPath path to the document list file
+     * @return ActionResult with detection summary
+     * @throws IOException if file operations fail
+     */
+    public ActionResult detectDocumentChanges(String docListPath) throws IOException {
+        // Clear previous results
+        changedDocuments.clear();
+
+        // Expand ~ to home directory
+        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));
+        Path listPath = Path.of(expandedPath);
+
+        if (!Files.exists(listPath)) {
+            return new ActionResult(false, "Document list not found: " + docListPath);
+        }
+
+        // Check for FORCE_FULL_BUILD environment variable
+        boolean forceBuild = "true".equalsIgnoreCase(System.getenv("FORCE_FULL_BUILD"));
+
+        StringBuilder summary = new StringBuilder();
+
+        if (forceBuild) {
+            summary.append("=== FORCE_FULL_BUILD enabled: processing all documents ===\n");
+        } else {
+            summary.append("=== Detecting changes via git fetch ===\n");
+        }
+
+        try (BufferedReader reader = Files.newBufferedReader(listPath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+
+                // Skip comments and empty lines
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+
+                // Parse: path git_url
+                String[] parts = line.split("\\s+", 2);
+                String path = parts[0].replace("~", System.getProperty("user.home"));
+                String docName = Path.of(path).getFileName().toString();
+
+                if (forceBuild) {
+                    changedDocuments.add(docName);
+                    summary.append("  [FORCE] ").append(docName).append("\n");
+                    continue;
+                }
+
+                // Check document status
+                Path docPath = Path.of(path);
+                Path gitPath = docPath.resolve(".git");
+
+                if (!Files.exists(docPath)) {
+                    // New document
+                    changedDocuments.add(docName);
+                    summary.append("  [NEW] ").append(docName).append("\n");
+                } else if (!Files.exists(gitPath)) {
+                    // Not a git repository
+                    changedDocuments.add(docName);
+                    summary.append("  [NO-GIT] ").append(docName).append("\n");
+                } else {
+                    // Check for remote changes using git
+                    String status = checkGitStatus(docPath);
+                    if (status.startsWith("[CHANGED]") || status.startsWith("[UNKNOWN]")) {
+                        changedDocuments.add(docName);
+                    }
+                    summary.append("  ").append(status).append(" ").append(docName).append("\n");
+                }
+            }
+        }
+
+        summary.append("\n=== Change detection summary ===\n");
+        if (changedDocuments.isEmpty()) {
+            summary.append("No changes detected. All documents are up to date.\n");
+        } else {
+            summary.append("Documents to process: ").append(changedDocuments.size()).append("\n");
+            for (String doc : changedDocuments) {
+                summary.append(doc).append("\n");
+            }
+        }
+
+        // Print summary (like the original shell script did)
+        System.out.println(summary);
+
+        return new ActionResult(true, "Detected " + changedDocuments.size() + " changed documents");
+    }
+
+    /**
+     * Checks git status for a document directory.
+     *
+     * @param docPath path to the document directory
+     * @return status string like "[CHANGED]", "[UP-TO-DATE]", or "[UNKNOWN]"
+     */
+    private String checkGitStatus(Path docPath) {
+        try {
+            // git fetch
+            ProcessBuilder fetchPb = new ProcessBuilder("git", "fetch", "origin");
+            fetchPb.directory(docPath.toFile());
+            fetchPb.redirectErrorStream(true);
+            Process fetchProcess = fetchPb.start();
+            fetchProcess.waitFor();
+
+            // Get local HEAD
+            String local = runGitCommand(docPath, "git", "rev-parse", "HEAD");
+
+            // Get remote HEAD (try main first, then master)
+            String remote = runGitCommand(docPath, "git", "rev-parse", "origin/main");
+            if (remote == null || remote.equals("unknown")) {
+                remote = runGitCommand(docPath, "git", "rev-parse", "origin/master");
+            }
+
+            if (local == null || remote == null || local.equals("unknown") || remote.equals("unknown")) {
+                return "[UNKNOWN] (cannot determine state)";
+            }
+
+            if (!local.equals(remote)) {
+                String localShort = local.length() > 7 ? local.substring(0, 7) : local;
+                String remoteShort = remote.length() > 7 ? remote.substring(0, 7) : remote;
+                return "[CHANGED] (local: " + localShort + ", remote: " + remoteShort + ")";
+            }
+
+            return "[UP-TO-DATE]";
+
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Error checking git status for " + docPath, e);
+            return "[UNKNOWN] (error: " + e.getMessage() + ")";
+        }
+    }
+
+    /**
+     * Runs a git command and returns the output.
+     */
+    private String runGitCommand(Path workDir, String... command) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(workDir.toFile());
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line = reader.readLine();
+                process.waitFor();
+                return line != null ? line.trim() : "unknown";
+            }
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * Checks if a specific document is in the changed list.
+     *
+     * @param docName the document name to check
+     * @return true if the document was detected as changed
+     */
+    public boolean isDocumentChanged(String docName) {
+        return changedDocuments.contains(docName);
+    }
+
+    /**
+     * Gets the number of changed documents.
+     *
+     * @return the count of changed documents
+     */
+    public int getChangedDocumentsCount() {
+        return changedDocuments.size();
+    }
+
+    /**
+     * Gets all changed document names.
+     *
+     * @return unmodifiable set of changed document names
+     */
+    public Set<String> getChangedDocuments() {
+        return Set.copyOf(changedDocuments);
+    }
+
+    /**
+     * Checks if there are any changed documents to process.
+     *
+     * @return true if at least one document needs processing
+     */
+    public boolean hasChangedDocuments() {
+        return !changedDocuments.isEmpty();
+    }
+
+    /**
+     * Clears the changed documents list.
+     */
+    public void clearChangedDocuments() {
+        changedDocuments.clear();
+    }
+
+    /**
+     * Adds a document to the changed list (for testing or manual override).
+     *
+     * @param docName the document name to add
+     */
+    public void addChangedDocument(String docName) {
+        changedDocuments.add(docName);
+    }
+
+    /**
+     * Clones changed documents from git.
+     *
+     * <p>Only clones documents that are in the changedDocuments set.
+     * Removes existing directory and does fresh clone to avoid conflicts.</p>
+     *
+     * @param docListPath path to the document list file
+     * @return ActionResult with clone summary
+     * @throws IOException if operations fail
+     */
+    public ActionResult cloneChangedDocuments(String docListPath) throws IOException {
+        if (changedDocuments.isEmpty()) {
+            System.out.println("=== No documents to clone (all up to date) ===");
+            return new ActionResult(true, "No documents to clone");
+        }
+
+        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));
+        Path listPath = Path.of(expandedPath);
+
+        // Ensure ~/works exists
+        node.executeCommand("mkdir -p ~/works");
+
+        System.out.println("=== Cloning changed documents ===");
+        int clonedCount = 0;
+
+        try (BufferedReader reader = Files.newBufferedReader(listPath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+
+                String[] parts = line.split("\\s+", 2);
+                String path = parts[0];
+                String gitUrl = parts.length > 1 ? parts[1] : null;
+                String docName = Path.of(path).getFileName().toString();
+
+                if (!changedDocuments.contains(docName)) {
+                    System.out.println("  [SKIP] " + docName + " (unchanged)");
+                    continue;
+                }
+
+                if (gitUrl != null && !gitUrl.isEmpty()) {
+                    // Remove old and clone fresh
+                    System.out.println("=== Cloning: " + gitUrl + " -> " + path + " ===");
+                    node.executeCommand("rm -rf " + path);
+                    Node.CommandResult result = node.executeCommand("git clone " + gitUrl + " " + path);
+                    if (result.getExitCode() == 0) {
+                        clonedCount++;
+                    } else {
+                        System.err.println("Clone failed: " + result.getStderr());
+                    }
+                } else {
+                    System.out.println("=== No git URL specified for: " + path + " ===");
+                }
+            }
+        }
+
+        return new ActionResult(true, "Cloned " + clonedCount + " documents");
+    }
+
+    /**
+     * Builds changed Docusaurus documents.
+     *
+     * <p>Only builds documents that are in the changedDocuments set.</p>
+     *
+     * @param docListPath path to the document list file
+     * @return ActionResult with build summary
+     * @throws IOException if operations fail
+     */
+    public ActionResult buildChangedDocuments(String docListPath) throws IOException {
+        if (changedDocuments.isEmpty()) {
+            System.out.println("=== No documents to build (all up to date) ===");
+            return new ActionResult(true, "No documents to build");
+        }
+
+        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));
+        Path listPath = Path.of(expandedPath);
+
+        System.out.println("=== Building changed documents ===");
+        int builtCount = 0;
+
+        try (BufferedReader reader = Files.newBufferedReader(listPath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+
+                String[] parts = line.split("\\s+", 2);
+                String path = parts[0];
+                String docName = Path.of(path).getFileName().toString();
+
+                if (!changedDocuments.contains(docName)) {
+                    System.out.println("  [SKIP] " + docName + " (unchanged)");
+                    continue;
+                }
+
+                System.out.println("=== Building: " + path + " ===");
+                Node.CommandResult result = node.executeCommand(
+                    "cd " + path + " && yarn install && yarn build"
+                );
+                if (result.getExitCode() == 0) {
+                    builtCount++;
+                } else {
+                    System.err.println("Build failed for " + docName + ": " + result.getStderr());
+                }
+            }
+        }
+
+        return new ActionResult(true, "Built " + builtCount + " documents");
+    }
+
+    /**
+     * Copies changed document builds to public_html.
+     *
+     * <p>Only copies documents that are in the changedDocuments set.</p>
+     *
+     * @param docListPath path to the document list file
+     * @return ActionResult with copy summary
+     * @throws IOException if operations fail
+     */
+    public ActionResult deployChangedDocuments(String docListPath) throws IOException {
+        // Ensure public_html exists
+        node.executeCommand("mkdir -p ~/public_html");
+
+        if (changedDocuments.isEmpty()) {
+            System.out.println("=== No documents to copy (all up to date) ===");
+            node.executeCommand("ls -la ~/public_html/");
+            return new ActionResult(true, "No documents to copy");
+        }
+
+        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));
+        Path listPath = Path.of(expandedPath);
+
+        System.out.println("=== Copying changed documents to public_html ===");
+        int copiedCount = 0;
+
+        try (BufferedReader reader = Files.newBufferedReader(listPath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+
+                String[] parts = line.split("\\s+", 2);
+                String path = parts[0];
+                String docName = Path.of(path).getFileName().toString();
+
+                if (!changedDocuments.contains(docName)) {
+                    System.out.println("  [SKIP] " + docName + " (unchanged)");
+                    continue;
+                }
+
+                String buildPath = path + "/build";
+                String destPath = "~/public_html/" + docName;
+
+                System.out.println("=== Copying " + docName + " to public_html ===");
+                node.executeCommand("rm -rf " + destPath);
+                Node.CommandResult result = node.executeCommand(
+                    "cp -r " + buildPath + " " + destPath
+                );
+                if (result.getExitCode() == 0) {
+                    copiedCount++;
+                } else {
+                    System.err.println("Copy failed for " + docName + ": " + result.getStderr());
+                }
+            }
+        }
+
+        System.out.println("=== public_html contents ===");
+        node.executeCommand("ls -la ~/public_html/");
+
+        return new ActionResult(true, "Deployed " + copiedCount + " documents");
     }
 }

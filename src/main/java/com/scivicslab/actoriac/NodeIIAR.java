@@ -149,6 +149,12 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 return utilityResult;
             }
 
+            // Document workflow actions
+            ActionResult documentResult = handleDocumentAction(actionName, arg);
+            if (documentResult != null) {
+                return documentResult;
+            }
+
             // Unknown action
             logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
                     this.getName(), actionName, arg));
@@ -276,6 +282,62 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
 
             default:
                 return null; // Not a utility action
+        }
+    }
+
+    /**
+     * Handles document workflow actions (detect, clone, build, deploy).
+     *
+     * @param actionName the action name
+     * @param arg the argument string
+     * @return ActionResult if handled, null if not a document action
+     */
+    private ActionResult handleDocumentAction(String actionName, String arg)
+            throws InterruptedException, ExecutionException {
+
+        switch (actionName) {
+            case "detectDocumentChanges":
+                return this.ask(n -> {
+                    try {
+                        String docListPath = extractCommandFromArgs(arg);
+                        return n.detectDocumentChanges(docListPath);
+                    } catch (IOException e) {
+                        return new ActionResult(false, "Error detecting changes: " + e.getMessage());
+                    }
+                }).get();
+
+            case "cloneChangedDocuments":
+                return this.ask(n -> {
+                    try {
+                        String docListPath = extractCommandFromArgs(arg);
+                        return n.cloneChangedDocuments(docListPath);
+                    } catch (IOException e) {
+                        return new ActionResult(false, "Error cloning documents: " + e.getMessage());
+                    }
+                }).get();
+
+            case "buildChangedDocuments":
+                return this.ask(n -> {
+                    try {
+                        String docListPath = extractCommandFromArgs(arg);
+                        return n.buildChangedDocuments(docListPath);
+                    } catch (IOException e) {
+                        return new ActionResult(false, "Error building documents: " + e.getMessage());
+                    }
+                }).get();
+
+            case "deployChangedDocuments":
+                return this.ask(n -> {
+                    try {
+                        String docListPath = extractCommandFromArgs(arg);
+                        return n.deployChangedDocuments(docListPath);
+                    } catch (IOException e) {
+                        return new ActionResult(false, "Error deploying documents: " + e.getMessage());
+                    }
+                }).get();
+
+            default:
+                return null; // Not a document action
         }
     }
 
