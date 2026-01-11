@@ -11,7 +11,43 @@
     <packaging>jar</packaging>
 
     <name>actor-IaC</name>
+    <description>Actor-based Infrastructure as Code - A CLI tool for executing SSH-based workflow automation using the POJO-actor framework.</description>
     <url>https://github.com/scivicslab/actor-IaC</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>scivicslab</id>
+            <name>Scivics Lab</name>
+            <email>devteam@scivics-lab.com</email>
+            <organization>Scivics Lab</organization>
+            <organizationUrl>https://scivics-lab.com</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/scivicslab/actor-IaC.git</connection>
+        <developerConnection>scm:git:ssh://github.com:scivicslab/actor-IaC.git</developerConnection>
+        <url>https://github.com/scivicslab/actor-IaC</url>
+    </scm>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -21,8 +57,8 @@
 
         <dependency>
             <groupId>com.scivicslab</groupId>
-            <artifactId>POJO-actor</artifactId>
-            <version>2.10.0</version>
+            <artifactId>pojo-actor</artifactId>
+            <version>2.11.0</version>
         </dependency>
 
         <dependency>
@@ -164,9 +200,24 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.3.2</version>
+                <version>3.6.3</version>
                 <configuration>
+                    <doclint>none</doclint>
                     <docfilessubdirs>true</docfilessubdirs>
                     <linksource>true</linksource>
                     <show>private</show>
@@ -175,6 +226,12 @@
                 </configuration>
                 <executions>
                     <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                    <execution>
                         <id>generate-javadoc</id>
                         <phase>verify</phase>
                         <goals>
@@ -182,6 +239,31 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.6.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                </configuration>
             </plugin>
 
             <plugin>
