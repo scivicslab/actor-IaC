@@ -116,7 +116,7 @@ public class LogServerCLI implements Callable<Integer> {
 
     @Option(
         names = {"--info-port"},
-        description = "HTTP port for info API (default: TCP port + 1000)"
+        description = "HTTP port for info API (default: TCP port - 200)"
     )
     private Integer infoPort;
 
@@ -156,8 +156,8 @@ public class LogServerCLI implements Callable<Integer> {
     /** Scheduler for periodic connection checks */
     private java.util.concurrent.ScheduledExecutorService scheduler;
 
-    /** Default offset from TCP port to HTTP port */
-    private static final int HTTP_PORT_OFFSET = 1000;
+    /** Default offset from TCP port to HTTP port (TCP - 200 = HTTP) */
+    private static final int HTTP_PORT_OFFSET = -200;
 
     /** Ports to scan for H2 servers (actor-IaC reserved range: 29090-29100) */
     private static final int[] SCAN_PORTS = {29090, 29091, 29092, 29093, 29094, 29095, 29096, 29097, 29098, 29099, 29100};
@@ -671,7 +671,7 @@ public class LogServerCLI implements Callable<Integer> {
      * First tries HTTP API, then falls back to database queries.
      */
     private void tryGetLogServerInfo(ServerInfo info) {
-        // First, try HTTP API (port + 1000)
+        // First, try HTTP API (TCP port - 200)
         if (tryGetInfoFromHttpApi(info, info.port + HTTP_PORT_OFFSET)) {
             return;
         }

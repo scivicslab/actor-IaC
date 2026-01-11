@@ -33,12 +33,12 @@ import java.util.regex.Pattern;
  * Discovers running H2 log servers that match a specific database path.
  *
  * <p>This class scans the actor-IaC reserved port range (29090-29100) and uses the
- * HTTP info API (port + 1000) to find servers that are serving a specific database.</p>
+ * HTTP info API (TCP port - 200) to find servers that are serving a specific database.</p>
  *
  * <p><strong>Discovery Flow:</strong></p>
  * <pre>
  * 1. Check if target DB file exists
- * 2. Scan HTTP ports 30090-30100 for /info API
+ * 2. Scan HTTP ports 28890-28900 for /info API
  * 3. Compare db_path from API with target path
  * 4. Return matching server's TCP port if found
  * </pre>
@@ -54,8 +54,8 @@ public class LogServerDiscovery {
     private static final int TCP_PORT_START = 29090;
     private static final int TCP_PORT_END = 29100;
 
-    /** Offset from TCP port to HTTP port */
-    private static final int HTTP_PORT_OFFSET = 1000;
+    /** Offset from TCP port to HTTP port (TCP - 200 = HTTP) */
+    private static final int HTTP_PORT_OFFSET = -200;
 
     /** Connection timeout in milliseconds */
     private static final int CONNECT_TIMEOUT = 1000;
