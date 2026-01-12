@@ -60,28 +60,28 @@ public interface DistributedLogStore extends AutoCloseable {
     void log(long sessionId, String nodeId, LogLevel level, String message);
 
     /**
-     * Records a log entry with step context.
+     * Records a log entry with transition context.
      *
      * @param sessionId session ID from startSession()
      * @param nodeId identifier of the node
-     * @param stepLabel current step label in workflow
+     * @param label current label in workflow
      * @param level log level
      * @param message log message
      */
-    void log(long sessionId, String nodeId, String stepLabel, LogLevel level, String message);
+    void log(long sessionId, String nodeId, String label, LogLevel level, String message);
 
     /**
      * Records an action result.
      *
      * @param sessionId session ID
      * @param nodeId node identifier
-     * @param stepLabel step label
+     * @param label label
      * @param actionName action/method name
      * @param exitCode command exit code (0 for success)
      * @param durationMs execution duration in milliseconds
      * @param output command output or result message
      */
-    void logAction(long sessionId, String nodeId, String stepLabel,
+    void logAction(long sessionId, String nodeId, String label,
                    String actionName, int exitCode, long durationMs, String output);
 
     /**

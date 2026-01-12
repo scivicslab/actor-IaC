@@ -174,9 +174,9 @@ public class NodeInterpreter extends Interpreter {
     }
 
     /**
-     * Hook called when entering a step during workflow execution.
+     * Hook called when entering a transition during workflow execution.
      *
-     * <p>Displays the workflow name and first 10 lines of the step definition
+     * <p>Displays the workflow name and first 10 lines of the transition definition
      * in YAML format using cowsay to provide visual separation between workflow steps.</p>
      *
      * @param transition the transition being entered
@@ -192,7 +192,7 @@ public class NodeInterpreter extends Interpreter {
         String yamlText = transition.toYamlString(10).trim();
         this.currentTransitionYaml = yamlText;
 
-        // Combine workflow name and step YAML
+        // Combine workflow name and transition YAML
         String displayText = "[" + workflowName + "]\n" + yamlText;
         String[] cowsayArgs = { displayText };
         System.out.println(Cowsay.say(cowsayArgs));

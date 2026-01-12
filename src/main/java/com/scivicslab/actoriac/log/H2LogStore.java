@@ -199,14 +199,14 @@ public class H2LogStore implements DistributedLogStore {
             }
 
             // Logs table
-            // step_label and action_name use CLOB to store long YAML snippets
+            // label and action_name use CLOB to store long YAML snippets
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS logs (
                     id IDENTITY PRIMARY KEY,
                     session_id BIGINT,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     node_id VARCHAR(255) NOT NULL,
-                    step_label CLOB,
+                    label CLOB,
                     action_name CLOB,
                     level VARCHAR(10) NOT NULL,
                     message CLOB,
@@ -314,15 +314,15 @@ public class H2LogStore implements DistributedLogStore {
     }
 
     @Override
-    public void log(long sessionId, String nodeId, String stepLabel, LogLevel level, String message) {
-        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, stepLabel, null, level, message, null, null));
+    public void log(long sessionId, String nodeId, String label, LogLevel level, String message) {
+        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, null, level, message, null, null));
     }
 
     @Override
-    public void logAction(long sessionId, String nodeId, String stepLabel,
+    public void logAction(long sessionId, String nodeId, String label,
                           String actionName, int exitCode, long durationMs, String output) {
         LogLevel level = exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;
-        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, stepLabel, actionName, level, output, exitCode, durationMs));
+        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, actionName, level, output, exitCode, durationMs));
     }
 
     @Override
@@ -526,7 +526,7 @@ public class H2LogStore implements DistributedLogStore {
                 rs.getLong("session_id"),
                 ts != null ? ts.toLocalDateTime() : null,
                 rs.getString("node_id"),
-                rs.getString("step_label"),
+                rs.getString("label"),
                 rs.getString("action_name"),
                 level,
                 rs.getString("message"),
@@ -551,16 +551,16 @@ public class H2LogStore implements DistributedLogStore {
     private interface LogTask {
         void execute(Connection conn) throws SQLException;
 
-        record InsertLog(long sessionId, String nodeId, String stepLabel, String actionName,
+        record InsertLog(long sessionId, String nodeId, String label, String actionName,
                          LogLevel level, String message, Integer exitCode, Long durationMs) implements LogTask {
             @Override
             public void execute(Connection conn) throws SQLException {
                 try (PreparedStatement ps = conn.prepareStatement(
-                        "INSERT INTO logs (session_id, node_id, step_label, action_name, level, message, exit_code, duration_ms) " +
+                        "INSERT INTO logs (session_id, node_id, label, action_name, level, message, exit_code, duration_ms) " +
                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
                     ps.setLong(1, sessionId);
                     ps.setString(2, nodeId);
-                    ps.setString(3, stepLabel);
+                    ps.setString(3, label);
                     ps.setString(4, actionName);
                     ps.setString(5, level.name());
                     ps.setString(6, message);

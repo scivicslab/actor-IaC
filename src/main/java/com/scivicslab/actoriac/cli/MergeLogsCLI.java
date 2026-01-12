@@ -306,7 +306,7 @@ public class MergeLogsCLI implements Callable<Integer> {
                     session_id BIGINT,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     node_id VARCHAR(255) NOT NULL,
-                    step_label CLOB,
+                    label CLOB,
                     action_name CLOB,
                     level VARCHAR(10) NOT NULL,
                     message CLOB,
@@ -470,7 +470,7 @@ public class MergeLogsCLI implements Callable<Integer> {
         int count = 0;
         String selectSql = "SELECT * FROM logs WHERE session_id = ?";
         String insertSql = """
-            INSERT INTO logs (session_id, timestamp, node_id, step_label, action_name,
+            INSERT INTO logs (session_id, timestamp, node_id, label, action_name,
                              level, message, exit_code, duration_ms)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
@@ -484,7 +484,7 @@ public class MergeLogsCLI implements Callable<Integer> {
                     insertPs.setLong(1, newSessionId);
                     insertPs.setTimestamp(2, rs.getTimestamp("timestamp"));
                     insertPs.setString(3, rs.getString("node_id"));
-                    insertPs.setString(4, rs.getString("step_label"));
+                    insertPs.setString(4, rs.getString("label"));
                     insertPs.setString(5, rs.getString("action_name"));
                     insertPs.setString(6, rs.getString("level"));
                     insertPs.setString(7, rs.getString("message"));

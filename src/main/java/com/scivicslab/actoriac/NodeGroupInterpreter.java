@@ -59,7 +59,7 @@ public class NodeGroupInterpreter extends Interpreter {
 
     /**
      * Verbose output flag.
-     * When true, displays full YAML for each step instead of truncated version.
+     * When true, displays full YAML for each transition instead of truncated version.
      */
     private boolean verbose = false;
 
@@ -152,7 +152,7 @@ public class NodeGroupInterpreter extends Interpreter {
     /**
      * Sets verbose mode for detailed output.
      *
-     * <p>When enabled, displays full YAML for each step in cowsay output
+     * <p>When enabled, displays full YAML for each transition in cowsay output
      * instead of the truncated version.</p>
      *
      * @param verbose true to enable verbose output
@@ -200,7 +200,7 @@ public class NodeGroupInterpreter extends Interpreter {
     }
 
     /**
-     * Hook called when entering a step during workflow execution.
+     * Hook called when entering a transition during workflow execution.
      *
      * <p>Displays the workflow name and transition definition using cowsay.
      * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML
@@ -233,11 +233,11 @@ public class NodeGroupInterpreter extends Interpreter {
 
         // Log to distributed log store
         if (logStore != null && sessionId >= 0) {
-            String transitionName = transition.getTransitionName();
-            if (transitionName == null && transition.getStates() != null && transition.getStates().size() >= 2) {
-                transitionName = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
+            String label = transition.getLabel();
+            if (label == null && transition.getStates() != null && transition.getStates().size() >= 2) {
+                label = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
             }
-            logStore.log(sessionId, "nodeGroup", transitionName, LogLevel.INFO,
+            logStore.log(sessionId, "nodeGroup", label, LogLevel.INFO,
                     "Entering transition: " + yamlText.split("\n")[0]);
         }
     }
