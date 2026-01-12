@@ -24,7 +24,7 @@ import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
-import com.scivicslab.pojoactor.workflow.Vertex;
+import com.scivicslab.pojoactor.workflow.Transition;
 
 /**
  * Level 3 wrapper that adds workflow capabilities to a NodeGroup POJO.
@@ -202,43 +202,43 @@ public class NodeGroupInterpreter extends Interpreter {
     /**
      * Hook called when entering a vertex during workflow execution.
      *
-     * <p>Displays the workflow name and vertex definition using cowsay.
+     * <p>Displays the workflow name and transition definition using cowsay.
      * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML
      * after the cowsay output.</p>
      *
-     * @param vertex the vertex being entered
+     * @param transition the transition being entered
      */
     @Override
-    protected void onEnterVertex(Vertex vertex) {
+    protected void onEnterTransition(Transition transition) {
         // Get workflow name
         String workflowName = (getCode() != null && getCode().getName() != null)
                 ? getCode().getName()
                 : "unknown-workflow";
 
         // Get YAML-formatted output (first 10 lines for cowsay)
-        String yamlText = vertex.toYamlString(10).trim();
+        String yamlText = transition.toYamlString(10).trim();
 
-        // Combine workflow name and vertex YAML
+        // Combine workflow name and transition YAML
         String displayText = "[" + workflowName + "]\n" + yamlText;
         String[] cowsayArgs = { displayText };
         System.out.println(Cowsay.say(cowsayArgs));
 
         // In verbose mode, show the full YAML after cowsay
         if (verbose) {
-            String fullYaml = vertex.toYamlString(-1);
-            System.out.println("--- Full vertex YAML ---");
+            String fullYaml = transition.toYamlString(-1);
+            System.out.println("--- Full transition YAML ---");
             System.out.println(fullYaml);
-            System.out.println("------------------------");
+            System.out.println("----------------------------");
         }
 
         // Log to distributed log store
         if (logStore != null && sessionId >= 0) {
-            String vertexName = vertex.getVertexName();
-            if (vertexName == null && vertex.getStates() != null && vertex.getStates().size() >= 2) {
-                vertexName = vertex.getStates().get(0) + " -> " + vertex.getStates().get(1);
+            String transitionName = transition.getTransitionName();
+            if (transitionName == null && transition.getStates() != null && transition.getStates().size() >= 2) {
+                transitionName = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
             }
-            logStore.log(sessionId, "nodeGroup", vertexName, LogLevel.INFO,
-                    "Entering vertex: " + yamlText.split("\n")[0]);
+            logStore.log(sessionId, "nodeGroup", transitionName, LogLevel.INFO,
+                    "Entering transition: " + yamlText.split("\n")[0]);
         }
     }
 }

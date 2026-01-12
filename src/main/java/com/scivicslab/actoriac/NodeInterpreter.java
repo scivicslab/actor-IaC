@@ -31,7 +31,7 @@ import com.github.ricksbrown.cowsay.Cowsay;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
-import com.scivicslab.pojoactor.workflow.Vertex;
+import com.scivicslab.pojoactor.workflow.Transition;
 
 /**
  * Level 3 wrapper that adds workflow capabilities to a Node POJO.
@@ -66,9 +66,9 @@ public class NodeInterpreter extends Interpreter {
     private String overlayDir;
 
     /**
-     * The current vertex YAML snippet (first 10 lines) for accumulator reporting.
+     * The current transition YAML snippet (first 10 lines) for accumulator reporting.
      */
-    private String currentVertexYaml = "";
+    private String currentTransitionYaml = "";
 
     /**
      * Set of changed document names detected by workflow.
@@ -179,18 +179,18 @@ public class NodeInterpreter extends Interpreter {
      * <p>Displays the workflow name and first 10 lines of the vertex definition
      * in YAML format using cowsay to provide visual separation between workflow steps.</p>
      *
-     * @param vertex the vertex being entered
+     * @param transition the transition being entered
      */
     @Override
-    protected void onEnterVertex(Vertex vertex) {
+    protected void onEnterTransition(Transition transition) {
         // Get workflow name
         String workflowName = (getCode() != null && getCode().getName() != null)
                 ? getCode().getName()
                 : "unknown-workflow";
 
         // Get YAML-formatted output (first 10 lines)
-        String yamlText = vertex.toYamlString(10).trim();
-        this.currentVertexYaml = yamlText;
+        String yamlText = transition.toYamlString(10).trim();
+        this.currentTransitionYaml = yamlText;
 
         // Combine workflow name and vertex YAML
         String displayText = "[" + workflowName + "]\n" + yamlText;
@@ -199,12 +199,12 @@ public class NodeInterpreter extends Interpreter {
     }
 
     /**
-     * Returns the current vertex YAML snippet for accumulator reporting.
+     * Returns the current transition YAML snippet for accumulator reporting.
      *
-     * @return the first 10 lines of the current vertex in YAML format
+     * @return the first 10 lines of the current transition in YAML format
      */
-    public String getCurrentVertexYaml() {
-        return currentVertexYaml;
+    public String getCurrentTransitionYaml() {
+        return currentTransitionYaml;
     }
 
     /**

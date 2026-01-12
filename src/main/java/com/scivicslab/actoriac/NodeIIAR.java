@@ -497,7 +497,7 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         if (accumulator != null) {
             JSONObject reportArg = new JSONObject();
             reportArg.put("source", this.getName());
-            reportArg.put("type", this.object.getCurrentVertexYaml());
+            reportArg.put("type", this.object.getCurrentTransitionYaml());
             reportArg.put("data", combineOutput(result));
             accumulator.callByActionName("add", reportArg.toString());
         }
