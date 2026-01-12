@@ -302,7 +302,7 @@ public class LogServerActor {
                     session_id BIGINT,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     node_id VARCHAR(255) NOT NULL,
-                    vertex_name CLOB,
+                    step_label CLOB,
                     action_name CLOB,
                     level VARCHAR(10) NOT NULL,
                     message CLOB,

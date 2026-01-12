@@ -29,7 +29,7 @@ public class LogEntry {
     private final long sessionId;
     private final LocalDateTime timestamp;
     private final String nodeId;
-    private final String vertexName;
+    private final String stepLabel;
     private final String actionName;
     private final LogLevel level;
     private final String message;
@@ -37,13 +37,13 @@ public class LogEntry {
     private final Long durationMs;
 
     public LogEntry(long id, long sessionId, LocalDateTime timestamp, String nodeId,
-                    String vertexName, String actionName, LogLevel level, String message,
+                    String stepLabel, String actionName, LogLevel level, String message,
                     Integer exitCode, Long durationMs) {
         this.id = id;
         this.sessionId = sessionId;
         this.timestamp = timestamp;
         this.nodeId = nodeId;
-        this.vertexName = vertexName;
+        this.stepLabel = stepLabel;
         this.actionName = actionName;
         this.level = level;
         this.message = message;
@@ -55,7 +55,7 @@ public class LogEntry {
     public long getSessionId() { return sessionId; }
     public LocalDateTime getTimestamp() { return timestamp; }
     public String getNodeId() { return nodeId; }
-    public String getVertexName() { return vertexName; }
+    public String getStepLabel() { return stepLabel; }
     public String getActionName() { return actionName; }
     public LogLevel getLevel() { return level; }
     public String getMessage() { return message; }
@@ -67,8 +67,8 @@ public class LogEntry {
         StringBuilder sb = new StringBuilder();
         sb.append("[").append(timestamp.toString().replace("T", " ")).append("] ");
         sb.append(String.format("%-5s ", level));
-        if (vertexName != null) {
-            sb.append("[").append(vertexName);
+        if (stepLabel != null) {
+            sb.append("[").append(stepLabel);
             if (actionName != null) {
                 sb.append(" -> ").append(actionName);
             }

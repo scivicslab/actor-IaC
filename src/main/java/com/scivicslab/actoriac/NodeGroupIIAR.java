@@ -606,7 +606,7 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
     /**
      * Prints a summary of the current session's verification results.
      *
-     * <p>Groups results by vertex name (step) and displays a formatted table.</p>
+     * <p>Groups results by step label (step) and displays a formatted table.</p>
      *
      * @return ActionResult with success status and summary text
      */
@@ -624,31 +624,31 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         List<com.scivicslab.actoriac.log.LogEntry> logs = logStore.getLogsByLevel(sessionId,
             com.scivicslab.actoriac.log.LogLevel.DEBUG);
 
-        // Group logs by vertex name and count results
-        java.util.Map<String, VerifyResult> resultsByVertex = new java.util.LinkedHashMap<>();
+        // Group logs by step label and count results
+        java.util.Map<String, VerifyResult> resultsByStep = new java.util.LinkedHashMap<>();
 
         for (com.scivicslab.actoriac.log.LogEntry entry : logs) {
             String message = entry.getMessage();
-            String vertexName = entry.getVertexName();
+            String stepLabel = entry.getStepLabel();
             if (message == null) continue;
 
-            // Extract vertex name from the message if it contains step info
-            // Format: "- states: [...]\n  vertexName: xxx\n..."
-            if (vertexName != null && vertexName.contains("vertexName:")) {
-                int idx = vertexName.indexOf("vertexName:");
+            // Extract step label from the message if it contains step info
+            // Format: "- states: [...]\n  stepLabel: xxx\n..."
+            if (stepLabel != null && stepLabel.contains("stepLabel:")) {
+                int idx = stepLabel.indexOf("stepLabel:");
                 if (idx >= 0) {
-                    String rest = vertexName.substring(idx + 11).trim();
+                    String rest = stepLabel.substring(idx + 11).trim();
                     int end = rest.indexOf('\n');
-                    vertexName = end > 0 ? rest.substring(0, end).trim() : rest.trim();
+                    stepLabel = end > 0 ? rest.substring(0, end).trim() : rest.trim();
                 }
             }
 
             // Skip non-verify steps
-            if (vertexName == null || !vertexName.startsWith("verify-")) {
+            if (stepLabel == null || !stepLabel.startsWith("verify-")) {
                 continue;
             }
 
-            VerifyResult result = resultsByVertex.computeIfAbsent(vertexName, k -> new VerifyResult());
+            VerifyResult result = resultsByStep.computeIfAbsent(stepLabel, k -> new VerifyResult());
 
             // Count occurrences in message
             result.okCount += countOccurrences(message, "[OK]");
@@ -670,7 +670,7 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         sb.append(String.format("| %-35s | %-20s |\n", "Item", "Status"));
         sb.append("|-------------------------------------|----------------------|\n");
 
-        // Mapping from vertex names to display names and aggregation
+        // Mapping from step labels to display names and aggregation
         String[][] mappings = {
             {"verify-repos", "Document repositories"},
             {"verify-utility-cli", "Utility-cli"},
@@ -691,9 +691,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         List<String> warnDetails = new ArrayList<>();
 
         for (String[] mapping : mappings) {
-            String vertexName = mapping[0];
+            String stepLabel = mapping[0];
             String displayName = mapping[1];
-            VerifyResult result = resultsByVertex.get(vertexName);
+            VerifyResult result = resultsByStep.get(stepLabel);
 
             if (result == null) {
                 sb.append(String.format("| %-35s | %-20s |\n", displayName, "-"));

@@ -59,7 +59,7 @@ public class NodeGroupInterpreter extends Interpreter {
 
     /**
      * Verbose output flag.
-     * When true, displays full YAML for each vertex instead of truncated version.
+     * When true, displays full YAML for each step instead of truncated version.
      */
     private boolean verbose = false;
 
@@ -152,7 +152,7 @@ public class NodeGroupInterpreter extends Interpreter {
     /**
      * Sets verbose mode for detailed output.
      *
-     * <p>When enabled, displays full YAML for each vertex in cowsay output
+     * <p>When enabled, displays full YAML for each step in cowsay output
      * instead of the truncated version.</p>
      *
      * @param verbose true to enable verbose output
@@ -200,7 +200,7 @@ public class NodeGroupInterpreter extends Interpreter {
     }
 
     /**
-     * Hook called when entering a vertex during workflow execution.
+     * Hook called when entering a step during workflow execution.
      *
      * <p>Displays the workflow name and transition definition using cowsay.
      * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML

@@ -60,28 +60,28 @@ public interface DistributedLogStore extends AutoCloseable {
     void log(long sessionId, String nodeId, LogLevel level, String message);
 
     /**
-     * Records a log entry with vertex context.
+     * Records a log entry with step context.
      *
      * @param sessionId session ID from startSession()
      * @param nodeId identifier of the node
-     * @param vertexName current vertex name in workflow
+     * @param stepLabel current step label in workflow
      * @param level log level
      * @param message log message
      */
-    void log(long sessionId, String nodeId, String vertexName, LogLevel level, String message);
+    void log(long sessionId, String nodeId, String stepLabel, LogLevel level, String message);
 
     /**
      * Records an action result.
      *
      * @param sessionId session ID
      * @param nodeId node identifier
-     * @param vertexName vertex name
+     * @param stepLabel step label
      * @param actionName action/method name
      * @param exitCode command exit code (0 for success)
      * @param durationMs execution duration in milliseconds
      * @param output command output or result message
      */
-    void logAction(long sessionId, String nodeId, String vertexName,
+    void logAction(long sessionId, String nodeId, String stepLabel,
                    String actionName, int exitCode, long durationMs, String output);
 
     /**

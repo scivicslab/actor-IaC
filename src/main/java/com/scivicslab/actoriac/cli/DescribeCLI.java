@@ -158,14 +158,14 @@ public class DescribeCLI implements Callable<Integer> {
 
             for (Map<String, Object> step : steps) {
                 List<String> states = (List<String>) step.get("states");
-                String vertexName = (String) step.get("vertexName");
+                String stepLabel = (String) step.get("stepLabel");
                 String stepDescription = (String) step.get("description");
 
                 String stateTransition = (states != null && states.size() >= 2)
                     ? states.get(0) + " -> " + states.get(1)
                     : "?";
 
-                String displayName = (vertexName != null) ? vertexName : "(unnamed)";
+                String displayName = (stepLabel != null) ? stepLabel : "(unnamed)";
 
                 System.out.println();
                 System.out.println("  [" + stateTransition + "] " + displayName);

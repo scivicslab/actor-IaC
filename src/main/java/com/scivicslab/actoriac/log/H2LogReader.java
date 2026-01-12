@@ -426,7 +426,7 @@ public class H2LogReader implements AutoCloseable {
                 rs.getLong("session_id"),
                 ts != null ? ts.toLocalDateTime() : null,
                 rs.getString("node_id"),
-                rs.getString("vertex_name"),
+                rs.getString("step_label"),
                 rs.getString("action_name"),
                 level,
                 rs.getString("message"),

@@ -120,7 +120,7 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
         // Log to H2 database
         if (logStore != null && sessionId >= 0) {
             // source = node ID (e.g., "node-192.168.1.1")
-            // type = vertex YAML snippet (what step is being executed)
+            // type = step YAML snippet (what step is being executed)
             // data = command output
             logStore.logAction(sessionId, source, type, "executeCommand", 0, 0L, data);
         }
