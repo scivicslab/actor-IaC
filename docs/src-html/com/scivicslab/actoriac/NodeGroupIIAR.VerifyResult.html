@@ -619,7 +619,7 @@
 <span class="source-line-no">606</span><span id="line-606">    /**</span>
 <span class="source-line-no">607</span><span id="line-607">     * Prints a summary of the current session's verification results.</span>
 <span class="source-line-no">608</span><span id="line-608">     *</span>
-<span class="source-line-no">609</span><span id="line-609">     * &lt;p&gt;Groups results by vertex name (step) and displays a formatted table.&lt;/p&gt;</span>
+<span class="source-line-no">609</span><span id="line-609">     * &lt;p&gt;Groups results by label (step) and displays a formatted table.&lt;/p&gt;</span>
 <span class="source-line-no">610</span><span id="line-610">     *</span>
 <span class="source-line-no">611</span><span id="line-611">     * @return ActionResult with success status and summary text</span>
 <span class="source-line-no">612</span><span id="line-612">     */</span>
@@ -637,31 +637,31 @@
 <span class="source-line-no">624</span><span id="line-624">        List&lt;com.scivicslab.actoriac.log.LogEntry&gt; logs = logStore.getLogsByLevel(sessionId,</span>
 <span class="source-line-no">625</span><span id="line-625">            com.scivicslab.actoriac.log.LogLevel.DEBUG);</span>
 <span class="source-line-no">626</span><span id="line-626"></span>
-<span class="source-line-no">627</span><span id="line-627">        // Group logs by vertex name and count results</span>
-<span class="source-line-no">628</span><span id="line-628">        java.util.Map&lt;String, VerifyResult&gt; resultsByVertex = new java.util.LinkedHashMap&lt;&gt;();</span>
+<span class="source-line-no">627</span><span id="line-627">        // Group logs by label and count results</span>
+<span class="source-line-no">628</span><span id="line-628">        java.util.Map&lt;String, VerifyResult&gt; resultsByLabel = new java.util.LinkedHashMap&lt;&gt;();</span>
 <span class="source-line-no">629</span><span id="line-629"></span>
 <span class="source-line-no">630</span><span id="line-630">        for (com.scivicslab.actoriac.log.LogEntry entry : logs) {</span>
 <span class="source-line-no">631</span><span id="line-631">            String message = entry.getMessage();</span>
-<span class="source-line-no">632</span><span id="line-632">            String vertexName = entry.getVertexName();</span>
+<span class="source-line-no">632</span><span id="line-632">            String label = entry.getLabel();</span>
 <span class="source-line-no">633</span><span id="line-633">            if (message == null) continue;</span>
 <span class="source-line-no">634</span><span id="line-634"></span>
-<span class="source-line-no">635</span><span id="line-635">            // Extract vertex name from the message if it contains step info</span>
-<span class="source-line-no">636</span><span id="line-636">            // Format: "- states: [...]\n  vertexName: xxx\n..."</span>
-<span class="source-line-no">637</span><span id="line-637">            if (vertexName != null &amp;&amp; vertexName.contains("vertexName:")) {</span>
-<span class="source-line-no">638</span><span id="line-638">                int idx = vertexName.indexOf("vertexName:");</span>
+<span class="source-line-no">635</span><span id="line-635">            // Extract label from the message if it contains step info</span>
+<span class="source-line-no">636</span><span id="line-636">            // Format: "- states: [...]\n  label: xxx\n..."</span>
+<span class="source-line-no">637</span><span id="line-637">            if (label != null &amp;&amp; label.contains("label:")) {</span>
+<span class="source-line-no">638</span><span id="line-638">                int idx = label.indexOf("label:");</span>
 <span class="source-line-no">639</span><span id="line-639">                if (idx &gt;= 0) {</span>
-<span class="source-line-no">640</span><span id="line-640">                    String rest = vertexName.substring(idx + 11).trim();</span>
+<span class="source-line-no">640</span><span id="line-640">                    String rest = label.substring(idx + 11).trim();</span>
 <span class="source-line-no">641</span><span id="line-641">                    int end = rest.indexOf('\n');</span>
-<span class="source-line-no">642</span><span id="line-642">                    vertexName = end &gt; 0 ? rest.substring(0, end).trim() : rest.trim();</span>
+<span class="source-line-no">642</span><span id="line-642">                    label = end &gt; 0 ? rest.substring(0, end).trim() : rest.trim();</span>
 <span class="source-line-no">643</span><span id="line-643">                }</span>
 <span class="source-line-no">644</span><span id="line-644">            }</span>
 <span class="source-line-no">645</span><span id="line-645"></span>
 <span class="source-line-no">646</span><span id="line-646">            // Skip non-verify steps</span>
-<span class="source-line-no">647</span><span id="line-647">            if (vertexName == null || !vertexName.startsWith("verify-")) {</span>
+<span class="source-line-no">647</span><span id="line-647">            if (label == null || !label.startsWith("verify-")) {</span>
 <span class="source-line-no">648</span><span id="line-648">                continue;</span>
 <span class="source-line-no">649</span><span id="line-649">            }</span>
 <span class="source-line-no">650</span><span id="line-650"></span>
-<span class="source-line-no">651</span><span id="line-651">            VerifyResult result = resultsByVertex.computeIfAbsent(vertexName, k -&gt; new VerifyResult());</span>
+<span class="source-line-no">651</span><span id="line-651">            VerifyResult result = resultsByLabel.computeIfAbsent(label, k -&gt; new VerifyResult());</span>
 <span class="source-line-no">652</span><span id="line-652"></span>
 <span class="source-line-no">653</span><span id="line-653">            // Count occurrences in message</span>
 <span class="source-line-no">654</span><span id="line-654">            result.okCount += countOccurrences(message, "[OK]");</span>
@@ -683,7 +683,7 @@
 <span class="source-line-no">670</span><span id="line-670">        sb.append(String.format("| %-35s | %-20s |\n", "Item", "Status"));</span>
 <span class="source-line-no">671</span><span id="line-671">        sb.append("|-------------------------------------|----------------------|\n");</span>
 <span class="source-line-no">672</span><span id="line-672"></span>
-<span class="source-line-no">673</span><span id="line-673">        // Mapping from vertex names to display names and aggregation</span>
+<span class="source-line-no">673</span><span id="line-673">        // Mapping from labels to display names and aggregation</span>
 <span class="source-line-no">674</span><span id="line-674">        String[][] mappings = {</span>
 <span class="source-line-no">675</span><span id="line-675">            {"verify-repos", "Document repositories"},</span>
 <span class="source-line-no">676</span><span id="line-676">            {"verify-utility-cli", "Utility-cli"},</span>
@@ -704,9 +704,9 @@
 <span class="source-line-no">691</span><span id="line-691">        List&lt;String&gt; warnDetails = new ArrayList&lt;&gt;();</span>
 <span class="source-line-no">692</span><span id="line-692"></span>
 <span class="source-line-no">693</span><span id="line-693">        for (String[] mapping : mappings) {</span>
-<span class="source-line-no">694</span><span id="line-694">            String vertexName = mapping[0];</span>
+<span class="source-line-no">694</span><span id="line-694">            String label = mapping[0];</span>
 <span class="source-line-no">695</span><span id="line-695">            String displayName = mapping[1];</span>
-<span class="source-line-no">696</span><span id="line-696">            VerifyResult result = resultsByVertex.get(vertexName);</span>
+<span class="source-line-no">696</span><span id="line-696">            VerifyResult result = resultsByLabel.get(label);</span>
 <span class="source-line-no">697</span><span id="line-697"></span>
 <span class="source-line-no">698</span><span id="line-698">            if (result == null) {</span>
 <span class="source-line-no">699</span><span id="line-699">                sb.append(String.format("| %-35s | %-20s |\n", displayName, "-"));</span>

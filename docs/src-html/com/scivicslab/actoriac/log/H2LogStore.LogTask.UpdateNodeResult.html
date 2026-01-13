@@ -212,14 +212,14 @@
 <span class="source-line-no">199</span><span id="line-199">            }</span>
 <span class="source-line-no">200</span><span id="line-200"></span>
 <span class="source-line-no">201</span><span id="line-201">            // Logs table</span>
-<span class="source-line-no">202</span><span id="line-202">            // vertex_name and action_name use CLOB to store long YAML snippets</span>
+<span class="source-line-no">202</span><span id="line-202">            // label and action_name use CLOB to store long YAML snippets</span>
 <span class="source-line-no">203</span><span id="line-203">            stmt.execute("""</span>
 <span class="source-line-no">204</span><span id="line-204">                CREATE TABLE IF NOT EXISTS logs (</span>
 <span class="source-line-no">205</span><span id="line-205">                    id IDENTITY PRIMARY KEY,</span>
 <span class="source-line-no">206</span><span id="line-206">                    session_id BIGINT,</span>
 <span class="source-line-no">207</span><span id="line-207">                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,</span>
 <span class="source-line-no">208</span><span id="line-208">                    node_id VARCHAR(255) NOT NULL,</span>
-<span class="source-line-no">209</span><span id="line-209">                    vertex_name CLOB,</span>
+<span class="source-line-no">209</span><span id="line-209">                    label CLOB,</span>
 <span class="source-line-no">210</span><span id="line-210">                    action_name CLOB,</span>
 <span class="source-line-no">211</span><span id="line-211">                    level VARCHAR(10) NOT NULL,</span>
 <span class="source-line-no">212</span><span id="line-212">                    message CLOB,</span>
@@ -327,15 +327,15 @@
 <span class="source-line-no">314</span><span id="line-314">    }</span>
 <span class="source-line-no">315</span><span id="line-315"></span>
 <span class="source-line-no">316</span><span id="line-316">    @Override</span>
-<span class="source-line-no">317</span><span id="line-317">    public void log(long sessionId, String nodeId, String vertexName, LogLevel level, String message) {</span>
-<span class="source-line-no">318</span><span id="line-318">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, vertexName, null, level, message, null, null));</span>
+<span class="source-line-no">317</span><span id="line-317">    public void log(long sessionId, String nodeId, String label, LogLevel level, String message) {</span>
+<span class="source-line-no">318</span><span id="line-318">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, null, level, message, null, null));</span>
 <span class="source-line-no">319</span><span id="line-319">    }</span>
 <span class="source-line-no">320</span><span id="line-320"></span>
 <span class="source-line-no">321</span><span id="line-321">    @Override</span>
-<span class="source-line-no">322</span><span id="line-322">    public void logAction(long sessionId, String nodeId, String vertexName,</span>
+<span class="source-line-no">322</span><span id="line-322">    public void logAction(long sessionId, String nodeId, String label,</span>
 <span class="source-line-no">323</span><span id="line-323">                          String actionName, int exitCode, long durationMs, String output) {</span>
 <span class="source-line-no">324</span><span id="line-324">        LogLevel level = exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;</span>
-<span class="source-line-no">325</span><span id="line-325">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, vertexName, actionName, level, output, exitCode, durationMs));</span>
+<span class="source-line-no">325</span><span id="line-325">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, actionName, level, output, exitCode, durationMs));</span>
 <span class="source-line-no">326</span><span id="line-326">    }</span>
 <span class="source-line-no">327</span><span id="line-327"></span>
 <span class="source-line-no">328</span><span id="line-328">    @Override</span>
@@ -539,7 +539,7 @@
 <span class="source-line-no">526</span><span id="line-526">                rs.getLong("session_id"),</span>
 <span class="source-line-no">527</span><span id="line-527">                ts != null ? ts.toLocalDateTime() : null,</span>
 <span class="source-line-no">528</span><span id="line-528">                rs.getString("node_id"),</span>
-<span class="source-line-no">529</span><span id="line-529">                rs.getString("vertex_name"),</span>
+<span class="source-line-no">529</span><span id="line-529">                rs.getString("label"),</span>
 <span class="source-line-no">530</span><span id="line-530">                rs.getString("action_name"),</span>
 <span class="source-line-no">531</span><span id="line-531">                level,</span>
 <span class="source-line-no">532</span><span id="line-532">                rs.getString("message"),</span>
@@ -564,16 +564,16 @@
 <span class="source-line-no">551</span><span id="line-551">    private interface LogTask {</span>
 <span class="source-line-no">552</span><span id="line-552">        void execute(Connection conn) throws SQLException;</span>
 <span class="source-line-no">553</span><span id="line-553"></span>
-<span class="source-line-no">554</span><span id="line-554">        record InsertLog(long sessionId, String nodeId, String vertexName, String actionName,</span>
+<span class="source-line-no">554</span><span id="line-554">        record InsertLog(long sessionId, String nodeId, String label, String actionName,</span>
 <span class="source-line-no">555</span><span id="line-555">                         LogLevel level, String message, Integer exitCode, Long durationMs) implements LogTask {</span>
 <span class="source-line-no">556</span><span id="line-556">            @Override</span>
 <span class="source-line-no">557</span><span id="line-557">            public void execute(Connection conn) throws SQLException {</span>
 <span class="source-line-no">558</span><span id="line-558">                try (PreparedStatement ps = conn.prepareStatement(</span>
-<span class="source-line-no">559</span><span id="line-559">                        "INSERT INTO logs (session_id, node_id, vertex_name, action_name, level, message, exit_code, duration_ms) " +</span>
+<span class="source-line-no">559</span><span id="line-559">                        "INSERT INTO logs (session_id, node_id, label, action_name, level, message, exit_code, duration_ms) " +</span>
 <span class="source-line-no">560</span><span id="line-560">                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {</span>
 <span class="source-line-no">561</span><span id="line-561">                    ps.setLong(1, sessionId);</span>
 <span class="source-line-no">562</span><span id="line-562">                    ps.setString(2, nodeId);</span>
-<span class="source-line-no">563</span><span id="line-563">                    ps.setString(3, vertexName);</span>
+<span class="source-line-no">563</span><span id="line-563">                    ps.setString(3, label);</span>
 <span class="source-line-no">564</span><span id="line-564">                    ps.setString(4, actionName);</span>
 <span class="source-line-no">565</span><span id="line-565">                    ps.setString(5, level.name());</span>
 <span class="source-line-no">566</span><span id="line-566">                    ps.setString(6, message);</span>

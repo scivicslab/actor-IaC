@@ -319,7 +319,7 @@
 <span class="source-line-no">306</span><span id="line-306">                    session_id BIGINT,</span>
 <span class="source-line-no">307</span><span id="line-307">                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,</span>
 <span class="source-line-no">308</span><span id="line-308">                    node_id VARCHAR(255) NOT NULL,</span>
-<span class="source-line-no">309</span><span id="line-309">                    vertex_name CLOB,</span>
+<span class="source-line-no">309</span><span id="line-309">                    label CLOB,</span>
 <span class="source-line-no">310</span><span id="line-310">                    action_name CLOB,</span>
 <span class="source-line-no">311</span><span id="line-311">                    level VARCHAR(10) NOT NULL,</span>
 <span class="source-line-no">312</span><span id="line-312">                    message CLOB,</span>
@@ -483,7 +483,7 @@
 <span class="source-line-no">470</span><span id="line-470">        int count = 0;</span>
 <span class="source-line-no">471</span><span id="line-471">        String selectSql = "SELECT * FROM logs WHERE session_id = ?";</span>
 <span class="source-line-no">472</span><span id="line-472">        String insertSql = """</span>
-<span class="source-line-no">473</span><span id="line-473">            INSERT INTO logs (session_id, timestamp, node_id, vertex_name, action_name,</span>
+<span class="source-line-no">473</span><span id="line-473">            INSERT INTO logs (session_id, timestamp, node_id, label, action_name,</span>
 <span class="source-line-no">474</span><span id="line-474">                             level, message, exit_code, duration_ms)</span>
 <span class="source-line-no">475</span><span id="line-475">            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)</span>
 <span class="source-line-no">476</span><span id="line-476">            """;</span>
@@ -497,7 +497,7 @@
 <span class="source-line-no">484</span><span id="line-484">                    insertPs.setLong(1, newSessionId);</span>
 <span class="source-line-no">485</span><span id="line-485">                    insertPs.setTimestamp(2, rs.getTimestamp("timestamp"));</span>
 <span class="source-line-no">486</span><span id="line-486">                    insertPs.setString(3, rs.getString("node_id"));</span>
-<span class="source-line-no">487</span><span id="line-487">                    insertPs.setString(4, rs.getString("vertex_name"));</span>
+<span class="source-line-no">487</span><span id="line-487">                    insertPs.setString(4, rs.getString("label"));</span>
 <span class="source-line-no">488</span><span id="line-488">                    insertPs.setString(5, rs.getString("action_name"));</span>
 <span class="source-line-no">489</span><span id="line-489">                    insertPs.setString(6, rs.getString("level"));</span>
 <span class="source-line-no">490</span><span id="line-490">                    insertPs.setString(7, rs.getString("message"));</span>

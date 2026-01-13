@@ -42,7 +42,7 @@
 <span class="source-line-no">029</span><span id="line-29">    private final long sessionId;</span>
 <span class="source-line-no">030</span><span id="line-30">    private final LocalDateTime timestamp;</span>
 <span class="source-line-no">031</span><span id="line-31">    private final String nodeId;</span>
-<span class="source-line-no">032</span><span id="line-32">    private final String vertexName;</span>
+<span class="source-line-no">032</span><span id="line-32">    private final String label;</span>
 <span class="source-line-no">033</span><span id="line-33">    private final String actionName;</span>
 <span class="source-line-no">034</span><span id="line-34">    private final LogLevel level;</span>
 <span class="source-line-no">035</span><span id="line-35">    private final String message;</span>
@@ -50,13 +50,13 @@
 <span class="source-line-no">037</span><span id="line-37">    private final Long durationMs;</span>
 <span class="source-line-no">038</span><span id="line-38"></span>
 <span class="source-line-no">039</span><span id="line-39">    public LogEntry(long id, long sessionId, LocalDateTime timestamp, String nodeId,</span>
-<span class="source-line-no">040</span><span id="line-40">                    String vertexName, String actionName, LogLevel level, String message,</span>
+<span class="source-line-no">040</span><span id="line-40">                    String label, String actionName, LogLevel level, String message,</span>
 <span class="source-line-no">041</span><span id="line-41">                    Integer exitCode, Long durationMs) {</span>
 <span class="source-line-no">042</span><span id="line-42">        this.id = id;</span>
 <span class="source-line-no">043</span><span id="line-43">        this.sessionId = sessionId;</span>
 <span class="source-line-no">044</span><span id="line-44">        this.timestamp = timestamp;</span>
 <span class="source-line-no">045</span><span id="line-45">        this.nodeId = nodeId;</span>
-<span class="source-line-no">046</span><span id="line-46">        this.vertexName = vertexName;</span>
+<span class="source-line-no">046</span><span id="line-46">        this.label = label;</span>
 <span class="source-line-no">047</span><span id="line-47">        this.actionName = actionName;</span>
 <span class="source-line-no">048</span><span id="line-48">        this.level = level;</span>
 <span class="source-line-no">049</span><span id="line-49">        this.message = message;</span>
@@ -68,7 +68,7 @@
 <span class="source-line-no">055</span><span id="line-55">    public long getSessionId() { return sessionId; }</span>
 <span class="source-line-no">056</span><span id="line-56">    public LocalDateTime getTimestamp() { return timestamp; }</span>
 <span class="source-line-no">057</span><span id="line-57">    public String getNodeId() { return nodeId; }</span>
-<span class="source-line-no">058</span><span id="line-58">    public String getVertexName() { return vertexName; }</span>
+<span class="source-line-no">058</span><span id="line-58">    public String getLabel() { return label; }</span>
 <span class="source-line-no">059</span><span id="line-59">    public String getActionName() { return actionName; }</span>
 <span class="source-line-no">060</span><span id="line-60">    public LogLevel getLevel() { return level; }</span>
 <span class="source-line-no">061</span><span id="line-61">    public String getMessage() { return message; }</span>
@@ -80,8 +80,8 @@
 <span class="source-line-no">067</span><span id="line-67">        StringBuilder sb = new StringBuilder();</span>
 <span class="source-line-no">068</span><span id="line-68">        sb.append("[").append(timestamp.toString().replace("T", " ")).append("] ");</span>
 <span class="source-line-no">069</span><span id="line-69">        sb.append(String.format("%-5s ", level));</span>
-<span class="source-line-no">070</span><span id="line-70">        if (vertexName != null) {</span>
-<span class="source-line-no">071</span><span id="line-71">            sb.append("[").append(vertexName);</span>
+<span class="source-line-no">070</span><span id="line-70">        if (label != null) {</span>
+<span class="source-line-no">071</span><span id="line-71">            sb.append("[").append(label);</span>
 <span class="source-line-no">072</span><span id="line-72">            if (actionName != null) {</span>
 <span class="source-line-no">073</span><span id="line-73">                sb.append(" -&gt; ").append(actionName);</span>
 <span class="source-line-no">074</span><span id="line-74">            }</span>

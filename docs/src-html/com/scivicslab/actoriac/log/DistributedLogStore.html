@@ -73,28 +73,28 @@
 <span class="source-line-no">060</span><span id="line-60">    void log(long sessionId, String nodeId, LogLevel level, String message);</span>
 <span class="source-line-no">061</span><span id="line-61"></span>
 <span class="source-line-no">062</span><span id="line-62">    /**</span>
-<span class="source-line-no">063</span><span id="line-63">     * Records a log entry with vertex context.</span>
+<span class="source-line-no">063</span><span id="line-63">     * Records a log entry with transition context.</span>
 <span class="source-line-no">064</span><span id="line-64">     *</span>
 <span class="source-line-no">065</span><span id="line-65">     * @param sessionId session ID from startSession()</span>
 <span class="source-line-no">066</span><span id="line-66">     * @param nodeId identifier of the node</span>
-<span class="source-line-no">067</span><span id="line-67">     * @param vertexName current vertex name in workflow</span>
+<span class="source-line-no">067</span><span id="line-67">     * @param label current label in workflow</span>
 <span class="source-line-no">068</span><span id="line-68">     * @param level log level</span>
 <span class="source-line-no">069</span><span id="line-69">     * @param message log message</span>
 <span class="source-line-no">070</span><span id="line-70">     */</span>
-<span class="source-line-no">071</span><span id="line-71">    void log(long sessionId, String nodeId, String vertexName, LogLevel level, String message);</span>
+<span class="source-line-no">071</span><span id="line-71">    void log(long sessionId, String nodeId, String label, LogLevel level, String message);</span>
 <span class="source-line-no">072</span><span id="line-72"></span>
 <span class="source-line-no">073</span><span id="line-73">    /**</span>
 <span class="source-line-no">074</span><span id="line-74">     * Records an action result.</span>
 <span class="source-line-no">075</span><span id="line-75">     *</span>
 <span class="source-line-no">076</span><span id="line-76">     * @param sessionId session ID</span>
 <span class="source-line-no">077</span><span id="line-77">     * @param nodeId node identifier</span>
-<span class="source-line-no">078</span><span id="line-78">     * @param vertexName vertex name</span>
+<span class="source-line-no">078</span><span id="line-78">     * @param label label</span>
 <span class="source-line-no">079</span><span id="line-79">     * @param actionName action/method name</span>
 <span class="source-line-no">080</span><span id="line-80">     * @param exitCode command exit code (0 for success)</span>
 <span class="source-line-no">081</span><span id="line-81">     * @param durationMs execution duration in milliseconds</span>
 <span class="source-line-no">082</span><span id="line-82">     * @param output command output or result message</span>
 <span class="source-line-no">083</span><span id="line-83">     */</span>
-<span class="source-line-no">084</span><span id="line-84">    void logAction(long sessionId, String nodeId, String vertexName,</span>
+<span class="source-line-no">084</span><span id="line-84">    void logAction(long sessionId, String nodeId, String label,</span>
 <span class="source-line-no">085</span><span id="line-85">                   String actionName, int exitCode, long durationMs, String output);</span>
 <span class="source-line-no">086</span><span id="line-86"></span>
 <span class="source-line-no">087</span><span id="line-87">    /**</span>

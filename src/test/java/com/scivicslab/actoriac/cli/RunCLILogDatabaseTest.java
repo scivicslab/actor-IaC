@@ -228,40 +228,33 @@ class RunCLILogDatabaseTest {
     class CliOptionDescription {
 
         @Test
-        @DisplayName("--db-log description should mention current directory")
-        void dbLogDescriptionShouldMentionCurrentDirectory() throws Exception {
+        @DisplayName("--log-db description should mention workflow directory")
+        void logDbDescriptionShouldMentionWorkflowDirectory() throws Exception {
             // Use reflection to check the @Option annotation
-            var field = RunCLI.class.getDeclaredField("logDbPath");
-            var option = field.getAnnotation(picocli.CommandLine.Option.class);
+            java.lang.reflect.Field field = RunCLI.class.getDeclaredField("logDbPath");
+            picocli.CommandLine.Option option = field.getAnnotation(picocli.CommandLine.Option.class);
 
             assertNotNull(option, "logDbPath should have @Option annotation");
-            assertTrue(option.description()[0].contains("current directory"),
-                      "Option description should mention current directory");
+            assertTrue(option.description()[0].contains("workflow directory"),
+                      "Option description should mention workflow directory");
         }
 
         @Test
         @DisplayName("Logging options should have clear naming convention")
         void loggingOptionsShouldHaveClearNaming() throws Exception {
-            // Verify --no-file-log option exists
-            var noFileLogField = RunCLI.class.getDeclaredField("noFileLog");
-            var noFileLogOption = noFileLogField.getAnnotation(picocli.CommandLine.Option.class);
-            assertNotNull(noFileLogOption);
-            assertTrue(java.util.Arrays.asList(noFileLogOption.names()).contains("--no-file-log"),
-                      "Should have --no-file-log option");
+            // Verify --no-log-db option exists
+            java.lang.reflect.Field noLogDbField = RunCLI.class.getDeclaredField("noLogDb");
+            picocli.CommandLine.Option noLogDbOption = noLogDbField.getAnnotation(picocli.CommandLine.Option.class);
+            assertNotNull(noLogDbOption);
+            assertTrue(java.util.Arrays.asList(noLogDbOption.names()).contains("--no-log-db"),
+                      "Should have --no-log-db option");
 
-            // Verify --no-db-log option exists
-            var noDbLogField = RunCLI.class.getDeclaredField("noDbLog");
-            var noDbLogOption = noDbLogField.getAnnotation(picocli.CommandLine.Option.class);
-            assertNotNull(noDbLogOption);
-            assertTrue(java.util.Arrays.asList(noDbLogOption.names()).contains("--no-db-log"),
-                      "Should have --no-db-log option");
-
-            // Verify --no-console-log option exists (alias for --quiet)
-            var quietField = RunCLI.class.getDeclaredField("quiet");
-            var quietOption = quietField.getAnnotation(picocli.CommandLine.Option.class);
+            // Verify --quiet option exists
+            java.lang.reflect.Field quietField = RunCLI.class.getDeclaredField("quiet");
+            picocli.CommandLine.Option quietOption = quietField.getAnnotation(picocli.CommandLine.Option.class);
             assertNotNull(quietOption);
-            assertTrue(java.util.Arrays.asList(quietOption.names()).contains("--no-console-log"),
-                      "Should have --no-console-log option");
+            assertTrue(java.util.Arrays.asList(quietOption.names()).contains("--quiet"),
+                      "Should have --quiet option");
         }
     }
 }

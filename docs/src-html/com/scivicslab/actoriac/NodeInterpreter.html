@@ -44,7 +44,7 @@
 <span class="source-line-no">031</span><span id="line-31">import com.scivicslab.pojoactor.core.ActionResult;</span>
 <span class="source-line-no">032</span><span id="line-32">import com.scivicslab.pojoactor.workflow.IIActorSystem;</span>
 <span class="source-line-no">033</span><span id="line-33">import com.scivicslab.pojoactor.workflow.Interpreter;</span>
-<span class="source-line-no">034</span><span id="line-34">import com.scivicslab.pojoactor.workflow.Vertex;</span>
+<span class="source-line-no">034</span><span id="line-34">import com.scivicslab.pojoactor.workflow.Transition;</span>
 <span class="source-line-no">035</span><span id="line-35"></span>
 <span class="source-line-no">036</span><span id="line-36">/**</span>
 <span class="source-line-no">037</span><span id="line-37"> * Level 3 wrapper that adds workflow capabilities to a Node POJO.</span>
@@ -79,9 +79,9 @@
 <span class="source-line-no">066</span><span id="line-66">    private String overlayDir;</span>
 <span class="source-line-no">067</span><span id="line-67"></span>
 <span class="source-line-no">068</span><span id="line-68">    /**</span>
-<span class="source-line-no">069</span><span id="line-69">     * The current vertex YAML snippet (first 10 lines) for accumulator reporting.</span>
+<span class="source-line-no">069</span><span id="line-69">     * The current transition YAML snippet (first 10 lines) for accumulator reporting.</span>
 <span class="source-line-no">070</span><span id="line-70">     */</span>
-<span class="source-line-no">071</span><span id="line-71">    private String currentVertexYaml = "";</span>
+<span class="source-line-no">071</span><span id="line-71">    private String currentTransitionYaml = "";</span>
 <span class="source-line-no">072</span><span id="line-72"></span>
 <span class="source-line-no">073</span><span id="line-73">    /**</span>
 <span class="source-line-no">074</span><span id="line-74">     * Set of changed document names detected by workflow.</span>
@@ -187,37 +187,37 @@
 <span class="source-line-no">174</span><span id="line-174">    }</span>
 <span class="source-line-no">175</span><span id="line-175"></span>
 <span class="source-line-no">176</span><span id="line-176">    /**</span>
-<span class="source-line-no">177</span><span id="line-177">     * Hook called when entering a vertex during workflow execution.</span>
+<span class="source-line-no">177</span><span id="line-177">     * Hook called when entering a transition during workflow execution.</span>
 <span class="source-line-no">178</span><span id="line-178">     *</span>
-<span class="source-line-no">179</span><span id="line-179">     * &lt;p&gt;Displays the workflow name and first 10 lines of the vertex definition</span>
+<span class="source-line-no">179</span><span id="line-179">     * &lt;p&gt;Displays the workflow name and first 10 lines of the transition definition</span>
 <span class="source-line-no">180</span><span id="line-180">     * in YAML format using cowsay to provide visual separation between workflow steps.&lt;/p&gt;</span>
 <span class="source-line-no">181</span><span id="line-181">     *</span>
-<span class="source-line-no">182</span><span id="line-182">     * @param vertex the vertex being entered</span>
+<span class="source-line-no">182</span><span id="line-182">     * @param transition the transition being entered</span>
 <span class="source-line-no">183</span><span id="line-183">     */</span>
 <span class="source-line-no">184</span><span id="line-184">    @Override</span>
-<span class="source-line-no">185</span><span id="line-185">    protected void onEnterVertex(Vertex vertex) {</span>
+<span class="source-line-no">185</span><span id="line-185">    protected void onEnterTransition(Transition transition) {</span>
 <span class="source-line-no">186</span><span id="line-186">        // Get workflow name</span>
 <span class="source-line-no">187</span><span id="line-187">        String workflowName = (getCode() != null &amp;&amp; getCode().getName() != null)</span>
 <span class="source-line-no">188</span><span id="line-188">                ? getCode().getName()</span>
 <span class="source-line-no">189</span><span id="line-189">                : "unknown-workflow";</span>
 <span class="source-line-no">190</span><span id="line-190"></span>
 <span class="source-line-no">191</span><span id="line-191">        // Get YAML-formatted output (first 10 lines)</span>
-<span class="source-line-no">192</span><span id="line-192">        String yamlText = vertex.toYamlString(10).trim();</span>
-<span class="source-line-no">193</span><span id="line-193">        this.currentVertexYaml = yamlText;</span>
+<span class="source-line-no">192</span><span id="line-192">        String yamlText = transition.toYamlString(10).trim();</span>
+<span class="source-line-no">193</span><span id="line-193">        this.currentTransitionYaml = yamlText;</span>
 <span class="source-line-no">194</span><span id="line-194"></span>
-<span class="source-line-no">195</span><span id="line-195">        // Combine workflow name and vertex YAML</span>
+<span class="source-line-no">195</span><span id="line-195">        // Combine workflow name and transition YAML</span>
 <span class="source-line-no">196</span><span id="line-196">        String displayText = "[" + workflowName + "]\n" + yamlText;</span>
 <span class="source-line-no">197</span><span id="line-197">        String[] cowsayArgs = { displayText };</span>
 <span class="source-line-no">198</span><span id="line-198">        System.out.println(Cowsay.say(cowsayArgs));</span>
 <span class="source-line-no">199</span><span id="line-199">    }</span>
 <span class="source-line-no">200</span><span id="line-200"></span>
 <span class="source-line-no">201</span><span id="line-201">    /**</span>
-<span class="source-line-no">202</span><span id="line-202">     * Returns the current vertex YAML snippet for accumulator reporting.</span>
+<span class="source-line-no">202</span><span id="line-202">     * Returns the current transition YAML snippet for accumulator reporting.</span>
 <span class="source-line-no">203</span><span id="line-203">     *</span>
-<span class="source-line-no">204</span><span id="line-204">     * @return the first 10 lines of the current vertex in YAML format</span>
+<span class="source-line-no">204</span><span id="line-204">     * @return the first 10 lines of the current transition in YAML format</span>
 <span class="source-line-no">205</span><span id="line-205">     */</span>
-<span class="source-line-no">206</span><span id="line-206">    public String getCurrentVertexYaml() {</span>
-<span class="source-line-no">207</span><span id="line-207">        return currentVertexYaml;</span>
+<span class="source-line-no">206</span><span id="line-206">    public String getCurrentTransitionYaml() {</span>
+<span class="source-line-no">207</span><span id="line-207">        return currentTransitionYaml;</span>
 <span class="source-line-no">208</span><span id="line-208">    }</span>
 <span class="source-line-no">209</span><span id="line-209"></span>
 <span class="source-line-no">210</span><span id="line-210">    /**</span>

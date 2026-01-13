@@ -37,7 +37,7 @@
 <span class="source-line-no">024</span><span id="line-24">import com.scivicslab.actoriac.log.LogLevel;</span>
 <span class="source-line-no">025</span><span id="line-25">import com.scivicslab.pojoactor.workflow.IIActorSystem;</span>
 <span class="source-line-no">026</span><span id="line-26">import com.scivicslab.pojoactor.workflow.Interpreter;</span>
-<span class="source-line-no">027</span><span id="line-27">import com.scivicslab.pojoactor.workflow.Vertex;</span>
+<span class="source-line-no">027</span><span id="line-27">import com.scivicslab.pojoactor.workflow.Transition;</span>
 <span class="source-line-no">028</span><span id="line-28"></span>
 <span class="source-line-no">029</span><span id="line-29">/**</span>
 <span class="source-line-no">030</span><span id="line-30"> * Level 3 wrapper that adds workflow capabilities to a NodeGroup POJO.</span>
@@ -72,7 +72,7 @@
 <span class="source-line-no">059</span><span id="line-59"></span>
 <span class="source-line-no">060</span><span id="line-60">    /**</span>
 <span class="source-line-no">061</span><span id="line-61">     * Verbose output flag.</span>
-<span class="source-line-no">062</span><span id="line-62">     * When true, displays full YAML for each vertex instead of truncated version.</span>
+<span class="source-line-no">062</span><span id="line-62">     * When true, displays full YAML for each transition instead of truncated version.</span>
 <span class="source-line-no">063</span><span id="line-63">     */</span>
 <span class="source-line-no">064</span><span id="line-64">    private boolean verbose = false;</span>
 <span class="source-line-no">065</span><span id="line-65"></span>
@@ -165,7 +165,7 @@
 <span class="source-line-no">152</span><span id="line-152">    /**</span>
 <span class="source-line-no">153</span><span id="line-153">     * Sets verbose mode for detailed output.</span>
 <span class="source-line-no">154</span><span id="line-154">     *</span>
-<span class="source-line-no">155</span><span id="line-155">     * &lt;p&gt;When enabled, displays full YAML for each vertex in cowsay output</span>
+<span class="source-line-no">155</span><span id="line-155">     * &lt;p&gt;When enabled, displays full YAML for each transition in cowsay output</span>
 <span class="source-line-no">156</span><span id="line-156">     * instead of the truncated version.&lt;/p&gt;</span>
 <span class="source-line-no">157</span><span id="line-157">     *</span>
 <span class="source-line-no">158</span><span id="line-158">     * @param verbose true to enable verbose output</span>
@@ -213,45 +213,45 @@
 <span class="source-line-no">200</span><span id="line-200">    }</span>
 <span class="source-line-no">201</span><span id="line-201"></span>
 <span class="source-line-no">202</span><span id="line-202">    /**</span>
-<span class="source-line-no">203</span><span id="line-203">     * Hook called when entering a vertex during workflow execution.</span>
+<span class="source-line-no">203</span><span id="line-203">     * Hook called when entering a transition during workflow execution.</span>
 <span class="source-line-no">204</span><span id="line-204">     *</span>
-<span class="source-line-no">205</span><span id="line-205">     * &lt;p&gt;Displays the workflow name and vertex definition using cowsay.</span>
+<span class="source-line-no">205</span><span id="line-205">     * &lt;p&gt;Displays the workflow name and transition definition using cowsay.</span>
 <span class="source-line-no">206</span><span id="line-206">     * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML</span>
 <span class="source-line-no">207</span><span id="line-207">     * after the cowsay output.&lt;/p&gt;</span>
 <span class="source-line-no">208</span><span id="line-208">     *</span>
-<span class="source-line-no">209</span><span id="line-209">     * @param vertex the vertex being entered</span>
+<span class="source-line-no">209</span><span id="line-209">     * @param transition the transition being entered</span>
 <span class="source-line-no">210</span><span id="line-210">     */</span>
 <span class="source-line-no">211</span><span id="line-211">    @Override</span>
-<span class="source-line-no">212</span><span id="line-212">    protected void onEnterVertex(Vertex vertex) {</span>
+<span class="source-line-no">212</span><span id="line-212">    protected void onEnterTransition(Transition transition) {</span>
 <span class="source-line-no">213</span><span id="line-213">        // Get workflow name</span>
 <span class="source-line-no">214</span><span id="line-214">        String workflowName = (getCode() != null &amp;&amp; getCode().getName() != null)</span>
 <span class="source-line-no">215</span><span id="line-215">                ? getCode().getName()</span>
 <span class="source-line-no">216</span><span id="line-216">                : "unknown-workflow";</span>
 <span class="source-line-no">217</span><span id="line-217"></span>
 <span class="source-line-no">218</span><span id="line-218">        // Get YAML-formatted output (first 10 lines for cowsay)</span>
-<span class="source-line-no">219</span><span id="line-219">        String yamlText = vertex.toYamlString(10).trim();</span>
+<span class="source-line-no">219</span><span id="line-219">        String yamlText = transition.toYamlString(10).trim();</span>
 <span class="source-line-no">220</span><span id="line-220"></span>
-<span class="source-line-no">221</span><span id="line-221">        // Combine workflow name and vertex YAML</span>
+<span class="source-line-no">221</span><span id="line-221">        // Combine workflow name and transition YAML</span>
 <span class="source-line-no">222</span><span id="line-222">        String displayText = "[" + workflowName + "]\n" + yamlText;</span>
 <span class="source-line-no">223</span><span id="line-223">        String[] cowsayArgs = { displayText };</span>
 <span class="source-line-no">224</span><span id="line-224">        System.out.println(Cowsay.say(cowsayArgs));</span>
 <span class="source-line-no">225</span><span id="line-225"></span>
 <span class="source-line-no">226</span><span id="line-226">        // In verbose mode, show the full YAML after cowsay</span>
 <span class="source-line-no">227</span><span id="line-227">        if (verbose) {</span>
-<span class="source-line-no">228</span><span id="line-228">            String fullYaml = vertex.toYamlString(-1);</span>
-<span class="source-line-no">229</span><span id="line-229">            System.out.println("--- Full vertex YAML ---");</span>
+<span class="source-line-no">228</span><span id="line-228">            String fullYaml = transition.toYamlString(-1);</span>
+<span class="source-line-no">229</span><span id="line-229">            System.out.println("--- Full transition YAML ---");</span>
 <span class="source-line-no">230</span><span id="line-230">            System.out.println(fullYaml);</span>
-<span class="source-line-no">231</span><span id="line-231">            System.out.println("------------------------");</span>
+<span class="source-line-no">231</span><span id="line-231">            System.out.println("----------------------------");</span>
 <span class="source-line-no">232</span><span id="line-232">        }</span>
 <span class="source-line-no">233</span><span id="line-233"></span>
 <span class="source-line-no">234</span><span id="line-234">        // Log to distributed log store</span>
 <span class="source-line-no">235</span><span id="line-235">        if (logStore != null &amp;&amp; sessionId &gt;= 0) {</span>
-<span class="source-line-no">236</span><span id="line-236">            String vertexName = vertex.getVertexName();</span>
-<span class="source-line-no">237</span><span id="line-237">            if (vertexName == null &amp;&amp; vertex.getStates() != null &amp;&amp; vertex.getStates().size() &gt;= 2) {</span>
-<span class="source-line-no">238</span><span id="line-238">                vertexName = vertex.getStates().get(0) + " -&gt; " + vertex.getStates().get(1);</span>
+<span class="source-line-no">236</span><span id="line-236">            String label = transition.getLabel();</span>
+<span class="source-line-no">237</span><span id="line-237">            if (label == null &amp;&amp; transition.getStates() != null &amp;&amp; transition.getStates().size() &gt;= 2) {</span>
+<span class="source-line-no">238</span><span id="line-238">                label = transition.getStates().get(0) + " -&gt; " + transition.getStates().get(1);</span>
 <span class="source-line-no">239</span><span id="line-239">            }</span>
-<span class="source-line-no">240</span><span id="line-240">            logStore.log(sessionId, "nodeGroup", vertexName, LogLevel.INFO,</span>
-<span class="source-line-no">241</span><span id="line-241">                    "Entering vertex: " + yamlText.split("\n")[0]);</span>
+<span class="source-line-no">240</span><span id="line-240">            logStore.log(sessionId, "nodeGroup", label, LogLevel.INFO,</span>
+<span class="source-line-no">241</span><span id="line-241">                    "Entering transition: " + yamlText.split("\n")[0]);</span>
 <span class="source-line-no">242</span><span id="line-242">        }</span>
 <span class="source-line-no">243</span><span id="line-243">    }</span>
 <span class="source-line-no">244</span><span id="line-244">}</span>

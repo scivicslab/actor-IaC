@@ -171,14 +171,14 @@
 <span class="source-line-no">158</span><span id="line-158"></span>
 <span class="source-line-no">159</span><span id="line-159">            for (Map&lt;String, Object&gt; step : steps) {</span>
 <span class="source-line-no">160</span><span id="line-160">                List&lt;String&gt; states = (List&lt;String&gt;) step.get("states");</span>
-<span class="source-line-no">161</span><span id="line-161">                String vertexName = (String) step.get("vertexName");</span>
+<span class="source-line-no">161</span><span id="line-161">                String label = (String) step.get("label");</span>
 <span class="source-line-no">162</span><span id="line-162">                String stepDescription = (String) step.get("description");</span>
 <span class="source-line-no">163</span><span id="line-163"></span>
 <span class="source-line-no">164</span><span id="line-164">                String stateTransition = (states != null &amp;&amp; states.size() &gt;= 2)</span>
 <span class="source-line-no">165</span><span id="line-165">                    ? states.get(0) + " -&gt; " + states.get(1)</span>
 <span class="source-line-no">166</span><span id="line-166">                    : "?";</span>
 <span class="source-line-no">167</span><span id="line-167"></span>
-<span class="source-line-no">168</span><span id="line-168">                String displayName = (vertexName != null) ? vertexName : "(unnamed)";</span>
+<span class="source-line-no">168</span><span id="line-168">                String displayName = (label != null) ? label : "(unnamed)";</span>
 <span class="source-line-no">169</span><span id="line-169"></span>
 <span class="source-line-no">170</span><span id="line-170">                System.out.println();</span>
 <span class="source-line-no">171</span><span id="line-171">                System.out.println("  [" + stateTransition + "] " + displayName);</span>

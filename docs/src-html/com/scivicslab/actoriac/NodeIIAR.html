@@ -510,7 +510,7 @@
 <span class="source-line-no">497</span><span id="line-497">        if (accumulator != null) {</span>
 <span class="source-line-no">498</span><span id="line-498">            JSONObject reportArg = new JSONObject();</span>
 <span class="source-line-no">499</span><span id="line-499">            reportArg.put("source", this.getName());</span>
-<span class="source-line-no">500</span><span id="line-500">            reportArg.put("type", this.object.getCurrentVertexYaml());</span>
+<span class="source-line-no">500</span><span id="line-500">            reportArg.put("type", this.object.getCurrentTransitionYaml());</span>
 <span class="source-line-no">501</span><span id="line-501">            reportArg.put("data", combineOutput(result));</span>
 <span class="source-line-no">502</span><span id="line-502">            accumulator.callByActionName("add", reportArg.toString());</span>
 <span class="source-line-no">503</span><span id="line-503">        }</span>
