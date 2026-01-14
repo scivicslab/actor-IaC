@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.Comparator;
 
+import com.scivicslab.actoriac.IaCStreamingAccumulator;
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.NodeGroupInterpreter;
 import com.scivicslab.actoriac.NodeGroupIIAR;
@@ -72,7 +73,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "run",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC run 2.11.0",
+    version = "actor-IaC run 2.12.0",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
 )
 public class RunCLI implements Callable<Integer> {
@@ -81,7 +82,6 @@ public class RunCLI implements Callable<Integer> {
 
     @Option(
         names = {"-d", "--dir"},
-        required = true,
         description = "Directory containing workflow files (searched recursively)"
     )
     private File workflowDir;
@@ -125,14 +125,14 @@ public class RunCLI implements Callable<Integer> {
     private File overlayDir;
 
     @Option(
-        names = {"-l", "--log"},
+        names = {"--file-log", "-l", "--log"},
         description = "Enable text file logging and specify output path. If not specified, only database logging is used."
     )
     private File logFile;
 
     @Option(
-        names = {"--no-log"},
-        description = "Disable file logging (output to console only)"
+        names = {"--no-file-log", "--no-log"},
+        description = "Explicitly disable text file logging. (Text logging is disabled by default.)"
     )
     private boolean noLog;
 
@@ -188,6 +188,14 @@ public class RunCLI implements Callable<Integer> {
     private boolean quiet;
 
     @Option(
+        names = {"--cowfile", "-c"},
+        description = "Cowsay character to use for step display. " +
+                     "Available: tux, dragon, stegosaurus, kitty, bunny, turtle, elephant, " +
+                     "ghostbusters, vader, and 35 more. Use '--cowfile list' to see all."
+    )
+    private String cowfile;
+
+    @Option(
         names = {"--render-to"},
         description = "Render overlay-applied workflows to specified directory (does not execute)"
     )
@@ -215,6 +223,19 @@ public class RunCLI implements Callable<Integer> {
      */
     @Override
     public Integer call() {
+        // Handle --cowfile list: show available cowfiles and exit
+        if ("list".equalsIgnoreCase(cowfile)) {
+            printAvailableCowfiles();
+            return 0;
+        }
+
+        // Validate --dir is required for all other operations
+        if (workflowDir == null) {
+            System.err.println("Missing required option: '--dir=<workflowDir>'");
+            CommandLine.usage(this, System.err);
+            return 2;
+        }
+
         // Validate required options
         // --render-to only requires --dir and --overlay, not --workflow
         if (renderToDir != null) {
@@ -730,6 +751,12 @@ public class RunCLI implements Callable<Integer> {
             if (verbose) {
                 nodeGroupInterpreter.setVerbose(true);
             }
+            // Create IaCStreamingAccumulator for cowsay display
+            IaCStreamingAccumulator accumulator = new IaCStreamingAccumulator();
+            if (cowfile != null && !cowfile.isBlank()) {
+                accumulator.setCowfile(cowfile);
+            }
+            nodeGroupInterpreter.setAccumulator(accumulator);
 
             // Inject log store into interpreter for node-level logging
             if (logStore != null) {
@@ -942,6 +969,48 @@ public class RunCLI implements Callable<Integer> {
         }
         System.out.println("-".repeat(90));
         System.out.println("Use -w <File> with the names shown in the 'File (-w)' column.");
+    }
+
+    /**
+     * Prints available cowfiles for cowsay output customization.
+     */
+    private void printAvailableCowfiles() {
+        System.out.println("Available cowfiles for --cowfile option:");
+        System.out.println("=".repeat(70));
+        System.out.println();
+
+        // Get list from Cowsay library
+        String[] listArgs = { "-l" };
+        String cowList = com.github.ricksbrown.cowsay.Cowsay.say(listArgs);
+
+        // Split and format nicely
+        String[] cowfiles = cowList.trim().split("\\s+");
+        System.out.println("Total: " + cowfiles.length + " cowfiles");
+        System.out.println();
+
+        // Print in columns
+        int cols = 4;
+        int colWidth = 17;
+        for (int i = 0; i < cowfiles.length; i++) {
+            System.out.printf("%-" + colWidth + "s", cowfiles[i]);
+            if ((i + 1) % cols == 0) {
+                System.out.println();
+            }
+        }
+        if (cowfiles.length % cols != 0) {
+            System.out.println();
+        }
+
+        System.out.println();
+        System.out.println("=".repeat(70));
+        System.out.println("Usage: actor_iac.java run -d <dir> -w <workflow> --cowfile tux");
+        System.out.println();
+        System.out.println("Popular choices:");
+        System.out.println("  tux         - Linux penguin (great for server work)");
+        System.out.println("  dragon      - Majestic dragon");
+        System.out.println("  stegosaurus - Prehistoric dinosaur");
+        System.out.println("  turtle      - Slow and steady");
+        System.out.println("  ghostbusters - Who you gonna call?");
     }
 
     private static String getBaseName(String fileName) {

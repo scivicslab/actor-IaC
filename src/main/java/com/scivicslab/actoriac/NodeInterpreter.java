@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.github.ricksbrown.cowsay.Cowsay;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
@@ -75,6 +74,12 @@ public class NodeInterpreter extends Interpreter {
      * This replaces the /tmp/changed_docs.txt file-based approach.
      */
     private final Set<String> changedDocuments = new HashSet<>();
+
+    /**
+     * IaCStreamingAccumulator for cowsay display.
+     * When set, workflow step transitions are displayed using cowsay.
+     */
+    private IaCStreamingAccumulator accumulator = null;
 
     /**
      * Constructs a NodeInterpreter that wraps the specified Node.
@@ -174,6 +179,24 @@ public class NodeInterpreter extends Interpreter {
     }
 
     /**
+     * Sets the IaCStreamingAccumulator for cowsay display.
+     *
+     * @param accumulator the accumulator to use for cowsay display
+     */
+    public void setAccumulator(IaCStreamingAccumulator accumulator) {
+        this.accumulator = accumulator;
+    }
+
+    /**
+     * Gets the IaCStreamingAccumulator for cowsay display.
+     *
+     * @return the cowsay accumulator, or null if not set
+     */
+    public IaCStreamingAccumulator getAccumulator() {
+        return accumulator;
+    }
+
+    /**
      * Hook called when entering a transition during workflow execution.
      *
      * <p>Displays the workflow name and first 10 lines of the transition definition
@@ -192,10 +215,13 @@ public class NodeInterpreter extends Interpreter {
         String yamlText = transition.toYamlString(10).trim();
         this.currentTransitionYaml = yamlText;
 
-        // Combine workflow name and transition YAML
-        String displayText = "[" + workflowName + "]\n" + yamlText;
-        String[] cowsayArgs = { displayText };
-        System.out.println(Cowsay.say(cowsayArgs));
+        // Display using IaCStreamingAccumulator if available
+        if (accumulator != null) {
+            accumulator.cowsay(workflowName, yamlText);
+        } else {
+            // Fallback to simple text output if no accumulator
+            System.out.println("[" + workflowName + "]\n" + yamlText);
+        }
     }
 
     /**

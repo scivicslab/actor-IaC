@@ -20,7 +20,6 @@ package com.scivicslab.actoriac;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import com.github.ricksbrown.cowsay.Cowsay;
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.pojoactor.core.ActorRef;
@@ -64,6 +63,12 @@ public class NodeGroupInterpreter extends Interpreter {
      * When true, displays full YAML for each transition instead of truncated version.
      */
     private boolean verbose = false;
+
+    /**
+     * IaCStreamingAccumulator for displaying workflow steps with cowsay ASCII art.
+     * When set, workflow step transitions are displayed using this accumulator.
+     */
+    private IaCStreamingAccumulator accumulator = null;
 
     /**
      * Actor reference for the distributed log store.
@@ -186,6 +191,28 @@ public class NodeGroupInterpreter extends Interpreter {
     }
 
     /**
+     * Sets the IaCStreamingAccumulator for displaying workflow steps.
+     *
+     * <p>When set, workflow step transitions are displayed using cowsay ASCII art
+     * via this accumulator. The accumulator's cowfile setting determines which
+     * character is used.</p>
+     *
+     * @param accumulator the accumulator to use for cowsay display
+     */
+    public void setAccumulator(IaCStreamingAccumulator accumulator) {
+        this.accumulator = accumulator;
+    }
+
+    /**
+     * Gets the IaCStreamingAccumulator for displaying workflow steps.
+     *
+     * @return the cowsay accumulator, or null if not set
+     */
+    public IaCStreamingAccumulator getAccumulator() {
+        return accumulator;
+    }
+
+    /**
      * Sets the distributed log store for structured logging.
      *
      * <p>Database writes are performed asynchronously via the logStore actor
@@ -261,10 +288,13 @@ public class NodeGroupInterpreter extends Interpreter {
         // Get YAML-formatted output (first 10 lines for cowsay)
         String yamlText = transition.toYamlString(10).trim();
 
-        // Combine workflow name and transition YAML
-        String displayText = "[" + workflowName + "]\n" + yamlText;
-        String[] cowsayArgs = { displayText };
-        System.out.println(Cowsay.say(cowsayArgs));
+        // Display using IaCStreamingAccumulator if available
+        if (accumulator != null) {
+            accumulator.cowsay(workflowName, yamlText);
+        } else {
+            // Fallback to simple text output if no accumulator
+            System.out.println("[" + workflowName + "]\n" + yamlText);
+        }
 
         // In verbose mode, show the full YAML after cowsay
         if (verbose) {

@@ -54,7 +54,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "describe",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC describe 2.10.0",
+    version = "actor-IaC describe 2.12.0",
     description = "Display workflow and step descriptions."
 )
 public class DescribeCLI implements Callable<Integer> {

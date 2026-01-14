@@ -359,6 +359,11 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
                 nodeInterpreter.setOverlayDir(nodeGroupInterpreter.getOverlayDir());
             }
 
+            // Propagate accumulator to child interpreter
+            if (nodeGroupInterpreter.getAccumulator() != null) {
+                nodeInterpreter.setAccumulator(nodeGroupInterpreter.getAccumulator());
+            }
+
             // Create child actor using ActorRef.createChild()
             // This establishes parent-child relationship
             this.createChild(nodeName, nodeInterpreter);
