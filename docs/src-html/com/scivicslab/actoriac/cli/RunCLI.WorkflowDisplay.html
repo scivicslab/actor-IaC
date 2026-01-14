@@ -151,7 +151,7 @@
 <span class="source-line-no">138</span><span id="line-138"></span>
 <span class="source-line-no">139</span><span id="line-139">    @Option(</span>
 <span class="source-line-no">140</span><span id="line-140">        names = {"--log-db"},</span>
-<span class="source-line-no">141</span><span id="line-141">        description = "H2 database path for distributed logging (default: actor-iac-logs in workflow directory)"</span>
+<span class="source-line-no">141</span><span id="line-141">        description = "H2 database path for distributed logging (default: actor-iac-logs in current directory)"</span>
 <span class="source-line-no">142</span><span id="line-142">    )</span>
 <span class="source-line-no">143</span><span id="line-143">    private File logDbPath;</span>
 <span class="source-line-no">144</span><span id="line-144"></span>
@@ -258,8 +258,8 @@
 <span class="source-line-no">245</span><span id="line-245">        // Setup H2 log database (enabled by default, use --no-log-db to disable)</span>
 <span class="source-line-no">246</span><span id="line-246">        if (!noLogDb) {</span>
 <span class="source-line-no">247</span><span id="line-247">            if (logDbPath == null) {</span>
-<span class="source-line-no">248</span><span id="line-248">                // Default: actor-iac-logs in workflow directory</span>
-<span class="source-line-no">249</span><span id="line-249">                logDbPath = new File(workflowDir, "actor-iac-logs");</span>
+<span class="source-line-no">248</span><span id="line-248">                // Default: actor-iac-logs in current directory</span>
+<span class="source-line-no">249</span><span id="line-249">                logDbPath = new File("actor-iac-logs");</span>
 <span class="source-line-no">250</span><span id="line-250">            }</span>
 <span class="source-line-no">251</span><span id="line-251">            try {</span>
 <span class="source-line-no">252</span><span id="line-252">                setupLogDatabase();</span>

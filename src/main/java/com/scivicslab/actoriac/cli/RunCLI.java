@@ -138,7 +138,7 @@ public class RunCLI implements Callable<Integer> {
 
     @Option(
         names = {"--log-db"},
-        description = "H2 database path for distributed logging (default: actor-iac-logs in workflow directory)"
+        description = "H2 database path for distributed logging (default: actor-iac-logs in current directory)"
     )
     private File logDbPath;
 
@@ -245,8 +245,8 @@ public class RunCLI implements Callable<Integer> {
         // Setup H2 log database (enabled by default, use --no-log-db to disable)
         if (!noLogDb) {
             if (logDbPath == null) {
-                // Default: actor-iac-logs in workflow directory
-                logDbPath = new File(workflowDir, "actor-iac-logs");
+                // Default: actor-iac-logs in current directory
+                logDbPath = new File("actor-iac-logs");
             }
             try {
                 setupLogDatabase();
