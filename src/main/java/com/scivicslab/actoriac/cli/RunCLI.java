@@ -126,7 +126,7 @@ public class RunCLI implements Callable<Integer> {
 
     @Option(
         names = {"-l", "--log"},
-        description = "Log file path (default: actor-iac-YYYYMMDDHHmm.log in current directory)"
+        description = "Enable text file logging and specify output path. If not specified, only database logging is used."
     )
     private File logFile;
 
@@ -257,8 +257,8 @@ public class RunCLI implements Callable<Integer> {
             }
         }
 
-        // Setup text file logging via H2LogStore (after DB is initialized)
-        if (!noLog && logStore != null) {
+        // Setup text file logging via H2LogStore (only when -l/--log option is specified)
+        if (logFile != null && logStore != null) {
             try {
                 setupTextLogging();
             } catch (IOException e) {
@@ -490,22 +490,16 @@ public class RunCLI implements Callable<Integer> {
      * Sets up text file logging via H2LogStore.
      *
      * <p>This method configures the H2LogStore to also write log entries
-     * to a text file, in addition to the H2 database.</p>
+     * to a text file, in addition to the H2 database. Only called when
+     * -l/--log option is explicitly specified.</p>
      */
     private void setupTextLogging() throws IOException {
-        Path logFilePath;
-        if (logFile != null) {
-            logFilePath = logFile.toPath();
-        } else {
-            // Generate default log file name: actor-iac-YYYYMMDDHHmm.log
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmm"));
-            logFilePath = Path.of("actor-iac-" + timestamp + ".log");
-        }
+        Path logFilePath = logFile.toPath();
 
         // Configure H2LogStore to also write to text file
         ((H2LogStore) logStore).setTextLogFile(logFilePath);
 
-        System.out.println("Logging to: " + logFilePath);
+        LOG.info("Text logging enabled: " + logFilePath);
     }
 
     /**
