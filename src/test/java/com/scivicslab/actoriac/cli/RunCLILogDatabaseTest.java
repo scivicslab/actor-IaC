@@ -228,15 +228,15 @@ class RunCLILogDatabaseTest {
     class CliOptionDescription {
 
         @Test
-        @DisplayName("--log-db description should mention workflow directory")
-        void logDbDescriptionShouldMentionWorkflowDirectory() throws Exception {
+        @DisplayName("--log-db description should mention current directory")
+        void logDbDescriptionShouldMentionCurrentDirectory() throws Exception {
             // Use reflection to check the @Option annotation
             java.lang.reflect.Field field = RunCLI.class.getDeclaredField("logDbPath");
             picocli.CommandLine.Option option = field.getAnnotation(picocli.CommandLine.Option.class);
 
             assertNotNull(option, "logDbPath should have @Option annotation");
-            assertTrue(option.description()[0].contains("workflow directory"),
-                      "Option description should mention workflow directory");
+            assertTrue(option.description()[0].contains("current directory"),
+                      "Option description should mention current directory");
         }
 
         @Test

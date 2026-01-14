@@ -159,7 +159,7 @@ public class DescribeCLI implements Callable<Integer> {
             for (Map<String, Object> step : steps) {
                 List<String> states = (List<String>) step.get("states");
                 String label = (String) step.get("label");
-                String stepDescription = (String) step.get("description");
+                String stepNote = (String) step.get("note");
 
                 String stateTransition = (states != null && states.size() >= 2)
                     ? states.get(0) + " -> " + states.get(1)
@@ -169,12 +169,10 @@ public class DescribeCLI implements Callable<Integer> {
 
                 System.out.println();
                 System.out.println("  [" + stateTransition + "] " + displayName);
-                if (stepDescription != null && !stepDescription.isBlank()) {
-                    for (String line : stepDescription.split("\n")) {
+                if (stepNote != null && !stepNote.isBlank()) {
+                    for (String line : stepNote.split("\n")) {
                         System.out.println("    " + line);
                     }
-                } else {
-                    System.out.println("    (no description)");
                 }
             }
         }
