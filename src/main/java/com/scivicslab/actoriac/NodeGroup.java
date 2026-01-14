@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Manages a group of nodes based on an Ansible inventory file.
@@ -53,7 +54,10 @@ import java.util.Map;
  */
 public class NodeGroup {
 
+    private static final Logger logger = Logger.getLogger(NodeGroup.class.getName());
+
     private InventoryParser.Inventory inventory;
+    private List<String> parseWarnings = new ArrayList<>();
     private String sshPassword;
     private List<String> hostLimit;
 
@@ -71,6 +75,7 @@ public class NodeGroup {
      */
     public static class Builder {
         private InventoryParser.Inventory inventory;
+        private List<String> warnings = new ArrayList<>();
 
         /**
          * Loads an Ansible inventory file.
@@ -80,7 +85,9 @@ public class NodeGroup {
          * @throws IOException if reading the inventory fails
          */
         public Builder withInventory(InputStream inventoryStream) throws IOException {
-            this.inventory = InventoryParser.parse(inventoryStream);
+            InventoryParser.ParseResult result = InventoryParser.parse(inventoryStream);
+            this.inventory = result.getInventory();
+            this.warnings = result.getWarnings();
             return this;
         }
 
@@ -90,7 +97,7 @@ public class NodeGroup {
          * @return a new NodeGroup instance with the configured settings
          */
         public NodeGroup build() {
-            return new NodeGroup(inventory);
+            return new NodeGroup(inventory, warnings);
         }
     }
 
@@ -106,19 +113,48 @@ public class NodeGroup {
      * Private constructor used by Builder.
      *
      * @param inventory the parsed inventory
+     * @param warnings list of warnings from parsing
      */
-    private NodeGroup(InventoryParser.Inventory inventory) {
+    private NodeGroup(InventoryParser.Inventory inventory, List<String> warnings) {
         this.inventory = inventory;
+        this.parseWarnings = warnings;
     }
 
     /**
      * Loads an inventory file from an input stream.
      *
+     * <p>Any warnings generated during parsing are stored and can be retrieved
+     * via {@link #getParseWarnings()}.</p>
+     *
      * @param inventoryStream the input stream containing the inventory file
      * @throws IOException if reading the inventory fails
      */
     public void loadInventory(InputStream inventoryStream) throws IOException {
-        this.inventory = InventoryParser.parse(inventoryStream);
+        InventoryParser.ParseResult result = InventoryParser.parse(inventoryStream);
+        this.inventory = result.getInventory();
+        this.parseWarnings = result.getWarnings();
+    }
+
+    /**
+     * Gets the warnings generated during inventory parsing.
+     *
+     * <p>These warnings should be logged by the caller using the appropriate
+     * logging mechanism (e.g., DistributedLogStore for database logging,
+     * or java.util.logging for console/file logging).</p>
+     *
+     * @return list of warning messages (may be empty)
+     */
+    public List<String> getParseWarnings() {
+        return parseWarnings;
+    }
+
+    /**
+     * Checks if there are any parse warnings.
+     *
+     * @return true if there are warnings
+     */
+    public boolean hasParseWarnings() {
+        return !parseWarnings.isEmpty();
     }
 
     /**
@@ -163,13 +199,15 @@ public class NodeGroup {
             effectiveVars.putAll(inventory.getHostVars(hostname));
 
             // Extract connection parameters for this host
-            // Use ansible_host if specified, otherwise use the logical hostname
-            String actualHost = effectiveVars.getOrDefault("ansible_host", hostname);
-            String user = effectiveVars.getOrDefault("ansible_user", System.getProperty("user.name"));
-            int port = Integer.parseInt(effectiveVars.getOrDefault("ansible_port", "22"));
+            // Support both actoriac_* (preferred) and ansible_* (for compatibility) prefixes
+            // Use actoriac_host or ansible_host if specified, otherwise use the logical hostname
+            String actualHost = getVar(effectiveVars, "host", hostname);
+            String user = getVar(effectiveVars, "user", System.getProperty("user.name"));
+            int port = Integer.parseInt(getVar(effectiveVars, "port", "22"));
 
-            // Check if local connection mode is requested (like Ansible's ansible_connection=local)
-            String connection = effectiveVars.getOrDefault("ansible_connection", "ssh");
+            // Check if local connection mode is requested
+            // (actoriac_connection=local or ansible_connection=local)
+            String connection = getVar(effectiveVars, "connection", "ssh");
             boolean localMode = "local".equalsIgnoreCase(connection);
 
             // Create Node using actualHost (IP or DNS) for SSH connection
@@ -262,6 +300,37 @@ public class NodeGroup {
      */
     public List<String> getHostLimit() {
         return hostLimit;
+    }
+
+    /**
+     * Gets a variable value with support for both actoriac_* and ansible_* prefixes.
+     *
+     * <p>This method checks for the variable in the following order:</p>
+     * <ol>
+     *   <li>actoriac_{suffix} - actor-IaC native naming</li>
+     *   <li>ansible_{suffix} - Ansible-compatible naming</li>
+     *   <li>defaultValue - if neither is found</li>
+     * </ol>
+     *
+     * @param vars the variable map to search
+     * @param suffix the variable suffix (e.g., "host", "user", "port", "connection")
+     * @param defaultValue the default value if neither prefix is found
+     * @return the variable value, or defaultValue if not found
+     */
+    private String getVar(Map<String, String> vars, String suffix, String defaultValue) {
+        // Check actoriac_* first (preferred)
+        String actoriacKey = "actoriac_" + suffix;
+        if (vars.containsKey(actoriacKey)) {
+            return vars.get(actoriacKey);
+        }
+
+        // Fallback to ansible_* for compatibility
+        String ansibleKey = "ansible_" + suffix;
+        if (vars.containsKey(ansibleKey)) {
+            return vars.get(ansibleKey);
+        }
+
+        return defaultValue;
     }
 
     @Override

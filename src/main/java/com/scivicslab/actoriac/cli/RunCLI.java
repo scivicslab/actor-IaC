@@ -30,10 +30,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import java.util.logging.FileHandler;
+import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.Comparator;
@@ -46,6 +45,7 @@ import com.scivicslab.actoriac.log.H2LogStore;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.actoriac.log.SessionStatus;
 import com.scivicslab.pojoactor.core.ActionResult;
+import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.kustomize.WorkflowKustomizer;
 
@@ -196,11 +196,14 @@ public class RunCLI implements Callable<Integer> {
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
 
-    /** File handler for logging */
-    private FileHandler fileHandler;
-
     /** Distributed log store (H2 database) */
     private DistributedLogStore logStore;
+
+    /** Actor reference for the log store (for async writes) */
+    private ActorRef<DistributedLogStore> logStoreActor;
+
+    /** Dedicated executor service for DB writes */
+    private ExecutorService dbExecutor;
 
     /** Current session ID for distributed logging */
     private long sessionId = -1;
@@ -236,17 +239,6 @@ public class RunCLI implements Callable<Integer> {
             suppressConsoleOutput();
         }
 
-        // Setup file logging
-        if (!noLog) {
-            try {
-                setupFileLogging();
-            } catch (IOException e) {
-                if (!quiet) {
-                    System.err.println("Warning: Failed to setup file logging: " + e.getMessage());
-                }
-            }
-        }
-
         // Configure log level based on verbose flag
         configureLogLevel(verbose);
 
@@ -265,13 +257,21 @@ public class RunCLI implements Callable<Integer> {
             }
         }
 
+        // Setup text file logging via H2LogStore (after DB is initialized)
+        if (!noLog && logStore != null) {
+            try {
+                setupTextLogging();
+            } catch (IOException e) {
+                if (!quiet) {
+                    System.err.println("Warning: Failed to setup text file logging: " + e.getMessage());
+                }
+            }
+        }
+
         try {
             return executeMain();
         } finally {
-            // Clean up resources
-            if (fileHandler != null) {
-                fileHandler.close();
-            }
+            // Clean up resources (H2LogStore.close() also closes text log writer)
             if (logStore != null) {
                 try {
                     logStore.close();
@@ -487,24 +487,23 @@ public class RunCLI implements Callable<Integer> {
     }
 
     /**
-     * Sets up file logging with default or specified log file.
+     * Sets up text file logging via H2LogStore.
+     *
+     * <p>This method configures the H2LogStore to also write log entries
+     * to a text file, in addition to the H2 database.</p>
      */
-    private void setupFileLogging() throws IOException {
-        String logFilePath;
+    private void setupTextLogging() throws IOException {
+        Path logFilePath;
         if (logFile != null) {
-            logFilePath = logFile.getAbsolutePath();
+            logFilePath = logFile.toPath();
         } else {
             // Generate default log file name: actor-iac-YYYYMMDDHHmm.log
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmm"));
-            logFilePath = "actor-iac-" + timestamp + ".log";
+            logFilePath = Path.of("actor-iac-" + timestamp + ".log");
         }
 
-        fileHandler = new FileHandler(logFilePath, false);
-        fileHandler.setFormatter(new SimpleFormatter());
-
-        // Add handler to root logger to capture all logs
-        Logger rootLogger = Logger.getLogger("");
-        rootLogger.addHandler(fileHandler);
+        // Configure H2LogStore to also write to text file
+        ((H2LogStore) logStore).setTextLogFile(logFilePath);
 
         System.out.println("Logging to: " + logFilePath);
     }
@@ -681,8 +680,15 @@ public class RunCLI implements Callable<Integer> {
 
         IIActorSystem system = new IIActorSystem("actor-iac-cli", threads);
 
-        // Start log session if log database is configured
+        // Add dedicated thread pool for DB writes (single thread to serialize writes)
+        system.addManagedThreadPool(1);
+        dbExecutor = system.getManagedThreadPool(1);
+
+        // Create logStore actor if log database is configured
         if (logStore != null) {
+            logStoreActor = system.actorOf("logStore", logStore);
+
+            // Start log session
             String overlayName = overlayDir != null ? overlayDir.getName() : null;
             String inventoryName = inventoryFile != null ? inventoryFile.getName() : null;
             sessionId = logStore.startSession(workflowName, overlayName, inventoryName, 1);
@@ -733,7 +739,7 @@ public class RunCLI implements Callable<Integer> {
 
             // Inject log store into interpreter for node-level logging
             if (logStore != null) {
-                nodeGroupInterpreter.setLogStore(logStore, sessionId);
+                nodeGroupInterpreter.setLogStore(logStore, logStoreActor, dbExecutor, sessionId);
             }
 
             // Step 2: Create NodeGroupIIAR and register with system
@@ -747,6 +753,20 @@ public class RunCLI implements Callable<Integer> {
                 logToDb("cli", LogLevel.ERROR, "Failed to load workflow: " + loadResult.getResult());
                 endSession(SessionStatus.FAILED);
                 return 1;
+            }
+
+            // Step 3.5: Create node actors if group is specified
+            if (groupName != null) {
+                LOG.info("Creating node actors for group: " + groupName);
+                logToDb("cli", LogLevel.INFO, "Creating node actors for group: " + groupName);
+                ActionResult createResult = nodeGroupActor.callByActionName("createNodeActors", "[\"" + groupName + "\"]");
+                if (!createResult.isSuccess()) {
+                    LOG.severe("Failed to create node actors: " + createResult.getResult());
+                    logToDb("cli", LogLevel.ERROR, "Failed to create node actors: " + createResult.getResult());
+                    endSession(SessionStatus.FAILED);
+                    return 1;
+                }
+                LOG.info("Node actors created: " + createResult.getResult());
             }
 
             // Step 4: Execute the workflow

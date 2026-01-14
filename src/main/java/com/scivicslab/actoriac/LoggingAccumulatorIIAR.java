@@ -18,6 +18,7 @@
 package com.scivicslab.actoriac;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,6 +27,7 @@ import org.json.JSONObject;
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.pojoactor.core.ActionResult;
+import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.core.accumulator.Accumulator;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
@@ -36,6 +38,10 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  * <p>This class extends the standard accumulator functionality to also write
  * logs to the H2LogStore for persistent storage. Each node's output is stored
  * with the node ID for later querying.</p>
+ *
+ * <p>Database writes are performed asynchronously using a dedicated single-threaded
+ * executor to avoid blocking workflow execution. The logStore actor ensures all
+ * DB writes are serialized.</p>
  *
  * <h2>Supported Actions</h2>
  * <ul>
@@ -51,7 +57,8 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
 public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
 
     private final Logger logger;
-    private final DistributedLogStore logStore;
+    private final ActorRef<DistributedLogStore> logStoreActor;
+    private final ExecutorService dbExecutor;
     private final long sessionId;
 
     /**
@@ -60,14 +67,17 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
      * @param actorName the name of this actor
      * @param object the Accumulator implementation
      * @param system the actor system
-     * @param logStore the distributed log store for database logging
+     * @param logStoreActor the actor reference for the distributed log store
+     * @param dbExecutor the dedicated executor service for DB writes (should be single-threaded)
      * @param sessionId the session ID for this workflow execution
      */
     public LoggingAccumulatorIIAR(String actorName, Accumulator object, IIActorSystem system,
-                                   DistributedLogStore logStore, long sessionId) {
+                                   ActorRef<DistributedLogStore> logStoreActor,
+                                   ExecutorService dbExecutor, long sessionId) {
         super(actorName, object, system);
         this.logger = Logger.getLogger(actorName);
-        this.logStore = logStore;
+        this.logStoreActor = logStoreActor;
+        this.dbExecutor = dbExecutor;
         this.sessionId = sessionId;
     }
 
@@ -103,7 +113,8 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
      * Handles the add action.
      *
      * <p>Adds the result to the accumulator (for console output) and also
-     * logs to the H2 database for persistent storage.</p>
+     * logs to the H2 database for persistent storage. Database writes are
+     * performed asynchronously via the logStore actor to avoid blocking.</p>
      *
      * @param arg JSON object with source, type, and data fields
      * @return ActionResult indicating success or failure
@@ -117,12 +128,15 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
         // Add to accumulator (console output)
         this.tell(acc -> acc.add(source, type, data)).get();
 
-        // Log to H2 database
-        if (logStore != null && sessionId >= 0) {
+        // Log to H2 database asynchronously via logStore actor
+        if (logStoreActor != null && sessionId >= 0) {
             // source = node ID (e.g., "node-192.168.1.1")
             // type = transition YAML snippet (what step is being executed)
             // data = command output
-            logStore.logAction(sessionId, source, type, "executeCommand", 0, 0L, data);
+            // Fire-and-forget: don't wait for DB write to complete
+            logStoreActor.tell(
+                store -> store.logAction(sessionId, source, type, "executeCommand", 0, 0L, data),
+                dbExecutor);
         }
 
         return new ActionResult(true, "Added");

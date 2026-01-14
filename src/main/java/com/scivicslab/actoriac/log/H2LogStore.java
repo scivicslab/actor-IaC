@@ -17,9 +17,14 @@
 
 package com.scivicslab.actoriac.log;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.sql.*;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -47,6 +52,7 @@ import java.util.logging.Logger;
 public class H2LogStore implements DistributedLogStore {
 
     private static final Logger LOG = Logger.getLogger(H2LogStore.class.getName());
+    private static final DateTimeFormatter LOG_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     private final Connection connection;
     private final BlockingQueue<LogTask> writeQueue;
@@ -54,6 +60,12 @@ public class H2LogStore implements DistributedLogStore {
     private final AtomicBoolean running;
     private static final int BATCH_SIZE = 100;
     private static final int DEFAULT_TCP_PORT = 29090;
+
+    /**
+     * Optional text log file writer.
+     * When set, log entries are also written to this text file.
+     */
+    private PrintWriter textLogWriter;
 
     /**
      * Creates an H2LogStore with the specified database path.
@@ -155,6 +167,33 @@ public class H2LogStore implements DistributedLogStore {
             }
         }
         return new H2LogStore(embeddedPath);
+    }
+
+    /**
+     * Sets the text log file for additional text-based logging.
+     *
+     * <p>When a text log file is set, all log entries written to the database
+     * are also appended to this text file in a human-readable format.</p>
+     *
+     * @param textLogPath path to the text log file
+     * @throws IOException if the file cannot be opened for writing
+     */
+    public void setTextLogFile(Path textLogPath) throws IOException {
+        if (this.textLogWriter != null) {
+            this.textLogWriter.close();
+        }
+        this.textLogWriter = new PrintWriter(new BufferedWriter(new FileWriter(textLogPath.toFile(), true)), true);
+        LOG.info("Text logging enabled: " + textLogPath);
+    }
+
+    /**
+     * Disables text file logging.
+     */
+    public void disableTextLog() {
+        if (this.textLogWriter != null) {
+            this.textLogWriter.close();
+            this.textLogWriter = null;
+        }
     }
 
     /**
@@ -316,6 +355,7 @@ public class H2LogStore implements DistributedLogStore {
     @Override
     public void log(long sessionId, String nodeId, String label, LogLevel level, String message) {
         writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, null, level, message, null, null));
+        writeToTextLog(nodeId, label, level, message);
     }
 
     @Override
@@ -323,6 +363,24 @@ public class H2LogStore implements DistributedLogStore {
                           String actionName, int exitCode, long durationMs, String output) {
         LogLevel level = exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;
         writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, actionName, level, output, exitCode, durationMs));
+        writeToTextLog(nodeId, label, level, output);
+    }
+
+    /**
+     * Writes a log entry to the text log file if enabled.
+     *
+     * @param nodeId the node identifier
+     * @param label the workflow label (may be null)
+     * @param level the log level
+     * @param message the log message
+     */
+    private void writeToTextLog(String nodeId, String label, LogLevel level, String message) {
+        if (textLogWriter == null) {
+            return;
+        }
+        String timestamp = LocalDateTime.now().format(LOG_TIMESTAMP_FORMAT);
+        String labelPart = label != null ? " [" + label + "]" : "";
+        textLogWriter.printf("%s %s %s%s %s%n", timestamp, level, nodeId, labelPart, message);
     }
 
     @Override
@@ -543,6 +601,10 @@ public class H2LogStore implements DistributedLogStore {
             writerThread.join(5000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+        if (textLogWriter != null) {
+            textLogWriter.close();
+            textLogWriter = null;
         }
         connection.close();
     }

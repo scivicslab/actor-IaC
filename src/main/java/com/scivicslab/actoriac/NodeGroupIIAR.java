@@ -20,6 +20,7 @@ package com.scivicslab.actoriac;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -28,6 +29,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.scivicslab.pojoactor.core.ActionResult;
+import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.core.accumulator.Accumulator;
 import com.scivicslab.pojoactor.core.accumulator.BufferedAccumulator;
 import com.scivicslab.pojoactor.core.accumulator.JsonAccumulator;
@@ -575,17 +577,19 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
                 throw new IllegalArgumentException("Unknown accumulator type: " + type);
         }
 
-        // Get logStore and sessionId from NodeGroupInterpreter
-        DistributedLogStore logStore = this.object.getLogStore();
+        // Get logStoreActor, dbExecutor and sessionId from NodeGroupInterpreter
+        ActorRef<DistributedLogStore> logStoreActor = this.object.getLogStoreActor();
+        ExecutorService dbExecutor = this.object.getDbExecutor();
         long sessionId = this.object.getSessionId();
 
-        // Create LoggingAccumulatorIIAR that also writes to H2 database
-        accumulatorActor = new LoggingAccumulatorIIAR("accumulator", accumulator, sys, logStore, sessionId);
+        // Create LoggingAccumulatorIIAR that also writes to H2 database via actor
+        accumulatorActor = new LoggingAccumulatorIIAR("accumulator", accumulator, sys,
+                                                       logStoreActor, dbExecutor, sessionId);
         this.createChild("accumulator", accumulator);
         sys.addIIActor(accumulatorActor);
 
         logger.info(String.format("Created %s accumulator as child actor (logging=%s)",
-            type, logStore != null ? "enabled" : "disabled"));
+            type, logStoreActor != null ? "enabled" : "disabled"));
     }
 
     /**

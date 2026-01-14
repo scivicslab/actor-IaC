@@ -208,4 +208,73 @@ class NodeGroupTest {
         assertNotNull(nodeGroup, "Builder should create nodeGroup");
         assertNotNull(nodeGroup.getInventory(), "Inventory should be loaded");
     }
+
+    @Test
+    @DisplayName("Should support actoriac_connection=local for local execution")
+    void testActoriacConnectionLocal() throws IOException {
+        InputStream input = getClass().getResourceAsStream("/test-inventory-actoriac.ini");
+        nodeGroup.loadInventory(input);
+
+        List<Node> localNodes = nodeGroup.createNodesForGroup("local");
+
+        assertEquals(1, localNodes.size(), "Should create 1 local node");
+        assertTrue(localNodes.get(0).isLocalMode(), "Node should be in local mode");
+    }
+
+    @Test
+    @DisplayName("Should support actoriac_user and actoriac_port variables")
+    void testActoriacUserAndPort() throws IOException {
+        InputStream input = getClass().getResourceAsStream("/test-inventory-actoriac.ini");
+        nodeGroup.loadInventory(input);
+
+        List<Node> servers = nodeGroup.createNodesForGroup("servers");
+
+        Node server1 = servers.stream()
+            .filter(n -> n.getHostname().equals("server1.example.com"))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals("admin", server1.getUser(), "server1 should use actoriac_user");
+        assertEquals(2222, server1.getPort(), "server1 should use actoriac_port");
+    }
+
+    @Test
+    @DisplayName("Should support actoriac_host variable")
+    void testActoriacHost() throws IOException {
+        InputStream input = getClass().getResourceAsStream("/test-inventory-actoriac.ini");
+        nodeGroup.loadInventory(input);
+
+        List<Node> servers = nodeGroup.createNodesForGroup("servers");
+
+        Node server2 = servers.stream()
+            .filter(n -> n.getHostname().equals("192.168.1.100"))
+            .findFirst()
+            .orElseThrow();
+
+        assertNotNull(server2, "server2 should use actoriac_host as actual hostname");
+    }
+
+    @Test
+    @DisplayName("actoriac_* should take priority over ansible_*")
+    void testActoriacPriorityOverAnsible() throws IOException {
+        InputStream input = getClass().getResourceAsStream("/test-inventory-actoriac.ini");
+        nodeGroup.loadInventory(input);
+
+        List<Node> mixed = nodeGroup.createNodesForGroup("mixed");
+
+        Node mixed1 = mixed.stream()
+            .filter(n -> n.getHostname().equals("mixed1.example.com"))
+            .findFirst()
+            .orElseThrow();
+        Node mixed2 = mixed.stream()
+            .filter(n -> n.getHostname().equals("mixed2.example.com"))
+            .findFirst()
+            .orElseThrow();
+
+        // actoriac_user should take priority over ansible_user
+        assertEquals("actoriac_user", mixed1.getUser(), "actoriac_* should take priority over ansible_*");
+
+        // ansible_user should still work when actoriac_user is not specified
+        assertEquals("ansible_only", mixed2.getUser(), "ansible_* should work as fallback");
+    }
 }

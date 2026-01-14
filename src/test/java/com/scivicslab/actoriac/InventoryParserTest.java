@@ -20,8 +20,10 @@ package com.scivicslab.actoriac;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -41,7 +43,8 @@ class InventoryParserTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         assertNotNull(input, "Test inventory file should exist");
 
-        InventoryParser.Inventory inventory = InventoryParser.parse(input);
+        InventoryParser.ParseResult result = InventoryParser.parse(input);
+        InventoryParser.Inventory inventory = result.getInventory();
 
         // Check groups
         Map<String, List<String>> groups = inventory.getAllGroups();
@@ -73,7 +76,8 @@ class InventoryParserTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         assertNotNull(input, "Test inventory file should exist");
 
-        InventoryParser.Inventory inventory = InventoryParser.parse(input);
+        InventoryParser.ParseResult result = InventoryParser.parse(input);
+        InventoryParser.Inventory inventory = result.getInventory();
 
         Map<String, String> globalVars = inventory.getGlobalVars();
         assertEquals("testuser", globalVars.get("ansible_user"), "Should have ansible_user");
@@ -86,7 +90,8 @@ class InventoryParserTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         assertNotNull(input, "Test inventory file should exist");
 
-        InventoryParser.Inventory inventory = InventoryParser.parse(input);
+        InventoryParser.ParseResult result = InventoryParser.parse(input);
+        InventoryParser.Inventory inventory = result.getInventory();
 
         Map<String, String> webserversVars = inventory.getGroupVars("webservers");
         assertEquals("8080", webserversVars.get("http_port"), "Webservers should have http_port");
@@ -98,7 +103,8 @@ class InventoryParserTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         assertNotNull(input, "Test inventory file should exist");
 
-        InventoryParser.Inventory inventory = InventoryParser.parse(input);
+        InventoryParser.ParseResult result = InventoryParser.parse(input);
+        InventoryParser.Inventory inventory = result.getInventory();
 
         List<String> nonexistent = inventory.getHosts("nonexistent");
         assertTrue(nonexistent.isEmpty(), "Nonexistent group should return empty list");
@@ -110,7 +116,8 @@ class InventoryParserTest {
         InputStream input = getClass().getResourceAsStream("/test-inventory.ini");
         assertNotNull(input, "Test inventory file should exist");
 
-        InventoryParser.Inventory inventory = InventoryParser.parse(input);
+        InventoryParser.ParseResult result = InventoryParser.parse(input);
+        InventoryParser.Inventory inventory = result.getInventory();
 
         // Check web1 has custom user
         Map<String, String> web1Vars = inventory.getHostVars("web1.example.com");
@@ -132,5 +139,105 @@ class InventoryParserTest {
         // Check db2 has no host-specific vars
         Map<String, String> db2Vars = inventory.getHostVars("db2.example.com");
         assertTrue(db2Vars.isEmpty(), "db2 should have no host-specific vars");
+    }
+
+    @Test
+    @DisplayName("Should warn about unsupported :children groups")
+    void testWarnChildrenGroups() throws IOException {
+        String inventory = """
+            [webservers]
+            web1.example.com
+
+            [production:children]
+            webservers
+            """;
+
+        InventoryParser.ParseResult result = InventoryParser.parse(
+            new ByteArrayInputStream(inventory.getBytes(StandardCharsets.UTF_8)));
+
+        assertTrue(result.hasWarnings(), "Should have warnings");
+        List<String> warnings = result.getWarnings();
+        assertTrue(warnings.stream().anyMatch(w -> w.contains(":children")),
+            "Should warn about :children groups");
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("not supported")),
+            "Warning should mention 'not supported'");
+    }
+
+    @Test
+    @DisplayName("Should warn about range patterns")
+    void testWarnRangePatterns() throws IOException {
+        String inventory = """
+            [webservers]
+            web[01:10].example.com
+            """;
+
+        InventoryParser.ParseResult result = InventoryParser.parse(
+            new ByteArrayInputStream(inventory.getBytes(StandardCharsets.UTF_8)));
+
+        assertTrue(result.hasWarnings(), "Should have warnings");
+        List<String> warnings = result.getWarnings();
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("Range patterns")),
+            "Should warn about range patterns");
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("[01:10]")),
+            "Warning should mention the pattern");
+    }
+
+    @Test
+    @DisplayName("Should warn about unsupported ansible_become variables")
+    void testWarnAnsibleBecome() throws IOException {
+        String inventory = """
+            [dbservers]
+            db1.example.com ansible_become=true ansible_become_user=root
+            """;
+
+        InventoryParser.ParseResult result = InventoryParser.parse(
+            new ByteArrayInputStream(inventory.getBytes(StandardCharsets.UTF_8)));
+
+        assertTrue(result.hasWarnings(), "Should have warnings");
+        List<String> warnings = result.getWarnings();
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("ansible_become")),
+            "Should warn about ansible_become");
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("privilege escalation") || w.contains("SUDO_PASSWORD")),
+            "Warning should suggest alternative");
+    }
+
+    @Test
+    @DisplayName("Should warn about ansible_python_interpreter")
+    void testWarnPythonInterpreter() throws IOException {
+        String inventory = """
+            [all:vars]
+            ansible_python_interpreter=/usr/bin/python3
+            """;
+
+        InventoryParser.ParseResult result = InventoryParser.parse(
+            new ByteArrayInputStream(inventory.getBytes(StandardCharsets.UTF_8)));
+
+        assertTrue(result.hasWarnings(), "Should have warnings");
+        List<String> warnings = result.getWarnings();
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("ansible_python_interpreter")),
+            "Should warn about ansible_python_interpreter");
+        assertTrue(warnings.stream().anyMatch(w -> w.contains("without Python")),
+            "Warning should explain why it's not needed");
+    }
+
+    @Test
+    @DisplayName("Should skip range pattern hosts but continue parsing")
+    void testSkipRangePatternHosts() throws IOException {
+        String inventory = """
+            [webservers]
+            web1.example.com
+            web[01:10].example.com
+            web2.example.com
+            """;
+
+        InventoryParser.ParseResult result = InventoryParser.parse(
+            new ByteArrayInputStream(inventory.getBytes(StandardCharsets.UTF_8)));
+
+        List<String> hosts = result.getInventory().getHosts("webservers");
+        assertEquals(2, hosts.size(), "Should have 2 valid hosts (range pattern skipped)");
+        assertTrue(hosts.contains("web1.example.com"), "Should contain web1");
+        assertTrue(hosts.contains("web2.example.com"), "Should contain web2");
+        assertFalse(hosts.stream().anyMatch(h -> h.contains("[")),
+            "Should not contain range pattern host");
     }
 }

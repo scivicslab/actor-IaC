@@ -18,10 +18,12 @@
 package com.scivicslab.actoriac;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 
 import com.github.ricksbrown.cowsay.Cowsay;
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
+import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
 import com.scivicslab.pojoactor.workflow.Transition;
@@ -64,9 +66,22 @@ public class NodeGroupInterpreter extends Interpreter {
     private boolean verbose = false;
 
     /**
-     * Distributed log store for structured logging.
+     * Actor reference for the distributed log store.
+     * Used to send log messages asynchronously to avoid blocking workflow execution.
+     */
+    private ActorRef<DistributedLogStore> logStoreActor;
+
+    /**
+     * Direct reference to the log store for synchronous read operations.
+     * Reads don't need to go through the actor since they don't need serialization.
      */
     private DistributedLogStore logStore;
+
+    /**
+     * Dedicated executor service for DB writes.
+     * Should be a single-threaded pool to ensure serialized writes.
+     */
+    private ExecutorService dbExecutor;
 
     /**
      * Session ID for the current workflow execution.
@@ -173,21 +188,49 @@ public class NodeGroupInterpreter extends Interpreter {
     /**
      * Sets the distributed log store for structured logging.
      *
-     * @param logStore the log store to use
+     * <p>Database writes are performed asynchronously via the logStore actor
+     * using the dedicated dbExecutor to avoid blocking workflow execution.
+     * Direct reads can use the logStore reference directly.</p>
+     *
+     * @param logStore the log store instance (for direct reads)
+     * @param logStoreActor the actor reference for the log store (for async writes)
+     * @param dbExecutor the dedicated executor service for DB writes
      * @param sessionId the session ID for this execution
      */
-    public void setLogStore(DistributedLogStore logStore, long sessionId) {
+    public void setLogStore(DistributedLogStore logStore,
+                            ActorRef<DistributedLogStore> logStoreActor,
+                            ExecutorService dbExecutor, long sessionId) {
         this.logStore = logStore;
+        this.logStoreActor = logStoreActor;
+        this.dbExecutor = dbExecutor;
         this.sessionId = sessionId;
     }
 
     /**
-     * Gets the log store.
+     * Gets the log store for direct read operations.
      *
      * @return the log store, or null if not set
      */
     public DistributedLogStore getLogStore() {
         return logStore;
+    }
+
+    /**
+     * Gets the log store actor for async write operations.
+     *
+     * @return the log store actor, or null if not set
+     */
+    public ActorRef<DistributedLogStore> getLogStoreActor() {
+        return logStoreActor;
+    }
+
+    /**
+     * Gets the DB executor service.
+     *
+     * @return the DB executor service, or null if not set
+     */
+    public ExecutorService getDbExecutor() {
+        return dbExecutor;
     }
 
     /**
@@ -231,14 +274,18 @@ public class NodeGroupInterpreter extends Interpreter {
             System.out.println("----------------------------");
         }
 
-        // Log to distributed log store
-        if (logStore != null && sessionId >= 0) {
+        // Log to distributed log store asynchronously
+        if (logStoreActor != null && sessionId >= 0) {
             String label = transition.getLabel();
             if (label == null && transition.getStates() != null && transition.getStates().size() >= 2) {
                 label = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
             }
-            logStore.log(sessionId, "nodeGroup", label, LogLevel.INFO,
-                    "Entering transition: " + yamlText.split("\n")[0]);
+            final String finalLabel = label;
+            final String message = "Entering transition: " + yamlText.split("\n")[0];
+            // Fire-and-forget: don't wait for DB write to complete
+            logStoreActor.tell(
+                store -> store.log(sessionId, "nodeGroup", finalLabel, LogLevel.INFO, message),
+                dbExecutor);
         }
     }
 }
