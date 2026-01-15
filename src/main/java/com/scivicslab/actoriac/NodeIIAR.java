@@ -516,13 +516,24 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
     }
 
     /**
-     * Extracts the root cause message from an ExecutionException.
+     * Extracts a meaningful error message from an ExecutionException.
+     *
+     * <p>Prioritizes IOException messages (which contain our detailed SSH error messages)
+     * over the raw library exception messages.</p>
      */
     private String extractRootCauseMessage(ExecutionException e) {
         Throwable cause = e.getCause();
-        while (cause != null && cause.getCause() != null) {
-            cause = cause.getCause();
+
+        // Look for IOException first - it contains our detailed error messages
+        Throwable current = cause;
+        while (current != null) {
+            if (current instanceof java.io.IOException) {
+                return current.getMessage();
+            }
+            current = current.getCause();
         }
+
+        // Fall back to the immediate cause message
         return cause != null ? cause.getMessage() : e.getMessage();
     }
 

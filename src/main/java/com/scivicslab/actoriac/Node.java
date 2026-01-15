@@ -285,7 +285,31 @@ public class Node {
             );
 
         } catch (JSchException e) {
-            throw new IOException("SSH connection failed: " + e.getMessage(), e);
+            String message = e.getMessage();
+            if (message != null && message.contains("USERAUTH fail")) {
+                throw new IOException(String.format(
+                    "SSH authentication failed for %s@%s:%d. " +
+                    "Please check: (1) ssh-agent is running with your key loaded (ssh-add -l), " +
+                    "(2) your public key is in the remote ~/.ssh/authorized_keys, " +
+                    "(3) correct username is specified in inventory",
+                    user, hostname, port), e);
+            } else if (message != null && message.contains("Auth fail")) {
+                throw new IOException(String.format(
+                    "SSH authentication failed for %s@%s:%d. " +
+                    "Verify your credentials and ensure the SSH key or password is correct.",
+                    user, hostname, port), e);
+            } else if (message != null && (message.contains("Connection refused") || message.contains("connect timed out"))) {
+                throw new IOException(String.format(
+                    "SSH connection failed to %s:%d - %s. " +
+                    "Verify the host is reachable and SSH service is running.",
+                    hostname, port, message), e);
+            } else if (message != null && message.contains("UnknownHostException")) {
+                throw new IOException(String.format(
+                    "SSH connection failed: Unknown host '%s'. " +
+                    "Check the hostname or IP address in inventory.",
+                    hostname), e);
+            }
+            throw new IOException("SSH connection failed to " + hostname + ": " + message, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Command execution interrupted", e);

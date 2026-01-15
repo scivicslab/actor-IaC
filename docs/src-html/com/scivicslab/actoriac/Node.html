@@ -298,356 +298,380 @@
 <span class="source-line-no">285</span><span id="line-285">            );</span>
 <span class="source-line-no">286</span><span id="line-286"></span>
 <span class="source-line-no">287</span><span id="line-287">        } catch (JSchException e) {</span>
-<span class="source-line-no">288</span><span id="line-288">            throw new IOException("SSH connection failed: " + e.getMessage(), e);</span>
-<span class="source-line-no">289</span><span id="line-289">        } catch (InterruptedException e) {</span>
-<span class="source-line-no">290</span><span id="line-290">            Thread.currentThread().interrupt();</span>
-<span class="source-line-no">291</span><span id="line-291">            throw new IOException("Command execution interrupted", e);</span>
-<span class="source-line-no">292</span><span id="line-292">        } finally {</span>
-<span class="source-line-no">293</span><span id="line-293">            if (channel != null &amp;&amp; channel.isConnected()) {</span>
-<span class="source-line-no">294</span><span id="line-294">                channel.disconnect();</span>
-<span class="source-line-no">295</span><span id="line-295">            }</span>
-<span class="source-line-no">296</span><span id="line-296">            if (session != null &amp;&amp; session.isConnected()) {</span>
-<span class="source-line-no">297</span><span id="line-297">                session.disconnect();</span>
-<span class="source-line-no">298</span><span id="line-298">            }</span>
-<span class="source-line-no">299</span><span id="line-299">            // Clean up jump host session if used</span>
-<span class="source-line-no">300</span><span id="line-300">            if (jumpHostSession != null &amp;&amp; jumpHostSession.isConnected()) {</span>
-<span class="source-line-no">301</span><span id="line-301">                jumpHostSession.disconnect();</span>
-<span class="source-line-no">302</span><span id="line-302">                jumpHostSession = null;</span>
-<span class="source-line-no">303</span><span id="line-303">            }</span>
-<span class="source-line-no">304</span><span id="line-304">        }</span>
-<span class="source-line-no">305</span><span id="line-305">    }</span>
-<span class="source-line-no">306</span><span id="line-306"></span>
-<span class="source-line-no">307</span><span id="line-307">    private static final String SUDO_PASSWORD_ENV = "SUDO_PASSWORD";</span>
-<span class="source-line-no">308</span><span id="line-308"></span>
-<span class="source-line-no">309</span><span id="line-309">    /**</span>
-<span class="source-line-no">310</span><span id="line-310">     * Executes a command with sudo privileges on the remote node.</span>
-<span class="source-line-no">311</span><span id="line-311">     *</span>
-<span class="source-line-no">312</span><span id="line-312">     * &lt;p&gt;Reads the sudo password from the SUDO_PASSWORD environment variable.</span>
-<span class="source-line-no">313</span><span id="line-313">     * If the environment variable is not set, throws an IOException.&lt;/p&gt;</span>
-<span class="source-line-no">314</span><span id="line-314">     *</span>
-<span class="source-line-no">315</span><span id="line-315">     * &lt;p&gt;Multi-line scripts are properly handled by wrapping them in bash -c.&lt;/p&gt;</span>
-<span class="source-line-no">316</span><span id="line-316">     *</span>
-<span class="source-line-no">317</span><span id="line-317">     * @param command the command to execute with sudo</span>
-<span class="source-line-no">318</span><span id="line-318">     * @return the execution result containing stdout, stderr, and exit code</span>
-<span class="source-line-no">319</span><span id="line-319">     * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set</span>
-<span class="source-line-no">320</span><span id="line-320">     */</span>
-<span class="source-line-no">321</span><span id="line-321">    public CommandResult executeSudoCommand(String command) throws IOException {</span>
-<span class="source-line-no">322</span><span id="line-322">        String sudoPassword = System.getenv(SUDO_PASSWORD_ENV);</span>
-<span class="source-line-no">323</span><span id="line-323">        if (sudoPassword == null || sudoPassword.isEmpty()) {</span>
-<span class="source-line-no">324</span><span id="line-324">            throw new IOException("SUDO_PASSWORD environment variable is not set");</span>
-<span class="source-line-no">325</span><span id="line-325">        }</span>
-<span class="source-line-no">326</span><span id="line-326"></span>
-<span class="source-line-no">327</span><span id="line-327">        // Escape single quotes in command for bash -c</span>
-<span class="source-line-no">328</span><span id="line-328">        String escapedCommand = command.replace("'", "'\"'\"'");</span>
-<span class="source-line-no">329</span><span id="line-329"></span>
-<span class="source-line-no">330</span><span id="line-330">        // Use sudo -S to read password from stdin, wrap command in bash -c for multi-line support</span>
-<span class="source-line-no">331</span><span id="line-331">        String sudoCommand = String.format("echo '%s' | sudo -S bash -c '%s'",</span>
-<span class="source-line-no">332</span><span id="line-332">            sudoPassword.replace("'", "'\\''"), escapedCommand);</span>
-<span class="source-line-no">333</span><span id="line-333"></span>
-<span class="source-line-no">334</span><span id="line-334">        return executeCommand(sudoCommand);</span>
-<span class="source-line-no">335</span><span id="line-335">    }</span>
-<span class="source-line-no">336</span><span id="line-336"></span>
-<span class="source-line-no">337</span><span id="line-337">    /**</span>
-<span class="source-line-no">338</span><span id="line-338">     * Creates a JSch SSH session with configured credentials.</span>
-<span class="source-line-no">339</span><span id="line-339">     * Supports ProxyJump for connections through a jump host.</span>
+<span class="source-line-no">288</span><span id="line-288">            String message = e.getMessage();</span>
+<span class="source-line-no">289</span><span id="line-289">            if (message != null &amp;&amp; message.contains("USERAUTH fail")) {</span>
+<span class="source-line-no">290</span><span id="line-290">                throw new IOException(String.format(</span>
+<span class="source-line-no">291</span><span id="line-291">                    "SSH authentication failed for %s@%s:%d. " +</span>
+<span class="source-line-no">292</span><span id="line-292">                    "Please check: (1) ssh-agent is running with your key loaded (ssh-add -l), " +</span>
+<span class="source-line-no">293</span><span id="line-293">                    "(2) your public key is in the remote ~/.ssh/authorized_keys, " +</span>
+<span class="source-line-no">294</span><span id="line-294">                    "(3) correct username is specified in inventory",</span>
+<span class="source-line-no">295</span><span id="line-295">                    user, hostname, port), e);</span>
+<span class="source-line-no">296</span><span id="line-296">            } else if (message != null &amp;&amp; message.contains("Auth fail")) {</span>
+<span class="source-line-no">297</span><span id="line-297">                throw new IOException(String.format(</span>
+<span class="source-line-no">298</span><span id="line-298">                    "SSH authentication failed for %s@%s:%d. " +</span>
+<span class="source-line-no">299</span><span id="line-299">                    "Verify your credentials and ensure the SSH key or password is correct.",</span>
+<span class="source-line-no">300</span><span id="line-300">                    user, hostname, port), e);</span>
+<span class="source-line-no">301</span><span id="line-301">            } else if (message != null &amp;&amp; (message.contains("Connection refused") || message.contains("connect timed out"))) {</span>
+<span class="source-line-no">302</span><span id="line-302">                throw new IOException(String.format(</span>
+<span class="source-line-no">303</span><span id="line-303">                    "SSH connection failed to %s:%d - %s. " +</span>
+<span class="source-line-no">304</span><span id="line-304">                    "Verify the host is reachable and SSH service is running.",</span>
+<span class="source-line-no">305</span><span id="line-305">                    hostname, port, message), e);</span>
+<span class="source-line-no">306</span><span id="line-306">            } else if (message != null &amp;&amp; message.contains("UnknownHostException")) {</span>
+<span class="source-line-no">307</span><span id="line-307">                throw new IOException(String.format(</span>
+<span class="source-line-no">308</span><span id="line-308">                    "SSH connection failed: Unknown host '%s'. " +</span>
+<span class="source-line-no">309</span><span id="line-309">                    "Check the hostname or IP address in inventory.",</span>
+<span class="source-line-no">310</span><span id="line-310">                    hostname), e);</span>
+<span class="source-line-no">311</span><span id="line-311">            }</span>
+<span class="source-line-no">312</span><span id="line-312">            throw new IOException("SSH connection failed to " + hostname + ": " + message, e);</span>
+<span class="source-line-no">313</span><span id="line-313">        } catch (InterruptedException e) {</span>
+<span class="source-line-no">314</span><span id="line-314">            Thread.currentThread().interrupt();</span>
+<span class="source-line-no">315</span><span id="line-315">            throw new IOException("Command execution interrupted", e);</span>
+<span class="source-line-no">316</span><span id="line-316">        } finally {</span>
+<span class="source-line-no">317</span><span id="line-317">            if (channel != null &amp;&amp; channel.isConnected()) {</span>
+<span class="source-line-no">318</span><span id="line-318">                channel.disconnect();</span>
+<span class="source-line-no">319</span><span id="line-319">            }</span>
+<span class="source-line-no">320</span><span id="line-320">            if (session != null &amp;&amp; session.isConnected()) {</span>
+<span class="source-line-no">321</span><span id="line-321">                session.disconnect();</span>
+<span class="source-line-no">322</span><span id="line-322">            }</span>
+<span class="source-line-no">323</span><span id="line-323">            // Clean up jump host session if used</span>
+<span class="source-line-no">324</span><span id="line-324">            if (jumpHostSession != null &amp;&amp; jumpHostSession.isConnected()) {</span>
+<span class="source-line-no">325</span><span id="line-325">                jumpHostSession.disconnect();</span>
+<span class="source-line-no">326</span><span id="line-326">                jumpHostSession = null;</span>
+<span class="source-line-no">327</span><span id="line-327">            }</span>
+<span class="source-line-no">328</span><span id="line-328">        }</span>
+<span class="source-line-no">329</span><span id="line-329">    }</span>
+<span class="source-line-no">330</span><span id="line-330"></span>
+<span class="source-line-no">331</span><span id="line-331">    private static final String SUDO_PASSWORD_ENV = "SUDO_PASSWORD";</span>
+<span class="source-line-no">332</span><span id="line-332"></span>
+<span class="source-line-no">333</span><span id="line-333">    /**</span>
+<span class="source-line-no">334</span><span id="line-334">     * Executes a command with sudo privileges on the remote node.</span>
+<span class="source-line-no">335</span><span id="line-335">     *</span>
+<span class="source-line-no">336</span><span id="line-336">     * &lt;p&gt;Reads the sudo password from the SUDO_PASSWORD environment variable.</span>
+<span class="source-line-no">337</span><span id="line-337">     * If the environment variable is not set, throws an IOException.&lt;/p&gt;</span>
+<span class="source-line-no">338</span><span id="line-338">     *</span>
+<span class="source-line-no">339</span><span id="line-339">     * &lt;p&gt;Multi-line scripts are properly handled by wrapping them in bash -c.&lt;/p&gt;</span>
 <span class="source-line-no">340</span><span id="line-340">     *</span>
-<span class="source-line-no">341</span><span id="line-341">     * @return configured but not yet connected Session</span>
-<span class="source-line-no">342</span><span id="line-342">     * @throws JSchException if session creation fails</span>
-<span class="source-line-no">343</span><span id="line-343">     * @throws IOException if SSH key file operations fail</span>
+<span class="source-line-no">341</span><span id="line-341">     * @param command the command to execute with sudo</span>
+<span class="source-line-no">342</span><span id="line-342">     * @return the execution result containing stdout, stderr, and exit code</span>
+<span class="source-line-no">343</span><span id="line-343">     * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set</span>
 <span class="source-line-no">344</span><span id="line-344">     */</span>
-<span class="source-line-no">345</span><span id="line-345">    private Session createSession() throws JSchException, IOException {</span>
-<span class="source-line-no">346</span><span id="line-346">        JSch jsch = new JSch();</span>
-<span class="source-line-no">347</span><span id="line-347"></span>
-<span class="source-line-no">348</span><span id="line-348">        // Load OpenSSH config file first (for user/hostname/port/IdentityFile/ProxyJump)</span>
-<span class="source-line-no">349</span><span id="line-349">        com.jcraft.jsch.ConfigRepository configRepository = null;</span>
-<span class="source-line-no">350</span><span id="line-350">        String identityFileFromConfig = null;</span>
-<span class="source-line-no">351</span><span id="line-351">        String proxyJump = null;</span>
-<span class="source-line-no">352</span><span id="line-352">        try {</span>
-<span class="source-line-no">353</span><span id="line-353">            String sshConfigPath = System.getProperty("user.home") + "/.ssh/config";</span>
-<span class="source-line-no">354</span><span id="line-354">            java.io.File configFile = new java.io.File(sshConfigPath);</span>
-<span class="source-line-no">355</span><span id="line-355">            if (configFile.exists()) {</span>
-<span class="source-line-no">356</span><span id="line-356">                com.jcraft.jsch.OpenSSHConfig openSSHConfig =</span>
-<span class="source-line-no">357</span><span id="line-357">                    com.jcraft.jsch.OpenSSHConfig.parseFile(sshConfigPath);</span>
-<span class="source-line-no">358</span><span id="line-358">                configRepository = openSSHConfig;</span>
-<span class="source-line-no">359</span><span id="line-359"></span>
-<span class="source-line-no">360</span><span id="line-360">                // Get IdentityFile and ProxyJump from config for this host</span>
-<span class="source-line-no">361</span><span id="line-361">                com.jcraft.jsch.ConfigRepository.Config hostConfig = openSSHConfig.getConfig(hostname);</span>
-<span class="source-line-no">362</span><span id="line-362">                if (hostConfig != null) {</span>
-<span class="source-line-no">363</span><span id="line-363">                    identityFileFromConfig = hostConfig.getValue("IdentityFile");</span>
-<span class="source-line-no">364</span><span id="line-364">                    // Expand ~ to home directory</span>
-<span class="source-line-no">365</span><span id="line-365">                    if (identityFileFromConfig != null &amp;&amp; identityFileFromConfig.startsWith("~")) {</span>
-<span class="source-line-no">366</span><span id="line-366">                        identityFileFromConfig = System.getProperty("user.home") +</span>
-<span class="source-line-no">367</span><span id="line-367">                            identityFileFromConfig.substring(1);</span>
-<span class="source-line-no">368</span><span id="line-368">                    }</span>
-<span class="source-line-no">369</span><span id="line-369">                    // Get ProxyJump setting</span>
-<span class="source-line-no">370</span><span id="line-370">                    proxyJump = hostConfig.getValue("ProxyJump");</span>
-<span class="source-line-no">371</span><span id="line-371">                }</span>
-<span class="source-line-no">372</span><span id="line-372">            }</span>
-<span class="source-line-no">373</span><span id="line-373">        } catch (Exception e) {</span>
-<span class="source-line-no">374</span><span id="line-374">            // If config loading fails, continue without it</span>
-<span class="source-line-no">375</span><span id="line-375">        }</span>
-<span class="source-line-no">376</span><span id="line-376"></span>
-<span class="source-line-no">377</span><span id="line-377">        // Setup authentication</span>
-<span class="source-line-no">378</span><span id="line-378">        setupAuthentication(jsch, identityFileFromConfig);</span>
-<span class="source-line-no">379</span><span id="line-379"></span>
-<span class="source-line-no">380</span><span id="line-380">        // Get effective connection parameters from SSH config</span>
-<span class="source-line-no">381</span><span id="line-381">        String effectiveUser = user;</span>
-<span class="source-line-no">382</span><span id="line-382">        String effectiveHostname = hostname;</span>
-<span class="source-line-no">383</span><span id="line-383">        int effectivePort = port;</span>
-<span class="source-line-no">384</span><span id="line-384"></span>
-<span class="source-line-no">385</span><span id="line-385">        if (configRepository != null) {</span>
-<span class="source-line-no">386</span><span id="line-386">            com.jcraft.jsch.ConfigRepository.Config config = configRepository.getConfig(hostname);</span>
-<span class="source-line-no">387</span><span id="line-387">            if (config != null) {</span>
-<span class="source-line-no">388</span><span id="line-388">                // Override with SSH config values if present</span>
-<span class="source-line-no">389</span><span id="line-389">                String configUser = config.getUser();</span>
-<span class="source-line-no">390</span><span id="line-390">                if (configUser != null) {</span>
-<span class="source-line-no">391</span><span id="line-391">                    effectiveUser = configUser;</span>
-<span class="source-line-no">392</span><span id="line-392">                }</span>
-<span class="source-line-no">393</span><span id="line-393">                String configHostname = config.getHostname();</span>
-<span class="source-line-no">394</span><span id="line-394">                if (configHostname != null) {</span>
-<span class="source-line-no">395</span><span id="line-395">                    effectiveHostname = configHostname;</span>
-<span class="source-line-no">396</span><span id="line-396">                }</span>
-<span class="source-line-no">397</span><span id="line-397">                String configPort = config.getValue("Port");</span>
-<span class="source-line-no">398</span><span id="line-398">                if (configPort != null) {</span>
-<span class="source-line-no">399</span><span id="line-399">                    try {</span>
-<span class="source-line-no">400</span><span id="line-400">                        effectivePort = Integer.parseInt(configPort);</span>
-<span class="source-line-no">401</span><span id="line-401">                    } catch (NumberFormatException e) {</span>
-<span class="source-line-no">402</span><span id="line-402">                        // Keep original port</span>
-<span class="source-line-no">403</span><span id="line-403">                    }</span>
-<span class="source-line-no">404</span><span id="line-404">                }</span>
-<span class="source-line-no">405</span><span id="line-405">            }</span>
-<span class="source-line-no">406</span><span id="line-406">        }</span>
-<span class="source-line-no">407</span><span id="line-407"></span>
-<span class="source-line-no">408</span><span id="line-408">        Session session;</span>
-<span class="source-line-no">409</span><span id="line-409"></span>
-<span class="source-line-no">410</span><span id="line-410">        // Handle ProxyJump if configured</span>
-<span class="source-line-no">411</span><span id="line-411">        if (proxyJump != null &amp;&amp; !proxyJump.isEmpty()) {</span>
-<span class="source-line-no">412</span><span id="line-412">            session = createSessionViaProxyJump(jsch, proxyJump, effectiveUser, effectiveHostname, effectivePort);</span>
-<span class="source-line-no">413</span><span id="line-413">        } else {</span>
-<span class="source-line-no">414</span><span id="line-414">            // Direct connection</span>
-<span class="source-line-no">415</span><span id="line-415">            session = jsch.getSession(effectiveUser, effectiveHostname, effectivePort);</span>
-<span class="source-line-no">416</span><span id="line-416">        }</span>
-<span class="source-line-no">417</span><span id="line-417"></span>
-<span class="source-line-no">418</span><span id="line-418">        // Set password if using password authentication</span>
-<span class="source-line-no">419</span><span id="line-419">        if (password != null &amp;&amp; !password.isEmpty()) {</span>
-<span class="source-line-no">420</span><span id="line-420">            session.setPassword(password);</span>
-<span class="source-line-no">421</span><span id="line-421">        }</span>
-<span class="source-line-no">422</span><span id="line-422"></span>
-<span class="source-line-no">423</span><span id="line-423">        // Disable strict host key checking (for convenience)</span>
-<span class="source-line-no">424</span><span id="line-424">        session.setConfig("StrictHostKeyChecking", "no");</span>
-<span class="source-line-no">425</span><span id="line-425"></span>
-<span class="source-line-no">426</span><span id="line-426">        return session;</span>
-<span class="source-line-no">427</span><span id="line-427">    }</span>
-<span class="source-line-no">428</span><span id="line-428"></span>
-<span class="source-line-no">429</span><span id="line-429">    /**</span>
-<span class="source-line-no">430</span><span id="line-430">     * Sets up authentication for JSch.</span>
-<span class="source-line-no">431</span><span id="line-431">     */</span>
-<span class="source-line-no">432</span><span id="line-432">    private void setupAuthentication(JSch jsch, String identityFileFromConfig) throws IOException, JSchException {</span>
-<span class="source-line-no">433</span><span id="line-433">        if (password != null &amp;&amp; !password.isEmpty()) {</span>
-<span class="source-line-no">434</span><span id="line-434">            // Password authentication - no ssh-agent needed</span>
-<span class="source-line-no">435</span><span id="line-435">            return;</span>
-<span class="source-line-no">436</span><span id="line-436">        }</span>
-<span class="source-line-no">437</span><span id="line-437"></span>
-<span class="source-line-no">438</span><span id="line-438">        boolean authConfigured = false;</span>
-<span class="source-line-no">439</span><span id="line-439"></span>
-<span class="source-line-no">440</span><span id="line-440">        // Priority 1: Try ssh-agent first (supports Ed25519 and other modern key types)</span>
-<span class="source-line-no">441</span><span id="line-441">        try {</span>
-<span class="source-line-no">442</span><span id="line-442">            com.jcraft.jsch.IdentityRepository repo =</span>
-<span class="source-line-no">443</span><span id="line-443">                new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());</span>
-<span class="source-line-no">444</span><span id="line-444">            jsch.setIdentityRepository(repo);</span>
-<span class="source-line-no">445</span><span id="line-445">            authConfigured = true;</span>
-<span class="source-line-no">446</span><span id="line-446">        } catch (Exception e) {</span>
-<span class="source-line-no">447</span><span id="line-447">            // ssh-agent not available, will try key files directly</span>
-<span class="source-line-no">448</span><span id="line-448">        }</span>
+<span class="source-line-no">345</span><span id="line-345">    public CommandResult executeSudoCommand(String command) throws IOException {</span>
+<span class="source-line-no">346</span><span id="line-346">        String sudoPassword = System.getenv(SUDO_PASSWORD_ENV);</span>
+<span class="source-line-no">347</span><span id="line-347">        if (sudoPassword == null || sudoPassword.isEmpty()) {</span>
+<span class="source-line-no">348</span><span id="line-348">            throw new IOException("SUDO_PASSWORD environment variable is not set");</span>
+<span class="source-line-no">349</span><span id="line-349">        }</span>
+<span class="source-line-no">350</span><span id="line-350"></span>
+<span class="source-line-no">351</span><span id="line-351">        // Escape single quotes in command for bash -c</span>
+<span class="source-line-no">352</span><span id="line-352">        String escapedCommand = command.replace("'", "'\"'\"'");</span>
+<span class="source-line-no">353</span><span id="line-353"></span>
+<span class="source-line-no">354</span><span id="line-354">        // Use sudo -S to read password from stdin, wrap command in bash -c for multi-line support</span>
+<span class="source-line-no">355</span><span id="line-355">        String sudoCommand = String.format("echo '%s' | sudo -S bash -c '%s'",</span>
+<span class="source-line-no">356</span><span id="line-356">            sudoPassword.replace("'", "'\\''"), escapedCommand);</span>
+<span class="source-line-no">357</span><span id="line-357"></span>
+<span class="source-line-no">358</span><span id="line-358">        return executeCommand(sudoCommand);</span>
+<span class="source-line-no">359</span><span id="line-359">    }</span>
+<span class="source-line-no">360</span><span id="line-360"></span>
+<span class="source-line-no">361</span><span id="line-361">    /**</span>
+<span class="source-line-no">362</span><span id="line-362">     * Creates a JSch SSH session with configured credentials.</span>
+<span class="source-line-no">363</span><span id="line-363">     * Supports ProxyJump for connections through a jump host.</span>
+<span class="source-line-no">364</span><span id="line-364">     *</span>
+<span class="source-line-no">365</span><span id="line-365">     * @return configured but not yet connected Session</span>
+<span class="source-line-no">366</span><span id="line-366">     * @throws JSchException if session creation fails</span>
+<span class="source-line-no">367</span><span id="line-367">     * @throws IOException if SSH key file operations fail</span>
+<span class="source-line-no">368</span><span id="line-368">     */</span>
+<span class="source-line-no">369</span><span id="line-369">    private Session createSession() throws JSchException, IOException {</span>
+<span class="source-line-no">370</span><span id="line-370">        JSch jsch = new JSch();</span>
+<span class="source-line-no">371</span><span id="line-371"></span>
+<span class="source-line-no">372</span><span id="line-372">        // Load OpenSSH config file first (for user/hostname/port/IdentityFile/ProxyJump)</span>
+<span class="source-line-no">373</span><span id="line-373">        com.jcraft.jsch.ConfigRepository configRepository = null;</span>
+<span class="source-line-no">374</span><span id="line-374">        String identityFileFromConfig = null;</span>
+<span class="source-line-no">375</span><span id="line-375">        String proxyJump = null;</span>
+<span class="source-line-no">376</span><span id="line-376">        try {</span>
+<span class="source-line-no">377</span><span id="line-377">            String sshConfigPath = System.getProperty("user.home") + "/.ssh/config";</span>
+<span class="source-line-no">378</span><span id="line-378">            java.io.File configFile = new java.io.File(sshConfigPath);</span>
+<span class="source-line-no">379</span><span id="line-379">            if (configFile.exists()) {</span>
+<span class="source-line-no">380</span><span id="line-380">                com.jcraft.jsch.OpenSSHConfig openSSHConfig =</span>
+<span class="source-line-no">381</span><span id="line-381">                    com.jcraft.jsch.OpenSSHConfig.parseFile(sshConfigPath);</span>
+<span class="source-line-no">382</span><span id="line-382">                configRepository = openSSHConfig;</span>
+<span class="source-line-no">383</span><span id="line-383"></span>
+<span class="source-line-no">384</span><span id="line-384">                // Get IdentityFile and ProxyJump from config for this host</span>
+<span class="source-line-no">385</span><span id="line-385">                com.jcraft.jsch.ConfigRepository.Config hostConfig = openSSHConfig.getConfig(hostname);</span>
+<span class="source-line-no">386</span><span id="line-386">                if (hostConfig != null) {</span>
+<span class="source-line-no">387</span><span id="line-387">                    identityFileFromConfig = hostConfig.getValue("IdentityFile");</span>
+<span class="source-line-no">388</span><span id="line-388">                    // Expand ~ to home directory</span>
+<span class="source-line-no">389</span><span id="line-389">                    if (identityFileFromConfig != null &amp;&amp; identityFileFromConfig.startsWith("~")) {</span>
+<span class="source-line-no">390</span><span id="line-390">                        identityFileFromConfig = System.getProperty("user.home") +</span>
+<span class="source-line-no">391</span><span id="line-391">                            identityFileFromConfig.substring(1);</span>
+<span class="source-line-no">392</span><span id="line-392">                    }</span>
+<span class="source-line-no">393</span><span id="line-393">                    // Get ProxyJump setting</span>
+<span class="source-line-no">394</span><span id="line-394">                    proxyJump = hostConfig.getValue("ProxyJump");</span>
+<span class="source-line-no">395</span><span id="line-395">                }</span>
+<span class="source-line-no">396</span><span id="line-396">            }</span>
+<span class="source-line-no">397</span><span id="line-397">        } catch (Exception e) {</span>
+<span class="source-line-no">398</span><span id="line-398">            // If config loading fails, continue without it</span>
+<span class="source-line-no">399</span><span id="line-399">        }</span>
+<span class="source-line-no">400</span><span id="line-400"></span>
+<span class="source-line-no">401</span><span id="line-401">        // Setup authentication</span>
+<span class="source-line-no">402</span><span id="line-402">        setupAuthentication(jsch, identityFileFromConfig);</span>
+<span class="source-line-no">403</span><span id="line-403"></span>
+<span class="source-line-no">404</span><span id="line-404">        // Get effective connection parameters from SSH config</span>
+<span class="source-line-no">405</span><span id="line-405">        String effectiveUser = user;</span>
+<span class="source-line-no">406</span><span id="line-406">        String effectiveHostname = hostname;</span>
+<span class="source-line-no">407</span><span id="line-407">        int effectivePort = port;</span>
+<span class="source-line-no">408</span><span id="line-408"></span>
+<span class="source-line-no">409</span><span id="line-409">        if (configRepository != null) {</span>
+<span class="source-line-no">410</span><span id="line-410">            com.jcraft.jsch.ConfigRepository.Config config = configRepository.getConfig(hostname);</span>
+<span class="source-line-no">411</span><span id="line-411">            if (config != null) {</span>
+<span class="source-line-no">412</span><span id="line-412">                // Override with SSH config values if present</span>
+<span class="source-line-no">413</span><span id="line-413">                String configUser = config.getUser();</span>
+<span class="source-line-no">414</span><span id="line-414">                if (configUser != null) {</span>
+<span class="source-line-no">415</span><span id="line-415">                    effectiveUser = configUser;</span>
+<span class="source-line-no">416</span><span id="line-416">                }</span>
+<span class="source-line-no">417</span><span id="line-417">                String configHostname = config.getHostname();</span>
+<span class="source-line-no">418</span><span id="line-418">                if (configHostname != null) {</span>
+<span class="source-line-no">419</span><span id="line-419">                    effectiveHostname = configHostname;</span>
+<span class="source-line-no">420</span><span id="line-420">                }</span>
+<span class="source-line-no">421</span><span id="line-421">                String configPort = config.getValue("Port");</span>
+<span class="source-line-no">422</span><span id="line-422">                if (configPort != null) {</span>
+<span class="source-line-no">423</span><span id="line-423">                    try {</span>
+<span class="source-line-no">424</span><span id="line-424">                        effectivePort = Integer.parseInt(configPort);</span>
+<span class="source-line-no">425</span><span id="line-425">                    } catch (NumberFormatException e) {</span>
+<span class="source-line-no">426</span><span id="line-426">                        // Keep original port</span>
+<span class="source-line-no">427</span><span id="line-427">                    }</span>
+<span class="source-line-no">428</span><span id="line-428">                }</span>
+<span class="source-line-no">429</span><span id="line-429">            }</span>
+<span class="source-line-no">430</span><span id="line-430">        }</span>
+<span class="source-line-no">431</span><span id="line-431"></span>
+<span class="source-line-no">432</span><span id="line-432">        Session session;</span>
+<span class="source-line-no">433</span><span id="line-433"></span>
+<span class="source-line-no">434</span><span id="line-434">        // Handle ProxyJump if configured</span>
+<span class="source-line-no">435</span><span id="line-435">        if (proxyJump != null &amp;&amp; !proxyJump.isEmpty()) {</span>
+<span class="source-line-no">436</span><span id="line-436">            session = createSessionViaProxyJump(jsch, proxyJump, effectiveUser, effectiveHostname, effectivePort);</span>
+<span class="source-line-no">437</span><span id="line-437">        } else {</span>
+<span class="source-line-no">438</span><span id="line-438">            // Direct connection</span>
+<span class="source-line-no">439</span><span id="line-439">            session = jsch.getSession(effectiveUser, effectiveHostname, effectivePort);</span>
+<span class="source-line-no">440</span><span id="line-440">        }</span>
+<span class="source-line-no">441</span><span id="line-441"></span>
+<span class="source-line-no">442</span><span id="line-442">        // Set password if using password authentication</span>
+<span class="source-line-no">443</span><span id="line-443">        if (password != null &amp;&amp; !password.isEmpty()) {</span>
+<span class="source-line-no">444</span><span id="line-444">            session.setPassword(password);</span>
+<span class="source-line-no">445</span><span id="line-445">        }</span>
+<span class="source-line-no">446</span><span id="line-446"></span>
+<span class="source-line-no">447</span><span id="line-447">        // Disable strict host key checking (for convenience)</span>
+<span class="source-line-no">448</span><span id="line-448">        session.setConfig("StrictHostKeyChecking", "no");</span>
 <span class="source-line-no">449</span><span id="line-449"></span>
-<span class="source-line-no">450</span><span id="line-450">        // Priority 2: Use IdentityFile from ~/.ssh/config (for RSA/ECDSA keys without passphrase)</span>
-<span class="source-line-no">451</span><span id="line-451">        if (!authConfigured &amp;&amp; identityFileFromConfig != null) {</span>
-<span class="source-line-no">452</span><span id="line-452">            java.io.File keyFile = new java.io.File(identityFileFromConfig);</span>
-<span class="source-line-no">453</span><span id="line-453">            if (keyFile.exists() &amp;&amp; keyFile.canRead()) {</span>
-<span class="source-line-no">454</span><span id="line-454">                try {</span>
-<span class="source-line-no">455</span><span id="line-455">                    jsch.addIdentity(identityFileFromConfig);</span>
-<span class="source-line-no">456</span><span id="line-456">                    authConfigured = true;</span>
-<span class="source-line-no">457</span><span id="line-457">                } catch (JSchException ex) {</span>
-<span class="source-line-no">458</span><span id="line-458">                    // Key file may require passphrase or be unsupported type</span>
-<span class="source-line-no">459</span><span id="line-459">                }</span>
-<span class="source-line-no">460</span><span id="line-460">            }</span>
-<span class="source-line-no">461</span><span id="line-461">        }</span>
-<span class="source-line-no">462</span><span id="line-462"></span>
-<span class="source-line-no">463</span><span id="line-463">        // Priority 3: Fallback to default key files (for RSA/ECDSA keys without passphrase)</span>
-<span class="source-line-no">464</span><span id="line-464">        if (!authConfigured) {</span>
-<span class="source-line-no">465</span><span id="line-465">            String home = System.getProperty("user.home");</span>
-<span class="source-line-no">466</span><span id="line-466">            String[] keyFiles = {</span>
-<span class="source-line-no">467</span><span id="line-467">                home + "/.ssh/id_rsa",</span>
-<span class="source-line-no">468</span><span id="line-468">                home + "/.ssh/id_ecdsa",</span>
-<span class="source-line-no">469</span><span id="line-469">                home + "/.ssh/id_dsa"</span>
-<span class="source-line-no">470</span><span id="line-470">                // Note: id_ed25519 requires ssh-agent, so not included here</span>
-<span class="source-line-no">471</span><span id="line-471">            };</span>
-<span class="source-line-no">472</span><span id="line-472"></span>
-<span class="source-line-no">473</span><span id="line-473">            for (String keyFile : keyFiles) {</span>
-<span class="source-line-no">474</span><span id="line-474">                java.io.File f = new java.io.File(keyFile);</span>
-<span class="source-line-no">475</span><span id="line-475">                if (f.exists() &amp;&amp; f.canRead()) {</span>
-<span class="source-line-no">476</span><span id="line-476">                    try {</span>
-<span class="source-line-no">477</span><span id="line-477">                        jsch.addIdentity(keyFile);</span>
-<span class="source-line-no">478</span><span id="line-478">                        authConfigured = true;</span>
-<span class="source-line-no">479</span><span id="line-479">                        break;</span>
-<span class="source-line-no">480</span><span id="line-480">                    } catch (JSchException ex) {</span>
-<span class="source-line-no">481</span><span id="line-481">                        // Key file may require passphrase, try next</span>
-<span class="source-line-no">482</span><span id="line-482">                    }</span>
+<span class="source-line-no">450</span><span id="line-450">        return session;</span>
+<span class="source-line-no">451</span><span id="line-451">    }</span>
+<span class="source-line-no">452</span><span id="line-452"></span>
+<span class="source-line-no">453</span><span id="line-453">    /**</span>
+<span class="source-line-no">454</span><span id="line-454">     * Sets up authentication for JSch.</span>
+<span class="source-line-no">455</span><span id="line-455">     */</span>
+<span class="source-line-no">456</span><span id="line-456">    private void setupAuthentication(JSch jsch, String identityFileFromConfig) throws IOException, JSchException {</span>
+<span class="source-line-no">457</span><span id="line-457">        if (password != null &amp;&amp; !password.isEmpty()) {</span>
+<span class="source-line-no">458</span><span id="line-458">            // Password authentication - no ssh-agent needed</span>
+<span class="source-line-no">459</span><span id="line-459">            return;</span>
+<span class="source-line-no">460</span><span id="line-460">        }</span>
+<span class="source-line-no">461</span><span id="line-461"></span>
+<span class="source-line-no">462</span><span id="line-462">        boolean authConfigured = false;</span>
+<span class="source-line-no">463</span><span id="line-463"></span>
+<span class="source-line-no">464</span><span id="line-464">        // Priority 1: Try ssh-agent first (supports Ed25519 and other modern key types)</span>
+<span class="source-line-no">465</span><span id="line-465">        try {</span>
+<span class="source-line-no">466</span><span id="line-466">            com.jcraft.jsch.IdentityRepository repo =</span>
+<span class="source-line-no">467</span><span id="line-467">                new com.jcraft.jsch.AgentIdentityRepository(new com.jcraft.jsch.SSHAgentConnector());</span>
+<span class="source-line-no">468</span><span id="line-468">            jsch.setIdentityRepository(repo);</span>
+<span class="source-line-no">469</span><span id="line-469">            authConfigured = true;</span>
+<span class="source-line-no">470</span><span id="line-470">        } catch (Exception e) {</span>
+<span class="source-line-no">471</span><span id="line-471">            // ssh-agent not available, will try key files directly</span>
+<span class="source-line-no">472</span><span id="line-472">        }</span>
+<span class="source-line-no">473</span><span id="line-473"></span>
+<span class="source-line-no">474</span><span id="line-474">        // Priority 2: Use IdentityFile from ~/.ssh/config (for RSA/ECDSA keys without passphrase)</span>
+<span class="source-line-no">475</span><span id="line-475">        if (!authConfigured &amp;&amp; identityFileFromConfig != null) {</span>
+<span class="source-line-no">476</span><span id="line-476">            java.io.File keyFile = new java.io.File(identityFileFromConfig);</span>
+<span class="source-line-no">477</span><span id="line-477">            if (keyFile.exists() &amp;&amp; keyFile.canRead()) {</span>
+<span class="source-line-no">478</span><span id="line-478">                try {</span>
+<span class="source-line-no">479</span><span id="line-479">                    jsch.addIdentity(identityFileFromConfig);</span>
+<span class="source-line-no">480</span><span id="line-480">                    authConfigured = true;</span>
+<span class="source-line-no">481</span><span id="line-481">                } catch (JSchException ex) {</span>
+<span class="source-line-no">482</span><span id="line-482">                    // Key file may require passphrase or be unsupported type</span>
 <span class="source-line-no">483</span><span id="line-483">                }</span>
 <span class="source-line-no">484</span><span id="line-484">            }</span>
-<span class="source-line-no">485</span><span id="line-485"></span>
-<span class="source-line-no">486</span><span id="line-486">            if (!authConfigured) {</span>
-<span class="source-line-no">487</span><span id="line-487">                throw new IOException("SSH authentication failed: No usable authentication method found.\n" +</span>
-<span class="source-line-no">488</span><span id="line-488">                    "For Ed25519 keys, please start ssh-agent: eval \"$(ssh-agent -s)\" &amp;&amp; ssh-add\n" +</span>
-<span class="source-line-no">489</span><span id="line-489">                    "Or ensure you have RSA/ECDSA keys in ~/.ssh/ without passphrase.\n" +</span>
-<span class="source-line-no">490</span><span id="line-490">                    "Or use --ask-pass for password authentication.");</span>
-<span class="source-line-no">491</span><span id="line-491">            }</span>
-<span class="source-line-no">492</span><span id="line-492">        }</span>
-<span class="source-line-no">493</span><span id="line-493">    }</span>
-<span class="source-line-no">494</span><span id="line-494"></span>
-<span class="source-line-no">495</span><span id="line-495">    /**</span>
-<span class="source-line-no">496</span><span id="line-496">     * Creates a session through a jump host using ProxyJump.</span>
-<span class="source-line-no">497</span><span id="line-497">     * Format: user@host or user@host:port</span>
-<span class="source-line-no">498</span><span id="line-498">     */</span>
-<span class="source-line-no">499</span><span id="line-499">    private Session createSessionViaProxyJump(JSch jsch, String proxyJump,</span>
-<span class="source-line-no">500</span><span id="line-500">            String targetUser, String targetHost, int targetPort) throws JSchException, IOException {</span>
-<span class="source-line-no">501</span><span id="line-501"></span>
-<span class="source-line-no">502</span><span id="line-502">        // Parse ProxyJump: user@host or user@host:port</span>
-<span class="source-line-no">503</span><span id="line-503">        String jumpUser;</span>
-<span class="source-line-no">504</span><span id="line-504">        String jumpHost;</span>
-<span class="source-line-no">505</span><span id="line-505">        int jumpPort = 22;</span>
-<span class="source-line-no">506</span><span id="line-506"></span>
-<span class="source-line-no">507</span><span id="line-507">        String[] atParts = proxyJump.split("@", 2);</span>
-<span class="source-line-no">508</span><span id="line-508">        if (atParts.length == 2) {</span>
-<span class="source-line-no">509</span><span id="line-509">            jumpUser = atParts[0];</span>
-<span class="source-line-no">510</span><span id="line-510">            String hostPart = atParts[1];</span>
-<span class="source-line-no">511</span><span id="line-511">            if (hostPart.contains(":")) {</span>
-<span class="source-line-no">512</span><span id="line-512">                String[] hostPortParts = hostPart.split(":", 2);</span>
-<span class="source-line-no">513</span><span id="line-513">                jumpHost = hostPortParts[0];</span>
-<span class="source-line-no">514</span><span id="line-514">                try {</span>
-<span class="source-line-no">515</span><span id="line-515">                    jumpPort = Integer.parseInt(hostPortParts[1]);</span>
-<span class="source-line-no">516</span><span id="line-516">                } catch (NumberFormatException e) {</span>
-<span class="source-line-no">517</span><span id="line-517">                    jumpHost = hostPart;</span>
-<span class="source-line-no">518</span><span id="line-518">                }</span>
-<span class="source-line-no">519</span><span id="line-519">            } else {</span>
-<span class="source-line-no">520</span><span id="line-520">                jumpHost = hostPart;</span>
-<span class="source-line-no">521</span><span id="line-521">            }</span>
-<span class="source-line-no">522</span><span id="line-522">        } else {</span>
-<span class="source-line-no">523</span><span id="line-523">            // No user specified, use current user</span>
-<span class="source-line-no">524</span><span id="line-524">            jumpUser = user;</span>
-<span class="source-line-no">525</span><span id="line-525">            String hostPart = proxyJump;</span>
-<span class="source-line-no">526</span><span id="line-526">            if (hostPart.contains(":")) {</span>
-<span class="source-line-no">527</span><span id="line-527">                String[] hostPortParts = hostPart.split(":", 2);</span>
-<span class="source-line-no">528</span><span id="line-528">                jumpHost = hostPortParts[0];</span>
-<span class="source-line-no">529</span><span id="line-529">                try {</span>
-<span class="source-line-no">530</span><span id="line-530">                    jumpPort = Integer.parseInt(hostPortParts[1]);</span>
-<span class="source-line-no">531</span><span id="line-531">                } catch (NumberFormatException e) {</span>
-<span class="source-line-no">532</span><span id="line-532">                    jumpHost = hostPart;</span>
-<span class="source-line-no">533</span><span id="line-533">                }</span>
-<span class="source-line-no">534</span><span id="line-534">            } else {</span>
-<span class="source-line-no">535</span><span id="line-535">                jumpHost = hostPart;</span>
-<span class="source-line-no">536</span><span id="line-536">            }</span>
-<span class="source-line-no">537</span><span id="line-537">        }</span>
-<span class="source-line-no">538</span><span id="line-538"></span>
-<span class="source-line-no">539</span><span id="line-539">        // Create and connect to jump host</span>
-<span class="source-line-no">540</span><span id="line-540">        jumpHostSession = jsch.getSession(jumpUser, jumpHost, jumpPort);</span>
-<span class="source-line-no">541</span><span id="line-541">        jumpHostSession.setConfig("StrictHostKeyChecking", "no");</span>
-<span class="source-line-no">542</span><span id="line-542">        if (password != null &amp;&amp; !password.isEmpty()) {</span>
-<span class="source-line-no">543</span><span id="line-543">            jumpHostSession.setPassword(password);</span>
-<span class="source-line-no">544</span><span id="line-544">        }</span>
-<span class="source-line-no">545</span><span id="line-545">        jumpHostSession.connect();</span>
-<span class="source-line-no">546</span><span id="line-546"></span>
-<span class="source-line-no">547</span><span id="line-547">        // Set up port forwarding through jump host</span>
-<span class="source-line-no">548</span><span id="line-548">        // Find an available local port</span>
-<span class="source-line-no">549</span><span id="line-549">        int localPort = jumpHostSession.setPortForwardingL(0, targetHost, targetPort);</span>
-<span class="source-line-no">550</span><span id="line-550"></span>
-<span class="source-line-no">551</span><span id="line-551">        // Create session to target via the forwarded port</span>
-<span class="source-line-no">552</span><span id="line-552">        Session targetSession = jsch.getSession(targetUser, "127.0.0.1", localPort);</span>
-<span class="source-line-no">553</span><span id="line-553"></span>
-<span class="source-line-no">554</span><span id="line-554">        return targetSession;</span>
-<span class="source-line-no">555</span><span id="line-555">    }</span>
-<span class="source-line-no">556</span><span id="line-556"></span>
-<span class="source-line-no">557</span><span id="line-557">    /**</span>
-<span class="source-line-no">558</span><span id="line-558">     * Cleans up resources used by this Node.</span>
-<span class="source-line-no">559</span><span id="line-559">     * Closes any open jump host sessions.</span>
-<span class="source-line-no">560</span><span id="line-560">     */</span>
-<span class="source-line-no">561</span><span id="line-561">    public void cleanup() {</span>
-<span class="source-line-no">562</span><span id="line-562">        if (jumpHostSession != null &amp;&amp; jumpHostSession.isConnected()) {</span>
-<span class="source-line-no">563</span><span id="line-563">            jumpHostSession.disconnect();</span>
-<span class="source-line-no">564</span><span id="line-564">            jumpHostSession = null;</span>
-<span class="source-line-no">565</span><span id="line-565">        }</span>
-<span class="source-line-no">566</span><span id="line-566">    }</span>
-<span class="source-line-no">567</span><span id="line-567"></span>
-<span class="source-line-no">568</span><span id="line-568">    /**</span>
-<span class="source-line-no">569</span><span id="line-569">     * Gets the hostname of this node.</span>
-<span class="source-line-no">570</span><span id="line-570">     *</span>
-<span class="source-line-no">571</span><span id="line-571">     * @return the hostname</span>
-<span class="source-line-no">572</span><span id="line-572">     */</span>
-<span class="source-line-no">573</span><span id="line-573">    public String getHostname() {</span>
-<span class="source-line-no">574</span><span id="line-574">        return hostname;</span>
-<span class="source-line-no">575</span><span id="line-575">    }</span>
-<span class="source-line-no">576</span><span id="line-576"></span>
-<span class="source-line-no">577</span><span id="line-577">    /**</span>
-<span class="source-line-no">578</span><span id="line-578">     * Gets the SSH username for this node.</span>
-<span class="source-line-no">579</span><span id="line-579">     *</span>
-<span class="source-line-no">580</span><span id="line-580">     * @return the username</span>
-<span class="source-line-no">581</span><span id="line-581">     */</span>
-<span class="source-line-no">582</span><span id="line-582">    public String getUser() {</span>
-<span class="source-line-no">583</span><span id="line-583">        return user;</span>
-<span class="source-line-no">584</span><span id="line-584">    }</span>
-<span class="source-line-no">585</span><span id="line-585"></span>
-<span class="source-line-no">586</span><span id="line-586">    /**</span>
-<span class="source-line-no">587</span><span id="line-587">     * Gets the SSH port for this node.</span>
-<span class="source-line-no">588</span><span id="line-588">     *</span>
-<span class="source-line-no">589</span><span id="line-589">     * @return the port number</span>
-<span class="source-line-no">590</span><span id="line-590">     */</span>
-<span class="source-line-no">591</span><span id="line-591">    public int getPort() {</span>
-<span class="source-line-no">592</span><span id="line-592">        return port;</span>
-<span class="source-line-no">593</span><span id="line-593">    }</span>
-<span class="source-line-no">594</span><span id="line-594"></span>
-<span class="source-line-no">595</span><span id="line-595">    @Override</span>
-<span class="source-line-no">596</span><span id="line-596">    public String toString() {</span>
-<span class="source-line-no">597</span><span id="line-597">        return String.format("Node{hostname='%s', user='%s', port=%d}",</span>
-<span class="source-line-no">598</span><span id="line-598">            hostname, user, port);</span>
+<span class="source-line-no">485</span><span id="line-485">        }</span>
+<span class="source-line-no">486</span><span id="line-486"></span>
+<span class="source-line-no">487</span><span id="line-487">        // Priority 3: Fallback to default key files (for RSA/ECDSA keys without passphrase)</span>
+<span class="source-line-no">488</span><span id="line-488">        if (!authConfigured) {</span>
+<span class="source-line-no">489</span><span id="line-489">            String home = System.getProperty("user.home");</span>
+<span class="source-line-no">490</span><span id="line-490">            String[] keyFiles = {</span>
+<span class="source-line-no">491</span><span id="line-491">                home + "/.ssh/id_rsa",</span>
+<span class="source-line-no">492</span><span id="line-492">                home + "/.ssh/id_ecdsa",</span>
+<span class="source-line-no">493</span><span id="line-493">                home + "/.ssh/id_dsa"</span>
+<span class="source-line-no">494</span><span id="line-494">                // Note: id_ed25519 requires ssh-agent, so not included here</span>
+<span class="source-line-no">495</span><span id="line-495">            };</span>
+<span class="source-line-no">496</span><span id="line-496"></span>
+<span class="source-line-no">497</span><span id="line-497">            for (String keyFile : keyFiles) {</span>
+<span class="source-line-no">498</span><span id="line-498">                java.io.File f = new java.io.File(keyFile);</span>
+<span class="source-line-no">499</span><span id="line-499">                if (f.exists() &amp;&amp; f.canRead()) {</span>
+<span class="source-line-no">500</span><span id="line-500">                    try {</span>
+<span class="source-line-no">501</span><span id="line-501">                        jsch.addIdentity(keyFile);</span>
+<span class="source-line-no">502</span><span id="line-502">                        authConfigured = true;</span>
+<span class="source-line-no">503</span><span id="line-503">                        break;</span>
+<span class="source-line-no">504</span><span id="line-504">                    } catch (JSchException ex) {</span>
+<span class="source-line-no">505</span><span id="line-505">                        // Key file may require passphrase, try next</span>
+<span class="source-line-no">506</span><span id="line-506">                    }</span>
+<span class="source-line-no">507</span><span id="line-507">                }</span>
+<span class="source-line-no">508</span><span id="line-508">            }</span>
+<span class="source-line-no">509</span><span id="line-509"></span>
+<span class="source-line-no">510</span><span id="line-510">            if (!authConfigured) {</span>
+<span class="source-line-no">511</span><span id="line-511">                throw new IOException("SSH authentication failed: No usable authentication method found.\n" +</span>
+<span class="source-line-no">512</span><span id="line-512">                    "For Ed25519 keys, please start ssh-agent: eval \"$(ssh-agent -s)\" &amp;&amp; ssh-add\n" +</span>
+<span class="source-line-no">513</span><span id="line-513">                    "Or ensure you have RSA/ECDSA keys in ~/.ssh/ without passphrase.\n" +</span>
+<span class="source-line-no">514</span><span id="line-514">                    "Or use --ask-pass for password authentication.");</span>
+<span class="source-line-no">515</span><span id="line-515">            }</span>
+<span class="source-line-no">516</span><span id="line-516">        }</span>
+<span class="source-line-no">517</span><span id="line-517">    }</span>
+<span class="source-line-no">518</span><span id="line-518"></span>
+<span class="source-line-no">519</span><span id="line-519">    /**</span>
+<span class="source-line-no">520</span><span id="line-520">     * Creates a session through a jump host using ProxyJump.</span>
+<span class="source-line-no">521</span><span id="line-521">     * Format: user@host or user@host:port</span>
+<span class="source-line-no">522</span><span id="line-522">     */</span>
+<span class="source-line-no">523</span><span id="line-523">    private Session createSessionViaProxyJump(JSch jsch, String proxyJump,</span>
+<span class="source-line-no">524</span><span id="line-524">            String targetUser, String targetHost, int targetPort) throws JSchException, IOException {</span>
+<span class="source-line-no">525</span><span id="line-525"></span>
+<span class="source-line-no">526</span><span id="line-526">        // Parse ProxyJump: user@host or user@host:port</span>
+<span class="source-line-no">527</span><span id="line-527">        String jumpUser;</span>
+<span class="source-line-no">528</span><span id="line-528">        String jumpHost;</span>
+<span class="source-line-no">529</span><span id="line-529">        int jumpPort = 22;</span>
+<span class="source-line-no">530</span><span id="line-530"></span>
+<span class="source-line-no">531</span><span id="line-531">        String[] atParts = proxyJump.split("@", 2);</span>
+<span class="source-line-no">532</span><span id="line-532">        if (atParts.length == 2) {</span>
+<span class="source-line-no">533</span><span id="line-533">            jumpUser = atParts[0];</span>
+<span class="source-line-no">534</span><span id="line-534">            String hostPart = atParts[1];</span>
+<span class="source-line-no">535</span><span id="line-535">            if (hostPart.contains(":")) {</span>
+<span class="source-line-no">536</span><span id="line-536">                String[] hostPortParts = hostPart.split(":", 2);</span>
+<span class="source-line-no">537</span><span id="line-537">                jumpHost = hostPortParts[0];</span>
+<span class="source-line-no">538</span><span id="line-538">                try {</span>
+<span class="source-line-no">539</span><span id="line-539">                    jumpPort = Integer.parseInt(hostPortParts[1]);</span>
+<span class="source-line-no">540</span><span id="line-540">                } catch (NumberFormatException e) {</span>
+<span class="source-line-no">541</span><span id="line-541">                    jumpHost = hostPart;</span>
+<span class="source-line-no">542</span><span id="line-542">                }</span>
+<span class="source-line-no">543</span><span id="line-543">            } else {</span>
+<span class="source-line-no">544</span><span id="line-544">                jumpHost = hostPart;</span>
+<span class="source-line-no">545</span><span id="line-545">            }</span>
+<span class="source-line-no">546</span><span id="line-546">        } else {</span>
+<span class="source-line-no">547</span><span id="line-547">            // No user specified, use current user</span>
+<span class="source-line-no">548</span><span id="line-548">            jumpUser = user;</span>
+<span class="source-line-no">549</span><span id="line-549">            String hostPart = proxyJump;</span>
+<span class="source-line-no">550</span><span id="line-550">            if (hostPart.contains(":")) {</span>
+<span class="source-line-no">551</span><span id="line-551">                String[] hostPortParts = hostPart.split(":", 2);</span>
+<span class="source-line-no">552</span><span id="line-552">                jumpHost = hostPortParts[0];</span>
+<span class="source-line-no">553</span><span id="line-553">                try {</span>
+<span class="source-line-no">554</span><span id="line-554">                    jumpPort = Integer.parseInt(hostPortParts[1]);</span>
+<span class="source-line-no">555</span><span id="line-555">                } catch (NumberFormatException e) {</span>
+<span class="source-line-no">556</span><span id="line-556">                    jumpHost = hostPart;</span>
+<span class="source-line-no">557</span><span id="line-557">                }</span>
+<span class="source-line-no">558</span><span id="line-558">            } else {</span>
+<span class="source-line-no">559</span><span id="line-559">                jumpHost = hostPart;</span>
+<span class="source-line-no">560</span><span id="line-560">            }</span>
+<span class="source-line-no">561</span><span id="line-561">        }</span>
+<span class="source-line-no">562</span><span id="line-562"></span>
+<span class="source-line-no">563</span><span id="line-563">        // Create and connect to jump host</span>
+<span class="source-line-no">564</span><span id="line-564">        jumpHostSession = jsch.getSession(jumpUser, jumpHost, jumpPort);</span>
+<span class="source-line-no">565</span><span id="line-565">        jumpHostSession.setConfig("StrictHostKeyChecking", "no");</span>
+<span class="source-line-no">566</span><span id="line-566">        if (password != null &amp;&amp; !password.isEmpty()) {</span>
+<span class="source-line-no">567</span><span id="line-567">            jumpHostSession.setPassword(password);</span>
+<span class="source-line-no">568</span><span id="line-568">        }</span>
+<span class="source-line-no">569</span><span id="line-569">        jumpHostSession.connect();</span>
+<span class="source-line-no">570</span><span id="line-570"></span>
+<span class="source-line-no">571</span><span id="line-571">        // Set up port forwarding through jump host</span>
+<span class="source-line-no">572</span><span id="line-572">        // Find an available local port</span>
+<span class="source-line-no">573</span><span id="line-573">        int localPort = jumpHostSession.setPortForwardingL(0, targetHost, targetPort);</span>
+<span class="source-line-no">574</span><span id="line-574"></span>
+<span class="source-line-no">575</span><span id="line-575">        // Create session to target via the forwarded port</span>
+<span class="source-line-no">576</span><span id="line-576">        Session targetSession = jsch.getSession(targetUser, "127.0.0.1", localPort);</span>
+<span class="source-line-no">577</span><span id="line-577"></span>
+<span class="source-line-no">578</span><span id="line-578">        return targetSession;</span>
+<span class="source-line-no">579</span><span id="line-579">    }</span>
+<span class="source-line-no">580</span><span id="line-580"></span>
+<span class="source-line-no">581</span><span id="line-581">    /**</span>
+<span class="source-line-no">582</span><span id="line-582">     * Cleans up resources used by this Node.</span>
+<span class="source-line-no">583</span><span id="line-583">     * Closes any open jump host sessions.</span>
+<span class="source-line-no">584</span><span id="line-584">     */</span>
+<span class="source-line-no">585</span><span id="line-585">    public void cleanup() {</span>
+<span class="source-line-no">586</span><span id="line-586">        if (jumpHostSession != null &amp;&amp; jumpHostSession.isConnected()) {</span>
+<span class="source-line-no">587</span><span id="line-587">            jumpHostSession.disconnect();</span>
+<span class="source-line-no">588</span><span id="line-588">            jumpHostSession = null;</span>
+<span class="source-line-no">589</span><span id="line-589">        }</span>
+<span class="source-line-no">590</span><span id="line-590">    }</span>
+<span class="source-line-no">591</span><span id="line-591"></span>
+<span class="source-line-no">592</span><span id="line-592">    /**</span>
+<span class="source-line-no">593</span><span id="line-593">     * Gets the hostname of this node.</span>
+<span class="source-line-no">594</span><span id="line-594">     *</span>
+<span class="source-line-no">595</span><span id="line-595">     * @return the hostname</span>
+<span class="source-line-no">596</span><span id="line-596">     */</span>
+<span class="source-line-no">597</span><span id="line-597">    public String getHostname() {</span>
+<span class="source-line-no">598</span><span id="line-598">        return hostname;</span>
 <span class="source-line-no">599</span><span id="line-599">    }</span>
 <span class="source-line-no">600</span><span id="line-600"></span>
 <span class="source-line-no">601</span><span id="line-601">    /**</span>
-<span class="source-line-no">602</span><span id="line-602">     * Represents the result of a command execution.</span>
-<span class="source-line-no">603</span><span id="line-603">     */</span>
-<span class="source-line-no">604</span><span id="line-604">    public static class CommandResult {</span>
-<span class="source-line-no">605</span><span id="line-605">        private final String stdout;</span>
-<span class="source-line-no">606</span><span id="line-606">        private final String stderr;</span>
-<span class="source-line-no">607</span><span id="line-607">        private final int exitCode;</span>
-<span class="source-line-no">608</span><span id="line-608"></span>
-<span class="source-line-no">609</span><span id="line-609">        public CommandResult(String stdout, String stderr, int exitCode) {</span>
-<span class="source-line-no">610</span><span id="line-610">            this.stdout = stdout;</span>
-<span class="source-line-no">611</span><span id="line-611">            this.stderr = stderr;</span>
-<span class="source-line-no">612</span><span id="line-612">            this.exitCode = exitCode;</span>
-<span class="source-line-no">613</span><span id="line-613">        }</span>
-<span class="source-line-no">614</span><span id="line-614"></span>
-<span class="source-line-no">615</span><span id="line-615">        public String getStdout() {</span>
-<span class="source-line-no">616</span><span id="line-616">            return stdout;</span>
-<span class="source-line-no">617</span><span id="line-617">        }</span>
+<span class="source-line-no">602</span><span id="line-602">     * Gets the SSH username for this node.</span>
+<span class="source-line-no">603</span><span id="line-603">     *</span>
+<span class="source-line-no">604</span><span id="line-604">     * @return the username</span>
+<span class="source-line-no">605</span><span id="line-605">     */</span>
+<span class="source-line-no">606</span><span id="line-606">    public String getUser() {</span>
+<span class="source-line-no">607</span><span id="line-607">        return user;</span>
+<span class="source-line-no">608</span><span id="line-608">    }</span>
+<span class="source-line-no">609</span><span id="line-609"></span>
+<span class="source-line-no">610</span><span id="line-610">    /**</span>
+<span class="source-line-no">611</span><span id="line-611">     * Gets the SSH port for this node.</span>
+<span class="source-line-no">612</span><span id="line-612">     *</span>
+<span class="source-line-no">613</span><span id="line-613">     * @return the port number</span>
+<span class="source-line-no">614</span><span id="line-614">     */</span>
+<span class="source-line-no">615</span><span id="line-615">    public int getPort() {</span>
+<span class="source-line-no">616</span><span id="line-616">        return port;</span>
+<span class="source-line-no">617</span><span id="line-617">    }</span>
 <span class="source-line-no">618</span><span id="line-618"></span>
-<span class="source-line-no">619</span><span id="line-619">        public String getStderr() {</span>
-<span class="source-line-no">620</span><span id="line-620">            return stderr;</span>
-<span class="source-line-no">621</span><span id="line-621">        }</span>
-<span class="source-line-no">622</span><span id="line-622"></span>
-<span class="source-line-no">623</span><span id="line-623">        public int getExitCode() {</span>
-<span class="source-line-no">624</span><span id="line-624">            return exitCode;</span>
-<span class="source-line-no">625</span><span id="line-625">        }</span>
-<span class="source-line-no">626</span><span id="line-626"></span>
-<span class="source-line-no">627</span><span id="line-627">        public boolean isSuccess() {</span>
-<span class="source-line-no">628</span><span id="line-628">            return exitCode == 0;</span>
-<span class="source-line-no">629</span><span id="line-629">        }</span>
-<span class="source-line-no">630</span><span id="line-630"></span>
-<span class="source-line-no">631</span><span id="line-631">        @Override</span>
-<span class="source-line-no">632</span><span id="line-632">        public String toString() {</span>
-<span class="source-line-no">633</span><span id="line-633">            return String.format("CommandResult{exitCode=%d, stdout='%s', stderr='%s'}",</span>
-<span class="source-line-no">634</span><span id="line-634">                exitCode, stdout, stderr);</span>
-<span class="source-line-no">635</span><span id="line-635">        }</span>
-<span class="source-line-no">636</span><span id="line-636">    }</span>
-<span class="source-line-no">637</span><span id="line-637">}</span>
+<span class="source-line-no">619</span><span id="line-619">    @Override</span>
+<span class="source-line-no">620</span><span id="line-620">    public String toString() {</span>
+<span class="source-line-no">621</span><span id="line-621">        return String.format("Node{hostname='%s', user='%s', port=%d}",</span>
+<span class="source-line-no">622</span><span id="line-622">            hostname, user, port);</span>
+<span class="source-line-no">623</span><span id="line-623">    }</span>
+<span class="source-line-no">624</span><span id="line-624"></span>
+<span class="source-line-no">625</span><span id="line-625">    /**</span>
+<span class="source-line-no">626</span><span id="line-626">     * Represents the result of a command execution.</span>
+<span class="source-line-no">627</span><span id="line-627">     */</span>
+<span class="source-line-no">628</span><span id="line-628">    public static class CommandResult {</span>
+<span class="source-line-no">629</span><span id="line-629">        private final String stdout;</span>
+<span class="source-line-no">630</span><span id="line-630">        private final String stderr;</span>
+<span class="source-line-no">631</span><span id="line-631">        private final int exitCode;</span>
+<span class="source-line-no">632</span><span id="line-632"></span>
+<span class="source-line-no">633</span><span id="line-633">        public CommandResult(String stdout, String stderr, int exitCode) {</span>
+<span class="source-line-no">634</span><span id="line-634">            this.stdout = stdout;</span>
+<span class="source-line-no">635</span><span id="line-635">            this.stderr = stderr;</span>
+<span class="source-line-no">636</span><span id="line-636">            this.exitCode = exitCode;</span>
+<span class="source-line-no">637</span><span id="line-637">        }</span>
+<span class="source-line-no">638</span><span id="line-638"></span>
+<span class="source-line-no">639</span><span id="line-639">        public String getStdout() {</span>
+<span class="source-line-no">640</span><span id="line-640">            return stdout;</span>
+<span class="source-line-no">641</span><span id="line-641">        }</span>
+<span class="source-line-no">642</span><span id="line-642"></span>
+<span class="source-line-no">643</span><span id="line-643">        public String getStderr() {</span>
+<span class="source-line-no">644</span><span id="line-644">            return stderr;</span>
+<span class="source-line-no">645</span><span id="line-645">        }</span>
+<span class="source-line-no">646</span><span id="line-646"></span>
+<span class="source-line-no">647</span><span id="line-647">        public int getExitCode() {</span>
+<span class="source-line-no">648</span><span id="line-648">            return exitCode;</span>
+<span class="source-line-no">649</span><span id="line-649">        }</span>
+<span class="source-line-no">650</span><span id="line-650"></span>
+<span class="source-line-no">651</span><span id="line-651">        public boolean isSuccess() {</span>
+<span class="source-line-no">652</span><span id="line-652">            return exitCode == 0;</span>
+<span class="source-line-no">653</span><span id="line-653">        }</span>
+<span class="source-line-no">654</span><span id="line-654"></span>
+<span class="source-line-no">655</span><span id="line-655">        @Override</span>
+<span class="source-line-no">656</span><span id="line-656">        public String toString() {</span>
+<span class="source-line-no">657</span><span id="line-657">            return String.format("CommandResult{exitCode=%d, stdout='%s', stderr='%s'}",</span>
+<span class="source-line-no">658</span><span id="line-658">                exitCode, stdout, stderr);</span>
+<span class="source-line-no">659</span><span id="line-659">        }</span>
+<span class="source-line-no">660</span><span id="line-660">    }</span>
+<span class="source-line-no">661</span><span id="line-661">}</span>
 
 
 

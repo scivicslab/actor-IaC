@@ -529,39 +529,50 @@
 <span class="source-line-no">516</span><span id="line-516">    }</span>
 <span class="source-line-no">517</span><span id="line-517"></span>
 <span class="source-line-no">518</span><span id="line-518">    /**</span>
-<span class="source-line-no">519</span><span id="line-519">     * Extracts the root cause message from an ExecutionException.</span>
-<span class="source-line-no">520</span><span id="line-520">     */</span>
-<span class="source-line-no">521</span><span id="line-521">    private String extractRootCauseMessage(ExecutionException e) {</span>
-<span class="source-line-no">522</span><span id="line-522">        Throwable cause = e.getCause();</span>
-<span class="source-line-no">523</span><span id="line-523">        while (cause != null &amp;&amp; cause.getCause() != null) {</span>
-<span class="source-line-no">524</span><span id="line-524">            cause = cause.getCause();</span>
-<span class="source-line-no">525</span><span id="line-525">        }</span>
-<span class="source-line-no">526</span><span id="line-526">        return cause != null ? cause.getMessage() : e.getMessage();</span>
-<span class="source-line-no">527</span><span id="line-527">    }</span>
-<span class="source-line-no">528</span><span id="line-528"></span>
-<span class="source-line-no">529</span><span id="line-529">    /**</span>
-<span class="source-line-no">530</span><span id="line-530">     * Extracts a command string from JSON array arguments.</span>
-<span class="source-line-no">531</span><span id="line-531">     *</span>
-<span class="source-line-no">532</span><span id="line-532">     * &lt;p&gt;Expects arguments in the format: {@code ["command string"]}&lt;/p&gt;</span>
-<span class="source-line-no">533</span><span id="line-533">     *</span>
-<span class="source-line-no">534</span><span id="line-534">     * @param arg the JSON array argument string</span>
-<span class="source-line-no">535</span><span id="line-535">     * @return the extracted command string</span>
-<span class="source-line-no">536</span><span id="line-536">     * @throws IllegalArgumentException if the argument format is invalid</span>
-<span class="source-line-no">537</span><span id="line-537">     */</span>
-<span class="source-line-no">538</span><span id="line-538">    private String extractCommandFromArgs(String arg) {</span>
-<span class="source-line-no">539</span><span id="line-539">        try {</span>
-<span class="source-line-no">540</span><span id="line-540">            JSONArray jsonArray = new JSONArray(arg);</span>
-<span class="source-line-no">541</span><span id="line-541">            if (jsonArray.length() == 0) {</span>
-<span class="source-line-no">542</span><span id="line-542">                throw new IllegalArgumentException("Command arguments cannot be empty");</span>
-<span class="source-line-no">543</span><span id="line-543">            }</span>
-<span class="source-line-no">544</span><span id="line-544">            return jsonArray.getString(0);</span>
-<span class="source-line-no">545</span><span id="line-545">        } catch (Exception e) {</span>
-<span class="source-line-no">546</span><span id="line-546">            throw new IllegalArgumentException(</span>
-<span class="source-line-no">547</span><span id="line-547">                "Invalid command argument format. Expected JSON array with command string: " + arg, e);</span>
-<span class="source-line-no">548</span><span id="line-548">        }</span>
-<span class="source-line-no">549</span><span id="line-549">    }</span>
-<span class="source-line-no">550</span><span id="line-550"></span>
-<span class="source-line-no">551</span><span id="line-551">}</span>
+<span class="source-line-no">519</span><span id="line-519">     * Extracts a meaningful error message from an ExecutionException.</span>
+<span class="source-line-no">520</span><span id="line-520">     *</span>
+<span class="source-line-no">521</span><span id="line-521">     * &lt;p&gt;Prioritizes IOException messages (which contain our detailed SSH error messages)</span>
+<span class="source-line-no">522</span><span id="line-522">     * over the raw library exception messages.&lt;/p&gt;</span>
+<span class="source-line-no">523</span><span id="line-523">     */</span>
+<span class="source-line-no">524</span><span id="line-524">    private String extractRootCauseMessage(ExecutionException e) {</span>
+<span class="source-line-no">525</span><span id="line-525">        Throwable cause = e.getCause();</span>
+<span class="source-line-no">526</span><span id="line-526"></span>
+<span class="source-line-no">527</span><span id="line-527">        // Look for IOException first - it contains our detailed error messages</span>
+<span class="source-line-no">528</span><span id="line-528">        Throwable current = cause;</span>
+<span class="source-line-no">529</span><span id="line-529">        while (current != null) {</span>
+<span class="source-line-no">530</span><span id="line-530">            if (current instanceof java.io.IOException) {</span>
+<span class="source-line-no">531</span><span id="line-531">                return current.getMessage();</span>
+<span class="source-line-no">532</span><span id="line-532">            }</span>
+<span class="source-line-no">533</span><span id="line-533">            current = current.getCause();</span>
+<span class="source-line-no">534</span><span id="line-534">        }</span>
+<span class="source-line-no">535</span><span id="line-535"></span>
+<span class="source-line-no">536</span><span id="line-536">        // Fall back to the immediate cause message</span>
+<span class="source-line-no">537</span><span id="line-537">        return cause != null ? cause.getMessage() : e.getMessage();</span>
+<span class="source-line-no">538</span><span id="line-538">    }</span>
+<span class="source-line-no">539</span><span id="line-539"></span>
+<span class="source-line-no">540</span><span id="line-540">    /**</span>
+<span class="source-line-no">541</span><span id="line-541">     * Extracts a command string from JSON array arguments.</span>
+<span class="source-line-no">542</span><span id="line-542">     *</span>
+<span class="source-line-no">543</span><span id="line-543">     * &lt;p&gt;Expects arguments in the format: {@code ["command string"]}&lt;/p&gt;</span>
+<span class="source-line-no">544</span><span id="line-544">     *</span>
+<span class="source-line-no">545</span><span id="line-545">     * @param arg the JSON array argument string</span>
+<span class="source-line-no">546</span><span id="line-546">     * @return the extracted command string</span>
+<span class="source-line-no">547</span><span id="line-547">     * @throws IllegalArgumentException if the argument format is invalid</span>
+<span class="source-line-no">548</span><span id="line-548">     */</span>
+<span class="source-line-no">549</span><span id="line-549">    private String extractCommandFromArgs(String arg) {</span>
+<span class="source-line-no">550</span><span id="line-550">        try {</span>
+<span class="source-line-no">551</span><span id="line-551">            JSONArray jsonArray = new JSONArray(arg);</span>
+<span class="source-line-no">552</span><span id="line-552">            if (jsonArray.length() == 0) {</span>
+<span class="source-line-no">553</span><span id="line-553">                throw new IllegalArgumentException("Command arguments cannot be empty");</span>
+<span class="source-line-no">554</span><span id="line-554">            }</span>
+<span class="source-line-no">555</span><span id="line-555">            return jsonArray.getString(0);</span>
+<span class="source-line-no">556</span><span id="line-556">        } catch (Exception e) {</span>
+<span class="source-line-no">557</span><span id="line-557">            throw new IllegalArgumentException(</span>
+<span class="source-line-no">558</span><span id="line-558">                "Invalid command argument format. Expected JSON array with command string: " + arg, e);</span>
+<span class="source-line-no">559</span><span id="line-559">        }</span>
+<span class="source-line-no">560</span><span id="line-560">    }</span>
+<span class="source-line-no">561</span><span id="line-561"></span>
+<span class="source-line-no">562</span><span id="line-562">}</span>
 
 
 
