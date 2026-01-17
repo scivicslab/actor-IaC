@@ -1,4 +1,5 @@
 com.scivicslab.actoriac
+com.scivicslab.actoriac.accumulator
 com.scivicslab.actoriac.cli
 com.scivicslab.actoriac.example
 com.scivicslab.actoriac.log

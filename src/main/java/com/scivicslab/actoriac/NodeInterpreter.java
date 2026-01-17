@@ -27,7 +27,10 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.json.JSONObject;
+
 import com.scivicslab.pojoactor.core.ActionResult;
+import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
 import com.scivicslab.pojoactor.workflow.Transition;
@@ -109,6 +112,20 @@ public class NodeInterpreter extends Interpreter {
     }
 
     /**
+     * Executes a command on the remote node via SSH with real-time output callback.
+     *
+     * <p>Delegates to the wrapped {@link Node#executeCommand(String, Node.OutputCallback)} method.</p>
+     *
+     * @param command the command to execute
+     * @param callback the callback for real-time output (may be null)
+     * @return the result of the command execution
+     * @throws IOException if SSH connection fails
+     */
+    public Node.CommandResult executeCommand(String command, Node.OutputCallback callback) throws IOException {
+        return node.executeCommand(command, callback);
+    }
+
+    /**
      * Executes a command with sudo privileges on the remote node.
      *
      * <p>Delegates to the wrapped {@link Node#executeSudoCommand(String)} method.
@@ -120,6 +137,21 @@ public class NodeInterpreter extends Interpreter {
      */
     public Node.CommandResult executeSudoCommand(String command) throws IOException {
         return node.executeSudoCommand(command);
+    }
+
+    /**
+     * Executes a command with sudo privileges on the remote node with real-time output callback.
+     *
+     * <p>Delegates to the wrapped {@link Node#executeSudoCommand(String, Node.OutputCallback)} method.
+     * Requires SUDO_PASSWORD environment variable to be set.</p>
+     *
+     * @param command the command to execute with sudo
+     * @param callback the callback for real-time output (may be null)
+     * @return the result of the command execution
+     * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set
+     */
+    public Node.CommandResult executeSudoCommand(String command, Node.OutputCallback callback) throws IOException {
+        return node.executeSudoCommand(command, callback);
     }
 
     /**
@@ -215,12 +247,24 @@ public class NodeInterpreter extends Interpreter {
         String yamlText = transition.toYamlString(10).trim();
         this.currentTransitionYaml = yamlText;
 
-        // Display using IaCStreamingAccumulator if available
+        // Render cowsay output
+        String cowsayOutput;
         if (accumulator != null) {
-            accumulator.cowsay(workflowName, yamlText);
+            cowsayOutput = accumulator.renderCowsay(workflowName, yamlText);
         } else {
-            // Fallback to simple text output if no accumulator
-            System.out.println("[" + workflowName + "]\n" + yamlText);
+            // Fallback to simple text if no accumulator
+            cowsayOutput = "[" + workflowName + "]\n" + yamlText;
+        }
+
+        // Send cowsay output to outputMultiplexer (loose coupling via ActorSystem)
+        IIActorRef<?> multiplexer = system.getIIActor("outputMultiplexer");
+        if (multiplexer != null) {
+            JSONObject arg = new JSONObject();
+            // Use actor name as source (consistent across all output)
+            arg.put("source", selfActorRef != null ? selfActorRef.getName() : "unknown");
+            arg.put("type", "cowsay");
+            arg.put("data", cowsayOutput);
+            multiplexer.callByActionName("add", arg.toString());
         }
     }
 

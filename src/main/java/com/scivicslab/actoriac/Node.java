@@ -142,23 +142,42 @@ public class Node {
      * @throws IOException if command execution fails
      */
     public CommandResult executeCommand(String command) throws IOException {
+        return executeCommand(command, null);
+    }
+
+    /**
+     * Executes a command on the node with real-time output callback.
+     *
+     * <p>If localMode is true, executes the command locally using ProcessBuilder.
+     * Otherwise, executes via SSH using JSch.</p>
+     *
+     * <p>The callback receives stdout and stderr lines as they are produced,
+     * enabling real-time forwarding to accumulators.</p>
+     *
+     * @param command the command to execute
+     * @param callback the callback for real-time output (may be null)
+     * @return the execution result containing stdout, stderr, and exit code
+     * @throws IOException if command execution fails
+     */
+    public CommandResult executeCommand(String command, OutputCallback callback) throws IOException {
         if (localMode) {
-            return executeLocalCommand(command);
+            return executeLocalCommand(command, callback);
         }
-        return executeRemoteCommand(command);
+        return executeRemoteCommand(command, callback);
     }
 
     /**
      * Executes a command locally using ProcessBuilder with real-time streaming.
      *
-     * <p>Output is streamed to System.out/System.err in real-time as it becomes available,
+     * <p>Output is streamed via callback (if provided) in real-time as it becomes available,
      * while also being captured for the CommandResult.</p>
      *
      * @param command the command to execute
+     * @param callback the callback for real-time output (may be null)
      * @return the execution result
      * @throws IOException if command execution fails
      */
-    private CommandResult executeLocalCommand(String command) throws IOException {
+    private CommandResult executeLocalCommand(String command, OutputCallback callback) throws IOException {
         ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
         Process process = pb.start();
 
@@ -173,7 +192,9 @@ public class Node {
                     synchronized (stderrBuilder) {
                         stderrBuilder.append(line).append("\n");
                     }
-                    System.err.println(line);
+                    if (callback != null) {
+                        callback.onStderr(line);
+                    }
                 }
             } catch (IOException e) {
                 // Ignore
@@ -186,7 +207,9 @@ public class Node {
             String line;
             while ((line = reader.readLine()) != null) {
                 stdoutBuilder.append(line).append("\n");
-                System.out.println(line);
+                if (callback != null) {
+                    callback.onStdout(line);
+                }
             }
         }
 
@@ -207,14 +230,15 @@ public class Node {
     /**
      * Executes a command on the remote node via SSH using JSch with real-time streaming.
      *
-     * <p>Output is streamed to System.out/System.err in real-time as it becomes available,
+     * <p>Output is streamed via callback (if provided) in real-time as it becomes available,
      * while also being captured for the CommandResult.</p>
      *
      * @param command the command to execute
+     * @param callback the callback for real-time output (may be null)
      * @return the execution result containing stdout, stderr, and exit code
      * @throws IOException if SSH connection or command execution fails
      */
-    private CommandResult executeRemoteCommand(String command) throws IOException {
+    private CommandResult executeRemoteCommand(String command, OutputCallback callback) throws IOException {
         Session session = null;
         ChannelExec channel = null;
 
@@ -246,7 +270,9 @@ public class Node {
                         synchronized (stderrBuilder) {
                             stderrBuilder.append(line).append("\n");
                         }
-                        System.err.println(line);
+                        if (callback != null) {
+                            callback.onStderr(line);
+                        }
                     }
                 } catch (IOException e) {
                     // Ignore
@@ -259,7 +285,9 @@ public class Node {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     stdoutBuilder.append(line).append("\n");
-                    System.out.println(line);
+                    if (callback != null) {
+                        callback.onStdout(line);
+                    }
                 }
             }
 
@@ -343,6 +371,23 @@ public class Node {
      * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set
      */
     public CommandResult executeSudoCommand(String command) throws IOException {
+        return executeSudoCommand(command, null);
+    }
+
+    /**
+     * Executes a command with sudo privileges on the remote node with real-time output callback.
+     *
+     * <p>Reads the sudo password from the SUDO_PASSWORD environment variable.
+     * If the environment variable is not set, throws an IOException.</p>
+     *
+     * <p>Multi-line scripts are properly handled by wrapping them in bash -c.</p>
+     *
+     * @param command the command to execute with sudo
+     * @param callback the callback for real-time output (may be null)
+     * @return the execution result containing stdout, stderr, and exit code
+     * @throws IOException if SSH connection fails or SUDO_PASSWORD is not set
+     */
+    public CommandResult executeSudoCommand(String command, OutputCallback callback) throws IOException {
         String sudoPassword = System.getenv(SUDO_PASSWORD_ENV);
         if (sudoPassword == null || sudoPassword.isEmpty()) {
             throw new IOException("SUDO_PASSWORD environment variable is not set");
@@ -355,7 +400,7 @@ public class Node {
         String sudoCommand = String.format("echo '%s' | sudo -S bash -c '%s'",
             sudoPassword.replace("'", "'\\''"), escapedCommand);
 
-        return executeCommand(sudoCommand);
+        return executeCommand(sudoCommand, callback);
     }
 
     /**
@@ -620,6 +665,28 @@ public class Node {
     public String toString() {
         return String.format("Node{hostname='%s', user='%s', port=%d}",
             hostname, user, port);
+    }
+
+    /**
+     * Callback interface for real-time output streaming.
+     *
+     * <p>Implementations receive stdout and stderr lines as they are produced,
+     * enabling real-time forwarding to accumulators without blocking.</p>
+     */
+    public interface OutputCallback {
+        /**
+         * Called when a stdout line is read.
+         *
+         * @param line the stdout line (without newline)
+         */
+        void onStdout(String line);
+
+        /**
+         * Called when a stderr line is read.
+         *
+         * @param line the stderr line (without newline)
+         */
+        void onStderr(String line);
     }
 
     /**

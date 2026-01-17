@@ -15,72 +15,88 @@
  * under the License.
  */
 
-package com.scivicslab.actoriac;
+package com.scivicslab.actoriac.accumulator;
 
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.json.JSONObject;
 
-import com.scivicslab.actoriac.log.DistributedLogStore;
-import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.pojoactor.core.ActionResult;
-import com.scivicslab.pojoactor.core.ActorRef;
-import com.scivicslab.pojoactor.core.accumulator.Accumulator;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 /**
- * Accumulator actor reference that also logs to H2 database.
+ * Actor reference for MultiplexerAccumulator.
  *
- * <p>This class extends the standard accumulator functionality to also write
- * logs to the H2LogStore for persistent storage. Each node's output is stored
- * with the node ID for later querying.</p>
+ * <p>This class wraps a {@link MultiplexerAccumulator} as an actor, allowing
+ * other actors to send messages to it via {@code callByActionName}. The actor
+ * forwards all output to its registered target accumulators (Console, File, Database).</p>
  *
- * <p>Database writes are performed asynchronously using a dedicated single-threaded
- * executor to avoid blocking workflow execution. The logStore actor ensures all
- * DB writes are serialized.</p>
+ * <p>This class replaces the former {@code LoggingAccumulatorIIAR} with a more
+ * flexible architecture that supports multiple output destinations.</p>
  *
  * <h2>Supported Actions</h2>
  * <ul>
- *   <li>{@code add} - Adds a result and logs to database</li>
- *   <li>{@code getSummary} - Returns formatted summary of all results</li>
- *   <li>{@code getCount} - Returns the number of added results</li>
- *   <li>{@code clear} - Clears all accumulated results</li>
+ *   <li>{@code add} - Adds output to all registered accumulators</li>
+ *   <li>{@code getSummary} - Returns formatted summary</li>
+ *   <li>{@code getCount} - Returns the number of added entries</li>
+ *   <li>{@code clear} - Clears all accumulated entries</li>
  * </ul>
  *
+ * <h2>Message Format for "add" Action</h2>
+ * <pre>{@code
+ * {
+ *   "source": "node-localhost",
+ *   "type": "stdout",
+ *   "data": "command output here"
+ * }
+ * }</pre>
+ *
+ * <h2>Usage</h2>
+ * <pre>{@code
+ * // Create and register the actor
+ * MultiplexerAccumulator multiplexer = new MultiplexerAccumulator();
+ * multiplexer.addTarget(new ConsoleAccumulator());
+ * multiplexer.addTarget(new FileAccumulator(logFilePath));
+ * multiplexer.addTarget(new DatabaseAccumulator(logStoreActor, dbExecutor, sessionId));
+ *
+ * MultiplexerAccumulatorIIAR actor = new MultiplexerAccumulatorIIAR(
+ *     "outputMultiplexer", multiplexer, system);
+ * system.addIIActor(actor);
+ *
+ * // Other actors can send messages by name
+ * IIActorRef<?> multiplexerActor = system.getIIActor("outputMultiplexer");
+ * multiplexerActor.callByActionName("add", jsonArg);
+ * }</pre>
+ *
  * @author devteam@scivics-lab.com
- * @since 2.9.0
+ * @since 2.12.0
  */
-public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
+public class MultiplexerAccumulatorIIAR extends IIActorRef<MultiplexerAccumulator> {
 
     private final Logger logger;
-    private final ActorRef<DistributedLogStore> logStoreActor;
-    private final ExecutorService dbExecutor;
-    private final long sessionId;
 
     /**
-     * Constructs a new LoggingAccumulatorIIAR.
+     * Constructs a new MultiplexerAccumulatorIIAR.
      *
-     * @param actorName the name of this actor
-     * @param object the Accumulator implementation
+     * @param actorName the name of this actor (e.g., "outputMultiplexer")
+     * @param object the MultiplexerAccumulator instance
      * @param system the actor system
-     * @param logStoreActor the actor reference for the distributed log store
-     * @param dbExecutor the dedicated executor service for DB writes (should be single-threaded)
-     * @param sessionId the session ID for this workflow execution
      */
-    public LoggingAccumulatorIIAR(String actorName, Accumulator object, IIActorSystem system,
-                                   ActorRef<DistributedLogStore> logStoreActor,
-                                   ExecutorService dbExecutor, long sessionId) {
+    public MultiplexerAccumulatorIIAR(String actorName, MultiplexerAccumulator object, IIActorSystem system) {
         super(actorName, object, system);
         this.logger = Logger.getLogger(actorName);
-        this.logStoreActor = logStoreActor;
-        this.dbExecutor = dbExecutor;
-        this.sessionId = sessionId;
     }
 
+    /**
+     * Invokes an action on the multiplexer by name.
+     *
+     * @param actionName the name of the action to execute
+     * @param arg the argument string (JSON format for "add" action)
+     * @return an {@link ActionResult} indicating success or failure
+     */
     @Override
     public ActionResult callByActionName(String actionName, String arg) {
         logger.fine(String.format("actionName = %s, arg = %s", actionName, arg));
@@ -112,9 +128,8 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
     /**
      * Handles the add action.
      *
-     * <p>Adds the result to the accumulator (for console output) and also
-     * logs to the H2 database for persistent storage. Database writes are
-     * performed asynchronously via the logStore actor to avoid blocking.</p>
+     * <p>Parses the JSON argument and forwards to the multiplexer, which then
+     * distributes to all registered target accumulators.</p>
      *
      * @param arg JSON object with source, type, and data fields
      * @return ActionResult indicating success or failure
@@ -125,19 +140,8 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
         String type = json.getString("type");
         String data = json.getString("data");
 
-        // Add to accumulator (console output)
+        // Forward to multiplexer (which distributes to all targets)
         this.tell(acc -> acc.add(source, type, data)).get();
-
-        // Log to H2 database asynchronously via logStore actor
-        if (logStoreActor != null && sessionId >= 0) {
-            // source = node ID (e.g., "node-192.168.1.1")
-            // type = transition YAML snippet (what step is being executed)
-            // data = command output
-            // Fire-and-forget: don't wait for DB write to complete
-            logStoreActor.tell(
-                store -> store.logAction(sessionId, source, type, "executeCommand", 0, 0L, data),
-                dbExecutor);
-        }
 
         return new ActionResult(true, "Added");
     }
@@ -148,7 +152,7 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
      * @return ActionResult with the formatted summary
      */
     private ActionResult handleGetSummary() throws ExecutionException, InterruptedException {
-        String summary = this.ask(Accumulator::getSummary).get();
+        String summary = this.ask(MultiplexerAccumulator::getSummary).get();
         return new ActionResult(true, summary);
     }
 
@@ -158,7 +162,7 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
      * @return ActionResult with the count
      */
     private ActionResult handleGetCount() throws ExecutionException, InterruptedException {
-        int count = this.ask(Accumulator::getCount).get();
+        int count = this.ask(MultiplexerAccumulator::getCount).get();
         return new ActionResult(true, String.valueOf(count));
     }
 
@@ -168,7 +172,7 @@ public class LoggingAccumulatorIIAR extends IIActorRef<Accumulator> {
      * @return ActionResult indicating success
      */
     private ActionResult handleClear() throws ExecutionException, InterruptedException {
-        this.tell(Accumulator::clear).get();
+        this.tell(MultiplexerAccumulator::clear).get();
         return new ActionResult(true, "Cleared");
     }
 }

@@ -80,8 +80,8 @@ public class DescribeCLI implements Callable<Integer> {
     private File overlayDir;
 
     @Option(
-        names = {"--steps"},
-        description = "Also display descriptions of each step"
+        names = {"--steps", "--notes"},
+        description = "Also display note/description of each step"
     )
     private boolean showSteps;
 

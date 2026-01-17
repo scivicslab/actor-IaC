@@ -41,6 +41,12 @@ import com.scivicslab.actoriac.IaCStreamingAccumulator;
 import com.scivicslab.actoriac.NodeGroup;
 import com.scivicslab.actoriac.NodeGroupInterpreter;
 import com.scivicslab.actoriac.NodeGroupIIAR;
+import com.scivicslab.actoriac.accumulator.ConsoleAccumulator;
+import com.scivicslab.actoriac.accumulator.DatabaseAccumulator;
+import com.scivicslab.actoriac.accumulator.FileAccumulator;
+import com.scivicslab.actoriac.accumulator.MultiplexerAccumulator;
+import com.scivicslab.actoriac.accumulator.MultiplexerAccumulatorIIAR;
+import com.scivicslab.actoriac.accumulator.MultiplexerLogHandler;
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.H2LogStore;
 import com.scivicslab.actoriac.log.LogLevel;
@@ -766,6 +772,41 @@ public class RunCLI implements Callable<Integer> {
             // Step 2: Create NodeGroupIIAR and register with system
             NodeGroupIIAR nodeGroupActor = new NodeGroupIIAR("nodeGroup", nodeGroupInterpreter, system);
             system.addIIActor(nodeGroupActor);
+
+            // Step 2.5: Create and register MultiplexerAccumulatorIIAR
+            MultiplexerAccumulator multiplexer = new MultiplexerAccumulator();
+
+            // Add ConsoleAccumulator (unless --quiet is specified)
+            if (!quiet) {
+                multiplexer.addTarget(new ConsoleAccumulator());
+            }
+
+            // Add FileAccumulator if --file-log is specified
+            if (logFile != null) {
+                try {
+                    multiplexer.addTarget(new FileAccumulator(logFile.toPath()));
+                    LOG.info("File logging enabled: " + logFile.getAbsolutePath());
+                } catch (IOException e) {
+                    LOG.warning("Failed to create file accumulator: " + e.getMessage());
+                }
+            }
+
+            // Add DatabaseAccumulator if log store is configured
+            if (logStoreActor != null && sessionId >= 0) {
+                multiplexer.addTarget(new DatabaseAccumulator(logStoreActor, dbExecutor, sessionId));
+                LOG.fine("Database logging enabled for session: " + sessionId);
+            }
+
+            // Register multiplexer actor with the system
+            MultiplexerAccumulatorIIAR multiplexerActor = new MultiplexerAccumulatorIIAR(
+                "outputMultiplexer", multiplexer, system);
+            system.addIIActor(multiplexerActor);
+            LOG.fine("MultiplexerAccumulator registered as 'outputMultiplexer'");
+
+            // Add log handler to forward java.util.logging to multiplexer
+            MultiplexerLogHandler logHandler = new MultiplexerLogHandler(system);
+            logHandler.setLevel(java.util.logging.Level.ALL);
+            java.util.logging.Logger.getLogger("").addHandler(logHandler);
 
             // Step 3: Load the main workflow (with overlay if specified)
             ActionResult loadResult = loadMainWorkflow(nodeGroupActor, mainWorkflowFile, overlayDir);

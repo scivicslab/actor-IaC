@@ -20,9 +20,12 @@ package com.scivicslab.actoriac;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
+import org.json.JSONObject;
+
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.pojoactor.core.ActorRef;
+import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.Interpreter;
 import com.scivicslab.pojoactor.workflow.Transition;
@@ -288,20 +291,38 @@ public class NodeGroupInterpreter extends Interpreter {
         // Get YAML-formatted output (first 10 lines for cowsay)
         String yamlText = transition.toYamlString(10).trim();
 
-        // Display using IaCStreamingAccumulator if available
+        // Render cowsay output
+        String cowsayOutput;
         if (accumulator != null) {
-            accumulator.cowsay(workflowName, yamlText);
+            cowsayOutput = accumulator.renderCowsay(workflowName, yamlText);
         } else {
-            // Fallback to simple text output if no accumulator
-            System.out.println("[" + workflowName + "]\n" + yamlText);
+            // Fallback to simple text if no accumulator
+            cowsayOutput = "[" + workflowName + "]\n" + yamlText;
         }
 
-        // In verbose mode, show the full YAML after cowsay
+        // Send cowsay output to outputMultiplexer (loose coupling via ActorSystem)
+        IIActorRef<?> multiplexer = system.getIIActor("outputMultiplexer");
+        // Use actor name as source (consistent across all output)
+        String actorName = selfActorRef != null ? selfActorRef.getName() : "unknown";
+        if (multiplexer != null) {
+            JSONObject arg = new JSONObject();
+            arg.put("source", actorName);
+            arg.put("type", "cowsay");
+            arg.put("data", cowsayOutput);
+            multiplexer.callByActionName("add", arg.toString());
+        }
+
+        // In verbose mode, also send the full YAML
         if (verbose) {
             String fullYaml = transition.toYamlString(-1);
-            System.out.println("--- Full transition YAML ---");
-            System.out.println(fullYaml);
-            System.out.println("----------------------------");
+            String verboseOutput = "--- Full transition YAML ---\n" + fullYaml + "\n----------------------------";
+            if (multiplexer != null) {
+                JSONObject arg = new JSONObject();
+                arg.put("source", actorName);
+                arg.put("type", "verbose");
+                arg.put("data", verboseOutput);
+                multiplexer.callByActionName("add", arg.toString());
+            }
         }
 
         // Log to distributed log store asynchronously

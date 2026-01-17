@@ -78,15 +78,18 @@ public class IaCStreamingAccumulator extends StreamingAccumulator {
     }
 
     /**
-     * Displays a workflow step using cowsay ASCII art.
+     * Renders a workflow step as cowsay ASCII art and returns the result.
      *
      * <p>This method formats the workflow name and step YAML into a cowsay
-     * message with the configured cowfile character.</p>
+     * message with the configured cowfile character. The rendered ASCII art
+     * is returned as a string instead of being printed directly, allowing
+     * the caller to send it to the output multiplexer.</p>
      *
      * @param workflowName the name of the workflow
      * @param stepYaml the YAML representation of the step (first 10 lines recommended)
+     * @return the rendered cowsay ASCII art string
      */
-    public void cowsay(String workflowName, String stepYaml) {
+    public String renderCowsay(String workflowName, String stepYaml) {
         String displayText = "[" + workflowName + "]\n" + stepYaml;
         String[] cowsayArgs;
         if (cowfile != null && !cowfile.isBlank()) {
@@ -94,7 +97,7 @@ public class IaCStreamingAccumulator extends StreamingAccumulator {
         } else {
             cowsayArgs = new String[] { displayText };
         }
-        System.out.println(Cowsay.say(cowsayArgs));
+        return Cowsay.say(cowsayArgs);
     }
 
     /**

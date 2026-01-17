@@ -20,7 +20,6 @@ package com.scivicslab.actoriac;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -29,12 +28,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.scivicslab.pojoactor.core.ActionResult;
-import com.scivicslab.pojoactor.core.ActorRef;
-import com.scivicslab.pojoactor.core.accumulator.Accumulator;
-import com.scivicslab.pojoactor.core.accumulator.BufferedAccumulator;
-import com.scivicslab.pojoactor.core.accumulator.JsonAccumulator;
-import com.scivicslab.pojoactor.core.accumulator.StreamingAccumulator;
-import com.scivicslab.pojoactor.core.accumulator.TableAccumulator;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
@@ -100,7 +93,6 @@ import com.scivicslab.actoriac.log.DistributedLogStore;
 public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
 
     Logger logger = null;
-    private LoggingAccumulatorIIAR accumulatorActor = null;
 
     /**
      * Constructs a new NodeGroupIIAR with the specified actor name and nodeGroupInterpreter object.
@@ -241,13 +233,14 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
                     String.format("Executed command on %d nodes: %s", results.size(), results));
 
             case "hasAccumulator":
-                boolean hasAcc = accumulatorActor != null;
+                // Check if outputMultiplexer exists (loose coupling)
+                boolean hasAcc = ((IIActorSystem) this.system()).getIIActor("outputMultiplexer") != null;
                 return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");
 
             case "createAccumulator":
-                String type = extractSingleArgument(arg);
-                createAccumulator(type);
-                return new ActionResult(true, String.format("Created %s accumulator", type));
+                // No-op: MultiplexerAccumulator is now created by RunCLI
+                // This case is kept for backward compatibility with existing workflows
+                return new ActionResult(true, "Accumulator managed by CLI");
 
             case "getAccumulatorSummary":
                 return getAccumulatorSummary();
@@ -553,62 +546,20 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
     }
 
     /**
-     * Creates an accumulator as a child actor.
+     * Gets the summary from the output multiplexer.
      *
-     * <p>If a log store is configured in the NodeGroupInterpreter, creates a
-     * LoggingAccumulatorIIAR that also writes to the H2 database.</p>
-     *
-     * @param type the accumulator type ("streaming", "buffered", "table", "json")
-     */
-    private void createAccumulator(String type) {
-        IIActorSystem sys = (IIActorSystem) this.system();
-
-        // Create POJO based on type
-        Accumulator accumulator;
-        switch (type.toLowerCase()) {
-            case "streaming":
-                accumulator = new StreamingAccumulator();
-                break;
-            case "buffered":
-                accumulator = new BufferedAccumulator();
-                break;
-            case "table":
-                accumulator = new TableAccumulator();
-                break;
-            case "json":
-                accumulator = new JsonAccumulator();
-                break;
-            default:
-                throw new IllegalArgumentException("Unknown accumulator type: " + type);
-        }
-
-        // Get logStoreActor, dbExecutor and sessionId from NodeGroupInterpreter
-        ActorRef<DistributedLogStore> logStoreActor = this.object.getLogStoreActor();
-        ExecutorService dbExecutor = this.object.getDbExecutor();
-        long sessionId = this.object.getSessionId();
-
-        // Create LoggingAccumulatorIIAR that also writes to H2 database via actor
-        accumulatorActor = new LoggingAccumulatorIIAR("accumulator", accumulator, sys,
-                                                       logStoreActor, dbExecutor, sessionId);
-        this.createChild("accumulator", accumulator);
-        sys.addIIActor(accumulatorActor);
-
-        logger.info(String.format("Created %s accumulator as child actor (logging=%s)",
-            type, logStoreActor != null ? "enabled" : "disabled"));
-    }
-
-    /**
-     * Gets the summary from the accumulator.
+     * <p>Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer")
+     * and calls its getSummary action.</p>
      *
      * @return ActionResult with the summary or error
      */
     private ActionResult getAccumulatorSummary() {
-        if (accumulatorActor == null) {
-            return new ActionResult(false, "No accumulator created");
+        IIActorSystem sys = (IIActorSystem) this.system();
+        IIActorRef<?> multiplexer = sys.getIIActor("outputMultiplexer");
+        if (multiplexer == null) {
+            return new ActionResult(false, "No output multiplexer registered");
         }
-        ActionResult result = accumulatorActor.callByActionName("getSummary", "");
-        // Print the summary to stdout
-        System.out.println(result.getResult());
+        ActionResult result = multiplexer.callByActionName("getSummary", "");
         return result;
     }
 

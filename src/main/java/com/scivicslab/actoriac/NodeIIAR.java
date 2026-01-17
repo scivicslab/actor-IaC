@@ -462,44 +462,98 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
 
     private ActionResult executeCommandWithReport(String arg) throws InterruptedException, ExecutionException {
         String command = extractCommandFromArgs(arg);
+        String nodeName = this.getName();
+        String transitionYaml = this.object.getCurrentTransitionYaml();
+
+        // Create callback that forwards output to multiplexer accumulator
+        Node.OutputCallback callback = createOutputCallback(nodeName);
+
         Node.CommandResult result = this.ask(n -> {
             try {
-                return n.executeCommand(command);
+                return n.executeCommand(command, callback);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }).get();
 
+        // Report final result to legacy accumulator actor (for backward compatibility)
         reportToAccumulator(result);
         return new ActionResult(result.isSuccess(), combineOutput(result));
     }
 
     private ActionResult executeSudoCommandWithReport(String arg) throws InterruptedException, ExecutionException {
         String command = extractCommandFromArgs(arg);
+        String nodeName = this.getName();
+
+        // Create callback that forwards output to multiplexer accumulator
+        Node.OutputCallback callback = createOutputCallback(nodeName);
+
         Node.CommandResult result = this.ask(n -> {
             try {
-                return n.executeSudoCommand(command);
+                return n.executeSudoCommand(command, callback);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }).get();
 
+        // Report final result to legacy accumulator actor (for backward compatibility)
         reportToAccumulator(result);
         return new ActionResult(result.isSuccess(), combineOutput(result));
     }
 
     /**
-     * Reports command result to the accumulator actor if available.
+     * Creates an OutputCallback that forwards output to the multiplexer accumulator.
+     *
+     * <p>Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer"),
+     * enabling loose coupling between NodeIIAR and MultiplexerAccumulatorIIAR.</p>
+     *
+     * @param nodeName the name of this node (used as source identifier)
+     * @return the callback, or null if multiplexer actor is not registered
+     */
+    private Node.OutputCallback createOutputCallback(String nodeName) {
+        IIActorSystem sys = (IIActorSystem) this.system();
+        IIActorRef<?> multiplexer = sys.getIIActor("outputMultiplexer");
+
+        if (multiplexer == null) {
+            // No multiplexer registered - return null (Node will not output anything)
+            return null;
+        }
+
+        return new Node.OutputCallback() {
+            @Override
+            public void onStdout(String line) {
+                JSONObject arg = new JSONObject();
+                arg.put("source", nodeName);
+                arg.put("type", "stdout");
+                arg.put("data", line);
+                multiplexer.callByActionName("add", arg.toString());
+            }
+
+            @Override
+            public void onStderr(String line) {
+                JSONObject arg = new JSONObject();
+                arg.put("source", nodeName);
+                arg.put("type", "stderr");
+                arg.put("data", line);
+                multiplexer.callByActionName("add", arg.toString());
+            }
+        };
+    }
+
+    /**
+     * Reports command result to the multiplexer accumulator actor if available.
+     *
+     * <p>Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer").</p>
      */
     private void reportToAccumulator(Node.CommandResult result) {
         IIActorSystem sys = (IIActorSystem) this.system();
-        IIActorRef<?> accumulator = sys.getIIActor("accumulator");
-        if (accumulator != null) {
+        IIActorRef<?> multiplexer = sys.getIIActor("outputMultiplexer");
+        if (multiplexer != null) {
             JSONObject reportArg = new JSONObject();
             reportArg.put("source", this.getName());
             reportArg.put("type", this.object.getCurrentTransitionYaml());
             reportArg.put("data", combineOutput(result));
-            accumulator.callByActionName("add", reportArg.toString());
+            multiplexer.callByActionName("add", reportArg.toString());
         }
     }
 
