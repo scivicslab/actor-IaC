@@ -19,6 +19,8 @@ package com.scivicslab.actoriac.log;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -27,6 +29,10 @@ import java.util.List;
  * @author devteam@scivics-lab.com
  */
 public class SessionSummary {
+    private static final DateTimeFormatter ISO_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+    private static final ZoneId SYSTEM_ZONE = ZoneId.systemDefault();
+
     private final long sessionId;
     private final String workflowName;
     private final String overlayName;
@@ -132,8 +138,8 @@ public class SessionSummary {
         if (inventoryName != null) {
             sb.append("  Inventory: ").append(inventoryName).append("\n");
         }
-        sb.append("  Started:  ").append(startedAt != null ? startedAt.toString().replace("T", " ") : "N/A").append("\n");
-        sb.append("  Ended:    ").append(endedAt != null ? endedAt.toString().replace("T", " ") : "N/A").append("\n");
+        sb.append("  Started:  ").append(formatTimestamp(startedAt)).append("\n");
+        sb.append("  Ended:    ").append(formatTimestamp(endedAt)).append("\n");
 
         Duration d = getDuration();
         if (!d.isZero()) {
@@ -155,5 +161,15 @@ public class SessionSummary {
         sb.append("\n");
         sb.append("  Log entries: ").append(totalLogEntries).append(" (").append(errorCount).append(" errors)");
         return sb.toString();
+    }
+
+    /**
+     * Formats a timestamp in ISO 8601 format with timezone.
+     */
+    private String formatTimestamp(LocalDateTime timestamp) {
+        if (timestamp == null) {
+            return "N/A";
+        }
+        return timestamp.atZone(SYSTEM_ZONE).format(ISO_FORMATTER);
     }
 }
