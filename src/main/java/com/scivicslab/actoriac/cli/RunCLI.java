@@ -85,6 +85,7 @@ import picocli.CommandLine.Option;
 public class RunCLI implements Callable<Integer> {
 
     private static final Logger LOG = Logger.getLogger(RunCLI.class.getName());
+    private static final String ACTORIAC_VERSION = "2.12.0";
 
     @Option(
         names = {"-d", "--dir"},
@@ -709,10 +710,20 @@ public class RunCLI implements Callable<Integer> {
         if (logStore != null) {
             logStoreActor = system.actorOf("logStore", logStore);
 
-            // Start log session
+            // Start log session with execution context
             String overlayName = overlayDir != null ? overlayDir.getName() : null;
             String inventoryName = inventoryFile != null ? inventoryFile.getName() : null;
-            sessionId = logStore.startSession(workflowName, overlayName, inventoryName, 1);
+
+            // Collect execution context for reproducibility
+            String cwd = System.getProperty("user.dir");
+            String gitCommit = getGitCommit(workflowDir);
+            String gitBranch = getGitBranch(workflowDir);
+            String commandLine = buildCommandLine();
+            String actorIacVersion = ACTORIAC_VERSION;
+            String actorIacCommit = getActorIacCommit();
+
+            sessionId = logStore.startSession(workflowName, overlayName, inventoryName, 1,
+                    cwd, gitCommit, gitBranch, commandLine, actorIacVersion, actorIacCommit);
             logStore.log(sessionId, "cli", LogLevel.INFO, "Starting workflow: " + workflowName);
         }
 
@@ -1159,4 +1170,112 @@ public class RunCLI implements Callable<Integer> {
      * Record for displaying workflow information.
      */
     private static record WorkflowDisplay(String baseName, String relativePath, String workflowName) {}
+
+    /**
+     * Gets the git commit hash of the specified directory.
+     *
+     * @param dir directory to check (uses current directory if null)
+     * @return short git commit hash, or null if not a git repository
+     */
+    private String getGitCommit(File dir) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "--short", "HEAD");
+            if (dir != null) {
+                pb.directory(dir);
+            }
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String output = new String(p.getInputStream().readAllBytes()).trim();
+            int exitCode = p.waitFor();
+            return exitCode == 0 && !output.isEmpty() ? output : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Gets the git branch name of the specified directory.
+     *
+     * @param dir directory to check (uses current directory if null)
+     * @return git branch name, or null if not a git repository
+     */
+    private String getGitBranch(File dir) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD");
+            if (dir != null) {
+                pb.directory(dir);
+            }
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            String output = new String(p.getInputStream().readAllBytes()).trim();
+            int exitCode = p.waitFor();
+            return exitCode == 0 && !output.isEmpty() ? output : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Builds a command line string from the current options.
+     *
+     * @return command line string
+     */
+    private String buildCommandLine() {
+        StringBuilder sb = new StringBuilder("run");
+        if (workflowDir != null) {
+            sb.append(" -d ").append(workflowDir.getPath());
+        }
+        if (workflowName != null) {
+            sb.append(" -w ").append(workflowName);
+        }
+        if (inventoryFile != null) {
+            sb.append(" -i ").append(inventoryFile.getPath());
+        }
+        if (groupName != null && !groupName.equals("all")) {
+            sb.append(" -g ").append(groupName);
+        }
+        if (overlayDir != null) {
+            sb.append(" -o ").append(overlayDir.getPath());
+        }
+        if (threads != 4) {
+            sb.append(" -t ").append(threads);
+        }
+        if (verbose) {
+            sb.append(" -v");
+        }
+        if (quiet) {
+            sb.append(" -q");
+        }
+        if (limitHosts != null) {
+            sb.append(" --limit ").append(limitHosts);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Gets the git commit hash of the actor-IaC installation.
+     * This looks for a .git directory relative to where actor-IaC is running.
+     *
+     * @return short git commit hash, or null if not available
+     */
+    private String getActorIacCommit() {
+        // Try to get commit from the actor-IaC source directory if running in dev mode
+        try {
+            String classPath = RunCLI.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+            File classFile = new File(classPath);
+            // If running from target/classes, go up to project root
+            if (classFile.getPath().contains("target")) {
+                File projectRoot = classFile.getParentFile();
+                while (projectRoot != null && !new File(projectRoot, ".git").exists()) {
+                    projectRoot = projectRoot.getParentFile();
+                }
+                if (projectRoot != null) {
+                    return getGitCommit(projectRoot);
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
+    }
 }

@@ -41,11 +41,37 @@ public class SessionSummary {
     private final int totalLogEntries;
     private final int errorCount;
 
+    // Execution context for reproducibility
+    private final String cwd;
+    private final String gitCommit;
+    private final String gitBranch;
+    private final String commandLine;
+    private final String actorIacVersion;
+    private final String actorIacCommit;
+
+    /**
+     * Legacy constructor for backward compatibility.
+     */
     public SessionSummary(long sessionId, String workflowName, String overlayName,
                           String inventoryName, LocalDateTime startedAt,
                           LocalDateTime endedAt, int nodeCount, SessionStatus status,
                           int successCount, int failedCount, List<String> failedNodes,
                           int totalLogEntries, int errorCount) {
+        this(sessionId, workflowName, overlayName, inventoryName, startedAt, endedAt,
+             nodeCount, status, successCount, failedCount, failedNodes, totalLogEntries, errorCount,
+             null, null, null, null, null, null);
+    }
+
+    /**
+     * Full constructor with execution context.
+     */
+    public SessionSummary(long sessionId, String workflowName, String overlayName,
+                          String inventoryName, LocalDateTime startedAt,
+                          LocalDateTime endedAt, int nodeCount, SessionStatus status,
+                          int successCount, int failedCount, List<String> failedNodes,
+                          int totalLogEntries, int errorCount,
+                          String cwd, String gitCommit, String gitBranch,
+                          String commandLine, String actorIacVersion, String actorIacCommit) {
         this.sessionId = sessionId;
         this.workflowName = workflowName;
         this.overlayName = overlayName;
@@ -59,6 +85,12 @@ public class SessionSummary {
         this.failedNodes = failedNodes;
         this.totalLogEntries = totalLogEntries;
         this.errorCount = errorCount;
+        this.cwd = cwd;
+        this.gitCommit = gitCommit;
+        this.gitBranch = gitBranch;
+        this.commandLine = commandLine;
+        this.actorIacVersion = actorIacVersion;
+        this.actorIacCommit = actorIacCommit;
     }
 
     public long getSessionId() { return sessionId; }
@@ -74,6 +106,14 @@ public class SessionSummary {
     public List<String> getFailedNodes() { return failedNodes; }
     public int getTotalLogEntries() { return totalLogEntries; }
     public int getErrorCount() { return errorCount; }
+
+    // Execution context getters
+    public String getCwd() { return cwd; }
+    public String getGitCommit() { return gitCommit; }
+    public String getGitBranch() { return gitBranch; }
+    public String getCommandLine() { return commandLine; }
+    public String getActorIacVersion() { return actorIacVersion; }
+    public String getActorIacCommit() { return actorIacCommit; }
 
     public Duration getDuration() {
         if (startedAt == null || endedAt == null) {
