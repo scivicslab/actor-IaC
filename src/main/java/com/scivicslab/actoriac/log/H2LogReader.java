@@ -138,6 +138,14 @@ public class H2LogReader implements AutoCloseable {
             int nodeCount = 0;
             SessionStatus status = SessionStatus.RUNNING;
 
+            // Execution context
+            String cwd = null;
+            String gitCommit = null;
+            String gitBranch = null;
+            String commandLine = null;
+            String actorIacVersion = null;
+            String actorIacCommit = null;
+
             try (PreparedStatement ps = connection.prepareStatement(
                     "SELECT * FROM sessions WHERE id = ?")) {
                 ps.setLong(1, sessionId);
@@ -155,6 +163,14 @@ public class H2LogReader implements AutoCloseable {
                         if (statusStr != null) {
                             status = SessionStatus.valueOf(statusStr);
                         }
+
+                        // Read execution context (may be null for older sessions)
+                        cwd = getStringOrNull(rs, "cwd");
+                        gitCommit = getStringOrNull(rs, "git_commit");
+                        gitBranch = getStringOrNull(rs, "git_branch");
+                        commandLine = getStringOrNull(rs, "command_line");
+                        actorIacVersion = getStringOrNull(rs, "actoriac_version");
+                        actorIacCommit = getStringOrNull(rs, "actoriac_commit");
                     } else {
                         return null;
                     }
@@ -198,10 +214,23 @@ public class H2LogReader implements AutoCloseable {
 
             return new SessionSummary(sessionId, workflowName, overlayName, inventoryName,
                     startedAt, endedAt, nodeCount, status, successCount, failedCount,
-                    failedNodes, totalLogEntries, errorCount);
+                    failedNodes, totalLogEntries, errorCount,
+                    cwd, gitCommit, gitBranch, commandLine, actorIacVersion, actorIacCommit);
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get session summary", e);
+        }
+    }
+
+    /**
+     * Safely gets a string column value, returning null if the column doesn't exist.
+     */
+    private String getStringOrNull(ResultSet rs, String columnName) {
+        try {
+            return rs.getString(columnName);
+        } catch (SQLException e) {
+            // Column may not exist in older databases
+            return null;
         }
     }
 

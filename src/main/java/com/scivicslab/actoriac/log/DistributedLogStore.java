@@ -50,6 +50,28 @@ public interface DistributedLogStore extends AutoCloseable {
     long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount);
 
     /**
+     * Starts a new workflow execution session with full execution context.
+     *
+     * @param workflowName name of the workflow being executed
+     * @param overlayName name of the overlay being used (may be null)
+     * @param inventoryName name of the inventory file being used (may be null)
+     * @param nodeCount number of nodes participating in this session
+     * @param cwd current working directory
+     * @param gitCommit git commit hash of the workflow directory (may be null)
+     * @param gitBranch git branch name (may be null)
+     * @param commandLine the command line used to invoke actor-IaC
+     * @param actorIacVersion actor-IaC version
+     * @param actorIacCommit actor-IaC git commit hash (may be null)
+     * @return session ID for subsequent log entries
+     */
+    default long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount,
+                              String cwd, String gitCommit, String gitBranch,
+                              String commandLine, String actorIacVersion, String actorIacCommit) {
+        // Default implementation for backward compatibility
+        return startSession(workflowName, overlayName, inventoryName, nodeCount);
+    }
+
+    /**
      * Records a log entry.
      *
      * @param sessionId session ID from startSession()

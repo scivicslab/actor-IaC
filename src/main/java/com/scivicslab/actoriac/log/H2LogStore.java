@@ -225,7 +225,13 @@ public class H2LogStore implements DistributedLogStore {
                     overlay_name VARCHAR(255),
                     inventory_name VARCHAR(255),
                     node_count INT,
-                    status VARCHAR(20) DEFAULT 'RUNNING'
+                    status VARCHAR(20) DEFAULT 'RUNNING',
+                    cwd VARCHAR(1000),
+                    git_commit VARCHAR(50),
+                    git_branch VARCHAR(255),
+                    command_line VARCHAR(2000),
+                    actoriac_version VARCHAR(50),
+                    actoriac_commit VARCHAR(50)
                 )
                 """);
 
@@ -233,6 +239,12 @@ public class H2LogStore implements DistributedLogStore {
             try {
                 stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS overlay_name VARCHAR(255)");
                 stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS inventory_name VARCHAR(255)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cwd VARCHAR(1000)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS git_commit VARCHAR(50)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS git_branch VARCHAR(255)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS command_line VARCHAR(2000)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS actoriac_version VARCHAR(50)");
+                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS actoriac_commit VARCHAR(50)");
             } catch (SQLException e) {
                 // Ignore if columns already exist
             }
@@ -328,13 +340,29 @@ public class H2LogStore implements DistributedLogStore {
 
     @Override
     public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount) {
+        return startSession(workflowName, overlayName, inventoryName, nodeCount,
+                            null, null, null, null, null, null);
+    }
+
+    @Override
+    public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount,
+                             String cwd, String gitCommit, String gitBranch,
+                             String commandLine, String actorIacVersion, String actorIacCommit) {
         try (PreparedStatement ps = connection.prepareStatement(
-                "INSERT INTO sessions (workflow_name, overlay_name, inventory_name, node_count) VALUES (?, ?, ?, ?)",
+                "INSERT INTO sessions (workflow_name, overlay_name, inventory_name, node_count, " +
+                "cwd, git_commit, git_branch, command_line, actoriac_version, actoriac_commit) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, workflowName);
             ps.setString(2, overlayName);
             ps.setString(3, inventoryName);
             ps.setInt(4, nodeCount);
+            ps.setString(5, cwd);
+            ps.setString(6, gitCommit);
+            ps.setString(7, gitBranch);
+            ps.setString(8, commandLine);
+            ps.setString(9, actorIacVersion);
+            ps.setString(10, actorIacCommit);
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -475,6 +503,14 @@ public class H2LogStore implements DistributedLogStore {
             int nodeCount = 0;
             SessionStatus status = SessionStatus.RUNNING;
 
+            // Execution context
+            String cwd = null;
+            String gitCommit = null;
+            String gitBranch = null;
+            String commandLine = null;
+            String actorIacVersion = null;
+            String actorIacCommit = null;
+
             try (PreparedStatement ps = connection.prepareStatement(
                     "SELECT * FROM sessions WHERE id = ?")) {
                 ps.setLong(1, sessionId);
@@ -492,6 +528,14 @@ public class H2LogStore implements DistributedLogStore {
                         if (statusStr != null) {
                             status = SessionStatus.valueOf(statusStr);
                         }
+
+                        // Read execution context (may be null for older sessions)
+                        cwd = getStringOrNull(rs, "cwd");
+                        gitCommit = getStringOrNull(rs, "git_commit");
+                        gitBranch = getStringOrNull(rs, "git_branch");
+                        commandLine = getStringOrNull(rs, "command_line");
+                        actorIacVersion = getStringOrNull(rs, "actoriac_version");
+                        actorIacCommit = getStringOrNull(rs, "actoriac_commit");
                     }
                 }
             }
@@ -535,10 +579,23 @@ public class H2LogStore implements DistributedLogStore {
 
             return new SessionSummary(sessionId, workflowName, overlayName, inventoryName,
                     startedAt, endedAt, nodeCount, status, successCount, failedCount,
-                    failedNodes, totalLogEntries, errorCount);
+                    failedNodes, totalLogEntries, errorCount,
+                    cwd, gitCommit, gitBranch, commandLine, actorIacVersion, actorIacCommit);
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get session summary", e);
+        }
+    }
+
+    /**
+     * Safely gets a string column value, returning null if the column doesn't exist.
+     */
+    private String getStringOrNull(ResultSet rs, String columnName) {
+        try {
+            return rs.getString(columnName);
+        } catch (SQLException e) {
+            // Column may not exist in older databases
+            return null;
         }
     }
 

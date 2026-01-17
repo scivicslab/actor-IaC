@@ -283,6 +283,29 @@ public class LogsCLI implements Callable<Integer> {
                 System.out.printf("      Inventory: %s%n", summary.getInventoryName());
             }
             System.out.printf("      Started:   %s%n", formatTimestamp(summary.getStartedAt()));
+            if (summary.getEndedAt() != null) {
+                System.out.printf("      Ended:     %s%n", formatTimestamp(summary.getEndedAt()));
+            }
+            if (summary.getCwd() != null) {
+                System.out.printf("      CWD:       %s%n", summary.getCwd());
+            }
+            if (summary.getGitCommit() != null) {
+                String gitInfo = summary.getGitCommit();
+                if (summary.getGitBranch() != null) {
+                    gitInfo += " (" + summary.getGitBranch() + ")";
+                }
+                System.out.printf("      Git:       %s%n", gitInfo);
+            }
+            if (summary.getCommandLine() != null) {
+                System.out.printf("      Command:   %s%n", summary.getCommandLine());
+            }
+            if (summary.getActorIacVersion() != null) {
+                String versionInfo = summary.getActorIacVersion();
+                if (summary.getActorIacCommit() != null) {
+                    versionInfo += " (commit: " + summary.getActorIacCommit() + ")";
+                }
+                System.out.printf("      actor-IaC: %s%n", versionInfo);
+            }
             System.out.println("-".repeat(80));
         }
         return 0;
