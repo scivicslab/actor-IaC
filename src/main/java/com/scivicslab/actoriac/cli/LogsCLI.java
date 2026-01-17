@@ -157,10 +157,9 @@ public class LogsCLI implements Callable<Integer> {
 
     @Option(
         names = {"--limit"},
-        description = "Maximum number of entries to show",
-        defaultValue = "100"
+        description = "Maximum number of lines to show (default: unlimited)"
     )
-    private int limit;
+    private int limit = 0;
 
     @Option(
         names = {"--list-nodes"},
@@ -323,7 +322,7 @@ public class LogsCLI implements Callable<Integer> {
         SessionSummary summary = reader.getSummary(targetSession);
         System.out.println("Nodes in session #" + targetSession + " (" + summary.getWorkflowName() + "):");
         System.out.println("=".repeat(70));
-        System.out.printf("%-30s %-10s %-10s%n", "NODE_ID", "STATUS", "LOG_COUNT");
+        System.out.printf("%-30s %-10s %-10s%n", "NODE_ID", "STATUS", "LOG_LINES");
         System.out.println("-".repeat(70));
         for (NodeInfo node : nodes) {
             System.out.printf("%-30s %-10s %-10d%n",
@@ -361,8 +360,8 @@ public class LogsCLI implements Callable<Integer> {
 
         int count = 0;
         for (LogEntry entry : logs) {
-            if (count >= limit) {
-                System.out.println("... (truncated, use --limit to show more)");
+            if (limit > 0 && count >= limit) {
+                System.out.println("... (truncated at " + limit + " lines, use --limit to change)");
                 break;
             }
 
@@ -380,7 +379,7 @@ public class LogsCLI implements Callable<Integer> {
         }
 
         System.out.println("=".repeat(80));
-        System.out.println("Total: " + logs.size() + " entries");
+        System.out.println("Total: " + logs.size() + " lines");
 
         return 0;
     }

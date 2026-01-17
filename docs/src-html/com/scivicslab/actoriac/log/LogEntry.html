@@ -31,72 +31,85 @@
 <span class="source-line-no">018</span><span id="line-18">package com.scivicslab.actoriac.log;</span>
 <span class="source-line-no">019</span><span id="line-19"></span>
 <span class="source-line-no">020</span><span id="line-20">import java.time.LocalDateTime;</span>
-<span class="source-line-no">021</span><span id="line-21"></span>
-<span class="source-line-no">022</span><span id="line-22">/**</span>
-<span class="source-line-no">023</span><span id="line-23"> * Represents a single log entry.</span>
-<span class="source-line-no">024</span><span id="line-24"> *</span>
-<span class="source-line-no">025</span><span id="line-25"> * @author devteam@scivics-lab.com</span>
-<span class="source-line-no">026</span><span id="line-26"> */</span>
-<span class="source-line-no">027</span><span id="line-27">public class LogEntry {</span>
-<span class="source-line-no">028</span><span id="line-28">    private final long id;</span>
-<span class="source-line-no">029</span><span id="line-29">    private final long sessionId;</span>
-<span class="source-line-no">030</span><span id="line-30">    private final LocalDateTime timestamp;</span>
-<span class="source-line-no">031</span><span id="line-31">    private final String nodeId;</span>
-<span class="source-line-no">032</span><span id="line-32">    private final String label;</span>
-<span class="source-line-no">033</span><span id="line-33">    private final String actionName;</span>
-<span class="source-line-no">034</span><span id="line-34">    private final LogLevel level;</span>
-<span class="source-line-no">035</span><span id="line-35">    private final String message;</span>
-<span class="source-line-no">036</span><span id="line-36">    private final Integer exitCode;</span>
-<span class="source-line-no">037</span><span id="line-37">    private final Long durationMs;</span>
-<span class="source-line-no">038</span><span id="line-38"></span>
-<span class="source-line-no">039</span><span id="line-39">    public LogEntry(long id, long sessionId, LocalDateTime timestamp, String nodeId,</span>
-<span class="source-line-no">040</span><span id="line-40">                    String label, String actionName, LogLevel level, String message,</span>
-<span class="source-line-no">041</span><span id="line-41">                    Integer exitCode, Long durationMs) {</span>
-<span class="source-line-no">042</span><span id="line-42">        this.id = id;</span>
-<span class="source-line-no">043</span><span id="line-43">        this.sessionId = sessionId;</span>
-<span class="source-line-no">044</span><span id="line-44">        this.timestamp = timestamp;</span>
-<span class="source-line-no">045</span><span id="line-45">        this.nodeId = nodeId;</span>
-<span class="source-line-no">046</span><span id="line-46">        this.label = label;</span>
-<span class="source-line-no">047</span><span id="line-47">        this.actionName = actionName;</span>
-<span class="source-line-no">048</span><span id="line-48">        this.level = level;</span>
-<span class="source-line-no">049</span><span id="line-49">        this.message = message;</span>
-<span class="source-line-no">050</span><span id="line-50">        this.exitCode = exitCode;</span>
-<span class="source-line-no">051</span><span id="line-51">        this.durationMs = durationMs;</span>
-<span class="source-line-no">052</span><span id="line-52">    }</span>
-<span class="source-line-no">053</span><span id="line-53"></span>
-<span class="source-line-no">054</span><span id="line-54">    public long getId() { return id; }</span>
-<span class="source-line-no">055</span><span id="line-55">    public long getSessionId() { return sessionId; }</span>
-<span class="source-line-no">056</span><span id="line-56">    public LocalDateTime getTimestamp() { return timestamp; }</span>
-<span class="source-line-no">057</span><span id="line-57">    public String getNodeId() { return nodeId; }</span>
-<span class="source-line-no">058</span><span id="line-58">    public String getLabel() { return label; }</span>
-<span class="source-line-no">059</span><span id="line-59">    public String getActionName() { return actionName; }</span>
-<span class="source-line-no">060</span><span id="line-60">    public LogLevel getLevel() { return level; }</span>
-<span class="source-line-no">061</span><span id="line-61">    public String getMessage() { return message; }</span>
-<span class="source-line-no">062</span><span id="line-62">    public Integer getExitCode() { return exitCode; }</span>
-<span class="source-line-no">063</span><span id="line-63">    public Long getDurationMs() { return durationMs; }</span>
-<span class="source-line-no">064</span><span id="line-64"></span>
-<span class="source-line-no">065</span><span id="line-65">    @Override</span>
-<span class="source-line-no">066</span><span id="line-66">    public String toString() {</span>
-<span class="source-line-no">067</span><span id="line-67">        StringBuilder sb = new StringBuilder();</span>
-<span class="source-line-no">068</span><span id="line-68">        sb.append("[").append(timestamp.toString().replace("T", " ")).append("] ");</span>
-<span class="source-line-no">069</span><span id="line-69">        sb.append(String.format("%-5s ", level));</span>
-<span class="source-line-no">070</span><span id="line-70">        if (label != null) {</span>
-<span class="source-line-no">071</span><span id="line-71">            sb.append("[").append(label);</span>
-<span class="source-line-no">072</span><span id="line-72">            if (actionName != null) {</span>
-<span class="source-line-no">073</span><span id="line-73">                sb.append(" -&gt; ").append(actionName);</span>
-<span class="source-line-no">074</span><span id="line-74">            }</span>
-<span class="source-line-no">075</span><span id="line-75">            sb.append("] ");</span>
-<span class="source-line-no">076</span><span id="line-76">        }</span>
-<span class="source-line-no">077</span><span id="line-77">        sb.append(message);</span>
-<span class="source-line-no">078</span><span id="line-78">        if (exitCode != null &amp;&amp; exitCode != 0) {</span>
-<span class="source-line-no">079</span><span id="line-79">            sb.append(" (exit=").append(exitCode).append(")");</span>
-<span class="source-line-no">080</span><span id="line-80">        }</span>
-<span class="source-line-no">081</span><span id="line-81">        if (durationMs != null) {</span>
-<span class="source-line-no">082</span><span id="line-82">            sb.append(" [").append(durationMs).append("ms]");</span>
-<span class="source-line-no">083</span><span id="line-83">        }</span>
-<span class="source-line-no">084</span><span id="line-84">        return sb.toString();</span>
-<span class="source-line-no">085</span><span id="line-85">    }</span>
-<span class="source-line-no">086</span><span id="line-86">}</span>
+<span class="source-line-no">021</span><span id="line-21">import java.time.ZoneId;</span>
+<span class="source-line-no">022</span><span id="line-22">import java.time.format.DateTimeFormatter;</span>
+<span class="source-line-no">023</span><span id="line-23"></span>
+<span class="source-line-no">024</span><span id="line-24">/**</span>
+<span class="source-line-no">025</span><span id="line-25"> * Represents a single log entry.</span>
+<span class="source-line-no">026</span><span id="line-26"> *</span>
+<span class="source-line-no">027</span><span id="line-27"> * @author devteam@scivics-lab.com</span>
+<span class="source-line-no">028</span><span id="line-28"> */</span>
+<span class="source-line-no">029</span><span id="line-29">public class LogEntry {</span>
+<span class="source-line-no">030</span><span id="line-30">    private static final DateTimeFormatter ISO_FORMATTER =</span>
+<span class="source-line-no">031</span><span id="line-31">            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");</span>
+<span class="source-line-no">032</span><span id="line-32">    private static final ZoneId SYSTEM_ZONE = ZoneId.systemDefault();</span>
+<span class="source-line-no">033</span><span id="line-33"></span>
+<span class="source-line-no">034</span><span id="line-34">    private final long id;</span>
+<span class="source-line-no">035</span><span id="line-35">    private final long sessionId;</span>
+<span class="source-line-no">036</span><span id="line-36">    private final LocalDateTime timestamp;</span>
+<span class="source-line-no">037</span><span id="line-37">    private final String nodeId;</span>
+<span class="source-line-no">038</span><span id="line-38">    private final String label;</span>
+<span class="source-line-no">039</span><span id="line-39">    private final String actionName;</span>
+<span class="source-line-no">040</span><span id="line-40">    private final LogLevel level;</span>
+<span class="source-line-no">041</span><span id="line-41">    private final String message;</span>
+<span class="source-line-no">042</span><span id="line-42">    private final Integer exitCode;</span>
+<span class="source-line-no">043</span><span id="line-43">    private final Long durationMs;</span>
+<span class="source-line-no">044</span><span id="line-44"></span>
+<span class="source-line-no">045</span><span id="line-45">    public LogEntry(long id, long sessionId, LocalDateTime timestamp, String nodeId,</span>
+<span class="source-line-no">046</span><span id="line-46">                    String label, String actionName, LogLevel level, String message,</span>
+<span class="source-line-no">047</span><span id="line-47">                    Integer exitCode, Long durationMs) {</span>
+<span class="source-line-no">048</span><span id="line-48">        this.id = id;</span>
+<span class="source-line-no">049</span><span id="line-49">        this.sessionId = sessionId;</span>
+<span class="source-line-no">050</span><span id="line-50">        this.timestamp = timestamp;</span>
+<span class="source-line-no">051</span><span id="line-51">        this.nodeId = nodeId;</span>
+<span class="source-line-no">052</span><span id="line-52">        this.label = label;</span>
+<span class="source-line-no">053</span><span id="line-53">        this.actionName = actionName;</span>
+<span class="source-line-no">054</span><span id="line-54">        this.level = level;</span>
+<span class="source-line-no">055</span><span id="line-55">        this.message = message;</span>
+<span class="source-line-no">056</span><span id="line-56">        this.exitCode = exitCode;</span>
+<span class="source-line-no">057</span><span id="line-57">        this.durationMs = durationMs;</span>
+<span class="source-line-no">058</span><span id="line-58">    }</span>
+<span class="source-line-no">059</span><span id="line-59"></span>
+<span class="source-line-no">060</span><span id="line-60">    public long getId() { return id; }</span>
+<span class="source-line-no">061</span><span id="line-61">    public long getSessionId() { return sessionId; }</span>
+<span class="source-line-no">062</span><span id="line-62">    public LocalDateTime getTimestamp() { return timestamp; }</span>
+<span class="source-line-no">063</span><span id="line-63">    public String getNodeId() { return nodeId; }</span>
+<span class="source-line-no">064</span><span id="line-64">    public String getLabel() { return label; }</span>
+<span class="source-line-no">065</span><span id="line-65">    public String getActionName() { return actionName; }</span>
+<span class="source-line-no">066</span><span id="line-66">    public LogLevel getLevel() { return level; }</span>
+<span class="source-line-no">067</span><span id="line-67">    public String getMessage() { return message; }</span>
+<span class="source-line-no">068</span><span id="line-68">    public Integer getExitCode() { return exitCode; }</span>
+<span class="source-line-no">069</span><span id="line-69">    public Long getDurationMs() { return durationMs; }</span>
+<span class="source-line-no">070</span><span id="line-70"></span>
+<span class="source-line-no">071</span><span id="line-71">    @Override</span>
+<span class="source-line-no">072</span><span id="line-72">    public String toString() {</span>
+<span class="source-line-no">073</span><span id="line-73">        StringBuilder sb = new StringBuilder();</span>
+<span class="source-line-no">074</span><span id="line-74">        sb.append("[").append(formatTimestamp(timestamp)).append("] ");</span>
+<span class="source-line-no">075</span><span id="line-75">        sb.append(String.format("%-5s ", level));</span>
+<span class="source-line-no">076</span><span id="line-76">        if (label != null) {</span>
+<span class="source-line-no">077</span><span id="line-77">            sb.append("[").append(label);</span>
+<span class="source-line-no">078</span><span id="line-78">            if (actionName != null) {</span>
+<span class="source-line-no">079</span><span id="line-79">                sb.append(" -&gt; ").append(actionName);</span>
+<span class="source-line-no">080</span><span id="line-80">            }</span>
+<span class="source-line-no">081</span><span id="line-81">            sb.append("] ");</span>
+<span class="source-line-no">082</span><span id="line-82">        }</span>
+<span class="source-line-no">083</span><span id="line-83">        sb.append(message);</span>
+<span class="source-line-no">084</span><span id="line-84">        if (exitCode != null &amp;&amp; exitCode != 0) {</span>
+<span class="source-line-no">085</span><span id="line-85">            sb.append(" (exit=").append(exitCode).append(")");</span>
+<span class="source-line-no">086</span><span id="line-86">        }</span>
+<span class="source-line-no">087</span><span id="line-87">        if (durationMs != null) {</span>
+<span class="source-line-no">088</span><span id="line-88">            sb.append(" [").append(durationMs).append("ms]");</span>
+<span class="source-line-no">089</span><span id="line-89">        }</span>
+<span class="source-line-no">090</span><span id="line-90">        return sb.toString();</span>
+<span class="source-line-no">091</span><span id="line-91">    }</span>
+<span class="source-line-no">092</span><span id="line-92"></span>
+<span class="source-line-no">093</span><span id="line-93">    private String formatTimestamp(LocalDateTime ts) {</span>
+<span class="source-line-no">094</span><span id="line-94">        if (ts == null) {</span>
+<span class="source-line-no">095</span><span id="line-95">            return "N/A";</span>
+<span class="source-line-no">096</span><span id="line-96">        }</span>
+<span class="source-line-no">097</span><span id="line-97">        return ts.atZone(SYSTEM_ZONE).format(ISO_FORMATTER);</span>
+<span class="source-line-no">098</span><span id="line-98">    }</span>
+<span class="source-line-no">099</span><span id="line-99">}</span>
 
 
 
