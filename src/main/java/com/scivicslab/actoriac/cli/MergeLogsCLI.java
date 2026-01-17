@@ -26,6 +26,8 @@ import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
+import com.scivicslab.actoriac.log.H2LogStore;
+
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -285,61 +287,15 @@ public class MergeLogsCLI implements Callable<Integer> {
      * Initializes the target database schema.
      */
     private void initializeSchema(Connection conn) throws SQLException {
+        H2LogStore.initSchema(conn);
+
+        // Add source_db column for merge tracking (specific to merge-logs)
         try (Statement stmt = conn.createStatement()) {
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS sessions (
-                    id IDENTITY PRIMARY KEY,
-                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ended_at TIMESTAMP,
-                    workflow_name VARCHAR(255),
-                    overlay_name VARCHAR(255),
-                    inventory_name VARCHAR(255),
-                    node_count INT,
-                    status VARCHAR(20) DEFAULT 'RUNNING',
-                    source_db VARCHAR(255)
-                )
-                """);
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id IDENTITY PRIMARY KEY,
-                    session_id BIGINT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    node_id VARCHAR(255) NOT NULL,
-                    label CLOB,
-                    action_name CLOB,
-                    level VARCHAR(10) NOT NULL,
-                    message CLOB,
-                    exit_code INT,
-                    duration_ms BIGINT,
-                    FOREIGN KEY (session_id) REFERENCES sessions(id)
-                )
-                """);
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS node_results (
-                    id IDENTITY PRIMARY KEY,
-                    session_id BIGINT,
-                    node_id VARCHAR(255) NOT NULL,
-                    status VARCHAR(20) NOT NULL,
-                    reason VARCHAR(1000),
-                    FOREIGN KEY (session_id) REFERENCES sessions(id)
-                )
-                """);
-
-            // Add source_db column if it doesn't exist (migration)
-            try {
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS source_db VARCHAR(255)");
-            } catch (SQLException e) {
-                // Column might already exist
-            }
-
-            // Create indexes
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_session ON logs(session_id)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_workflow ON sessions(workflow_name)");
+            stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS source_db VARCHAR(255)");
+        } catch (SQLException e) {
+            // Column might already exist
         }
+
         conn.commit();
     }
 

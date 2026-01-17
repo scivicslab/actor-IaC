@@ -204,9 +204,11 @@ public class LogsCLI implements Callable<Integer> {
 
         } catch (SQLException e) {
             System.err.println("Database error: " + e.getMessage());
+            e.printStackTrace();
             return 1;
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
+            e.printStackTrace();
             return 1;
         }
     }

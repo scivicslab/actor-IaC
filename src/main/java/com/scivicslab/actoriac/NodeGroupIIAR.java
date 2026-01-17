@@ -416,14 +416,25 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             // Apply action to each matching actor (continue on failure, report all errors)
             int successCount = 0;
             List<String> failures = new ArrayList<>();
+            DistributedLogStore logStore = this.object.getLogStore();
+            long sessionId = this.object.getSessionId();
+
             for (IIActorRef<?> actor : matchedActors) {
                 ActionResult result = actor.callByActionName(method, args);
                 if (!result.isSuccess()) {
                     failures.add(String.format("%s: %s", actor.getName(), result.getResult()));
                     logger.warning(String.format("Failed on %s: %s", actor.getName(), result.getResult()));
+                    // Record node failure in log store
+                    if (logStore != null && sessionId >= 0) {
+                        logStore.markNodeFailed(sessionId, actor.getName(), result.getResult());
+                    }
                 } else {
                     successCount++;
                     logger.fine(String.format("Applied to %s: %s", actor.getName(), result.getResult()));
+                    // Record node success in log store
+                    if (logStore != null && sessionId >= 0) {
+                        logStore.markNodeSuccess(sessionId, actor.getName());
+                    }
                 }
             }
 

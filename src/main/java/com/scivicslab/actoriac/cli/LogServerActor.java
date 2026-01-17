@@ -41,6 +41,8 @@ import com.sun.net.httpserver.HttpServer;
 
 import org.h2.tools.Server;
 
+import com.scivicslab.actoriac.log.H2LogStore;
+
 /**
  * Actor that wraps the H2 TCP server and HTTP info server.
  *
@@ -283,53 +285,7 @@ public class LogServerActor {
         try (Connection conn = DriverManager.getConnection(dbUrl);
              Statement stmt = conn.createStatement()) {
 
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS sessions (
-                    id IDENTITY PRIMARY KEY,
-                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    ended_at TIMESTAMP,
-                    workflow_name VARCHAR(255),
-                    overlay_name VARCHAR(255),
-                    inventory_name VARCHAR(255),
-                    node_count INT,
-                    status VARCHAR(20) DEFAULT 'RUNNING'
-                )
-                """);
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id IDENTITY PRIMARY KEY,
-                    session_id BIGINT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    node_id VARCHAR(255) NOT NULL,
-                    label CLOB,
-                    action_name CLOB,
-                    level VARCHAR(10) NOT NULL,
-                    message CLOB,
-                    exit_code INT,
-                    duration_ms BIGINT,
-                    FOREIGN KEY (session_id) REFERENCES sessions(id)
-                )
-                """);
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS node_results (
-                    id IDENTITY PRIMARY KEY,
-                    session_id BIGINT,
-                    node_id VARCHAR(255) NOT NULL,
-                    status VARCHAR(20) NOT NULL,
-                    reason VARCHAR(1000),
-                    FOREIGN KEY (session_id) REFERENCES sessions(id),
-                    UNIQUE (session_id, node_id)
-                )
-                """);
-
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_session ON logs(session_id)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_node ON logs(node_id)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_workflow ON sessions(workflow_name)");
-            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)");
+            H2LogStore.initSchema(conn);
 
             // Get initial session count
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sessions")) {

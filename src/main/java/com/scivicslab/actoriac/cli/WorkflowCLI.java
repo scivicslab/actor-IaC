@@ -49,6 +49,7 @@ import picocli.CommandLine.Option;
  *   <li>{@code describe} - Describe workflow structure</li>
  *   <li>{@code logs} - Query execution logs</li>
  *   <li>{@code log-server} - Start H2 log server</li>
+ *   <li>{@code db-clear} - Clear (delete) the log database</li>
  * </ul>
  *
  * <h2>Usage Examples</h2>
@@ -73,7 +74,8 @@ import picocli.CommandLine.Option;
         DescribeCLI.class,
         LogsCLI.class,
         LogServerCLI.class,
-        MergeLogsCLI.class
+        MergeLogsCLI.class,
+        DbClearCLI.class
     }
 )
 public class WorkflowCLI implements Callable<Integer> {
