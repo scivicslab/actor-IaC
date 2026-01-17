@@ -18,6 +18,8 @@
 package com.scivicslab.actoriac.log;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Represents a single log entry.
@@ -25,6 +27,10 @@ import java.time.LocalDateTime;
  * @author devteam@scivics-lab.com
  */
 public class LogEntry {
+    private static final DateTimeFormatter ISO_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+    private static final ZoneId SYSTEM_ZONE = ZoneId.systemDefault();
+
     private final long id;
     private final long sessionId;
     private final LocalDateTime timestamp;
@@ -65,7 +71,7 @@ public class LogEntry {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("[").append(timestamp.toString().replace("T", " ")).append("] ");
+        sb.append("[").append(formatTimestamp(timestamp)).append("] ");
         sb.append(String.format("%-5s ", level));
         if (label != null) {
             sb.append("[").append(label);
@@ -82,5 +88,12 @@ public class LogEntry {
             sb.append(" [").append(durationMs).append("ms]");
         }
         return sb.toString();
+    }
+
+    private String formatTimestamp(LocalDateTime ts) {
+        if (ts == null) {
+            return "N/A";
+        }
+        return ts.atZone(SYSTEM_ZONE).format(ISO_FORMATTER);
     }
 }

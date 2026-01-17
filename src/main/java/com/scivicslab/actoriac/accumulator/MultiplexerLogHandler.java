@@ -18,6 +18,7 @@
 package com.scivicslab.actoriac.accumulator;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -37,7 +38,7 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  * <h2>Log Format</h2>
  * <p>Log messages are formatted as:</p>
  * <pre>{@code
- * 2026-01-17 12:27:54 INFO Starting workflow: main-collect-sysinfo
+ * 2026-01-17T12:27:54+09:00 INFO Starting workflow: main-collect-sysinfo
  * }</pre>
  *
  * <h2>Message Format</h2>
@@ -46,7 +47,7 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  * {
  *   "source": "cli",
  *   "type": "log-INFO",
- *   "data": "2026-01-17 12:27:54 INFO Starting workflow: main-collect-sysinfo"
+ *   "data": "2026-01-17T12:27:54+09:00 INFO Starting workflow: main-collect-sysinfo"
  * }
  * }</pre>
  *
@@ -62,8 +63,9 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  */
 public class MultiplexerLogHandler extends Handler {
 
-    private static final DateTimeFormatter FORMATTER =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter ISO_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+    private static final ZoneId SYSTEM_ZONE = ZoneId.systemDefault();
 
     private final IIActorSystem system;
     private volatile boolean closed = false;
@@ -96,7 +98,7 @@ public class MultiplexerLogHandler extends Handler {
         }
 
         // Format the log message
-        String timestamp = LocalDateTime.now().format(FORMATTER);
+        String timestamp = LocalDateTime.now().atZone(SYSTEM_ZONE).format(ISO_FORMATTER);
         String level = record.getLevel().getName();
         String message = formatMessage(record);
         String formattedLog = String.format("%s %s %s", timestamp, level, message);

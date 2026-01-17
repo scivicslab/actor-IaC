@@ -24,6 +24,7 @@ import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.sql.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,9 +53,12 @@ import java.util.logging.Logger;
 public class H2LogStore implements DistributedLogStore {
 
     private static final Logger LOG = Logger.getLogger(H2LogStore.class.getName());
-    private static final DateTimeFormatter LOG_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+    private static final DateTimeFormatter ISO_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+    private static final ZoneId SYSTEM_ZONE = ZoneId.systemDefault();
 
     private final Connection connection;
+    private final H2LogReader reader;
     private final BlockingQueue<LogTask> writeQueue;
     private final Thread writerThread;
     private final AtomicBoolean running;
@@ -78,6 +82,7 @@ public class H2LogStore implements DistributedLogStore {
         // First process starts embedded server, others connect via TCP
         String url = "jdbc:h2:" + dbPath.toAbsolutePath().toString() + ";AUTO_SERVER=TRUE";
         this.connection = DriverManager.getConnection(url);
+        this.reader = new H2LogReader(connection);
         this.writeQueue = new LinkedBlockingQueue<>();
         this.running = new AtomicBoolean(true);
 
@@ -98,6 +103,7 @@ public class H2LogStore implements DistributedLogStore {
         // Use unique DB name per instance to avoid test interference
         String url = "jdbc:h2:mem:testdb_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
         this.connection = DriverManager.getConnection(url);
+        this.reader = new H2LogReader(connection);
         this.writeQueue = new LinkedBlockingQueue<>();
         this.running = new AtomicBoolean(true);
 
@@ -122,6 +128,7 @@ public class H2LogStore implements DistributedLogStore {
     public H2LogStore(String host, int port, String dbPath) throws SQLException {
         String url = "jdbc:h2:tcp://" + host + ":" + port + "/" + dbPath;
         this.connection = DriverManager.getConnection(url);
+        this.reader = new H2LogReader(connection);
         this.writeQueue = new LinkedBlockingQueue<>();
         this.running = new AtomicBoolean(true);
 
@@ -214,7 +221,20 @@ public class H2LogStore implements DistributedLogStore {
     }
 
     private void initSchema() throws SQLException {
-        try (Statement stmt = connection.createStatement()) {
+        initSchema(connection);
+    }
+
+    /**
+     * Initializes the log database schema on the given connection.
+     *
+     * <p>This method can be called from external components (e.g., log server)
+     * to ensure consistent schema across all database access points.</p>
+     *
+     * @param conn the database connection
+     * @throws SQLException if schema initialization fails
+     */
+    public static void initSchema(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
             // Sessions table
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -234,20 +254,6 @@ public class H2LogStore implements DistributedLogStore {
                     actoriac_commit VARCHAR(50)
                 )
                 """);
-
-            // Add columns if they don't exist (migration for existing databases)
-            try {
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS overlay_name VARCHAR(255)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS inventory_name VARCHAR(255)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cwd VARCHAR(1000)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS git_commit VARCHAR(50)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS git_branch VARCHAR(255)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS command_line VARCHAR(2000)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS actoriac_version VARCHAR(50)");
-                stmt.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS actoriac_commit VARCHAR(50)");
-            } catch (SQLException e) {
-                // Ignore if columns already exist
-            }
 
             // Logs table
             // label and action_name use CLOB to store long YAML snippets
@@ -406,7 +412,7 @@ public class H2LogStore implements DistributedLogStore {
         if (textLogWriter == null) {
             return;
         }
-        String timestamp = LocalDateTime.now().format(LOG_TIMESTAMP_FORMAT);
+        String timestamp = LocalDateTime.now().atZone(SYSTEM_ZONE).format(ISO_FORMATTER);
         String labelPart = label != null ? " [" + label + "]" : "";
         textLogWriter.printf("%s %s %s%s %s%n", timestamp, level, nodeId, labelPart, message);
     }
@@ -450,204 +456,27 @@ public class H2LogStore implements DistributedLogStore {
 
     @Override
     public List<LogEntry> getLogsByNode(long sessionId, String nodeId) {
-        List<LogEntry> entries = new ArrayList<>();
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT * FROM logs WHERE session_id = ? AND node_id = ? ORDER BY timestamp")) {
-            ps.setLong(1, sessionId);
-            ps.setString(2, nodeId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    entries.add(mapLogEntry(rs));
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to query logs", e);
-        }
-        return entries;
+        return reader.getLogsByNode(sessionId, nodeId);
     }
 
     @Override
     public List<LogEntry> getLogsByLevel(long sessionId, LogLevel minLevel) {
-        List<LogEntry> entries = new ArrayList<>();
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT * FROM logs WHERE session_id = ? AND level IN (?, ?, ?, ?) ORDER BY timestamp")) {
-            ps.setLong(1, sessionId);
-            int idx = 2;
-            for (LogLevel level : LogLevel.values()) {
-                if (level.isAtLeast(minLevel)) {
-                    ps.setString(idx++, level.name());
-                } else {
-                    ps.setString(idx++, "NONE"); // Placeholder
-                }
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    entries.add(mapLogEntry(rs));
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to query logs", e);
-        }
-        return entries;
+        return reader.getLogsByLevel(sessionId, minLevel);
     }
 
     @Override
     public SessionSummary getSummary(long sessionId) {
-        try {
-            // Get session info
-            String workflowName = null;
-            String overlayName = null;
-            String inventoryName = null;
-            LocalDateTime startedAt = null;
-            LocalDateTime endedAt = null;
-            int nodeCount = 0;
-            SessionStatus status = SessionStatus.RUNNING;
-
-            // Execution context
-            String cwd = null;
-            String gitCommit = null;
-            String gitBranch = null;
-            String commandLine = null;
-            String actorIacVersion = null;
-            String actorIacCommit = null;
-
-            try (PreparedStatement ps = connection.prepareStatement(
-                    "SELECT * FROM sessions WHERE id = ?")) {
-                ps.setLong(1, sessionId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        workflowName = rs.getString("workflow_name");
-                        overlayName = rs.getString("overlay_name");
-                        inventoryName = rs.getString("inventory_name");
-                        Timestamp ts = rs.getTimestamp("started_at");
-                        startedAt = ts != null ? ts.toLocalDateTime() : null;
-                        ts = rs.getTimestamp("ended_at");
-                        endedAt = ts != null ? ts.toLocalDateTime() : null;
-                        nodeCount = rs.getInt("node_count");
-                        String statusStr = rs.getString("status");
-                        if (statusStr != null) {
-                            status = SessionStatus.valueOf(statusStr);
-                        }
-
-                        // Read execution context (may be null for older sessions)
-                        cwd = getStringOrNull(rs, "cwd");
-                        gitCommit = getStringOrNull(rs, "git_commit");
-                        gitBranch = getStringOrNull(rs, "git_branch");
-                        commandLine = getStringOrNull(rs, "command_line");
-                        actorIacVersion = getStringOrNull(rs, "actoriac_version");
-                        actorIacCommit = getStringOrNull(rs, "actoriac_commit");
-                    }
-                }
-            }
-
-            // Get node results
-            int successCount = 0;
-            int failedCount = 0;
-            List<String> failedNodes = new ArrayList<>();
-
-            try (PreparedStatement ps = connection.prepareStatement(
-                    "SELECT node_id, status FROM node_results WHERE session_id = ?")) {
-                ps.setLong(1, sessionId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        String nodeStatus = rs.getString("status");
-                        if ("SUCCESS".equals(nodeStatus)) {
-                            successCount++;
-                        } else {
-                            failedCount++;
-                            failedNodes.add(rs.getString("node_id"));
-                        }
-                    }
-                }
-            }
-
-            // Get log counts
-            int totalLogEntries = 0;
-            int errorCount = 0;
-
-            try (PreparedStatement ps = connection.prepareStatement(
-                    "SELECT COUNT(*) as total, SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as errors " +
-                    "FROM logs WHERE session_id = ?")) {
-                ps.setLong(1, sessionId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        totalLogEntries = rs.getInt("total");
-                        errorCount = rs.getInt("errors");
-                    }
-                }
-            }
-
-            return new SessionSummary(sessionId, workflowName, overlayName, inventoryName,
-                    startedAt, endedAt, nodeCount, status, successCount, failedCount,
-                    failedNodes, totalLogEntries, errorCount,
-                    cwd, gitCommit, gitBranch, commandLine, actorIacVersion, actorIacCommit);
-
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to get session summary", e);
-        }
-    }
-
-    /**
-     * Safely gets a string column value, returning null if the column doesn't exist.
-     */
-    private String getStringOrNull(ResultSet rs, String columnName) {
-        try {
-            return rs.getString(columnName);
-        } catch (SQLException e) {
-            // Column may not exist in older databases
-            return null;
-        }
+        return reader.getSummary(sessionId);
     }
 
     @Override
     public long getLatestSessionId() {
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT MAX(id) FROM sessions")) {
-            if (rs.next()) {
-                return rs.getLong(1);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to get latest session", e);
-        }
-        return -1;
+        return reader.getLatestSessionId();
     }
 
     @Override
     public List<SessionSummary> listSessions(int limit) {
-        List<SessionSummary> sessions = new ArrayList<>();
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT id FROM sessions ORDER BY started_at DESC LIMIT ?")) {
-            ps.setInt(1, limit);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    sessions.add(getSummary(rs.getLong("id")));
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to list sessions", e);
-        }
-        return sessions;
-    }
-
-    private LogEntry mapLogEntry(ResultSet rs) throws SQLException {
-        Timestamp ts = rs.getTimestamp("timestamp");
-        Integer exitCode = rs.getObject("exit_code") != null ? rs.getInt("exit_code") : null;
-        Long durationMs = rs.getObject("duration_ms") != null ? rs.getLong("duration_ms") : null;
-        String levelStr = rs.getString("level");
-        LogLevel level = levelStr != null ? LogLevel.valueOf(levelStr) : LogLevel.INFO;
-
-        return new LogEntry(
-                rs.getLong("id"),
-                rs.getLong("session_id"),
-                ts != null ? ts.toLocalDateTime() : null,
-                rs.getString("node_id"),
-                rs.getString("label"),
-                rs.getString("action_name"),
-                level,
-                rs.getString("message"),
-                exitCode,
-                durationMs
-        );
+        return reader.listSessions(limit);
     }
 
     @Override

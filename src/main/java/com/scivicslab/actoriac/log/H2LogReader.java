@@ -35,6 +35,7 @@ import java.util.List;
 public class H2LogReader implements AutoCloseable {
 
     private final Connection connection;
+    private final boolean ownsConnection;
 
     /**
      * Opens the log database for reading.
@@ -43,13 +44,12 @@ public class H2LogReader implements AutoCloseable {
      * @throws SQLException if database connection fails
      */
     public H2LogReader(Path dbPath) throws SQLException {
-        // Connect to the database.
-        // If H2LogStore is running with AUTO_SERVER=TRUE, H2 will automatically
-        // detect this and connect to the server process via TCP.
-        // FILE_LOCK=FS allows multiple readers even without AUTO_SERVER.
-        String url = "jdbc:h2:" + dbPath.toAbsolutePath().toString()
-                   + ";FILE_LOCK=FS;OPEN_NEW=FALSE";
+        // Connect to the database using AUTO_SERVER=TRUE.
+        // This allows connecting to the server started by H2LogStore or log-server,
+        // or starting a new server if none exists.
+        String url = "jdbc:h2:" + dbPath.toAbsolutePath().toString() + ";AUTO_SERVER=TRUE";
         this.connection = DriverManager.getConnection(url);
+        this.ownsConnection = true;
     }
 
     /**
@@ -65,6 +65,20 @@ public class H2LogReader implements AutoCloseable {
     public H2LogReader(String host, int port, String dbPath) throws SQLException {
         String url = "jdbc:h2:tcp://" + host + ":" + port + "/" + dbPath;
         this.connection = DriverManager.getConnection(url);
+        this.ownsConnection = true;
+    }
+
+    /**
+     * Creates a reader using an existing connection.
+     *
+     * <p>Used internally by H2LogStore to delegate read operations.
+     * The connection will NOT be closed when this reader is closed.</p>
+     *
+     * @param connection the database connection to use
+     */
+    public H2LogReader(Connection connection) {
+        this.connection = connection;
+        this.ownsConnection = false;
     }
 
     /**
@@ -195,6 +209,12 @@ public class H2LogReader implements AutoCloseable {
                         }
                     }
                 }
+            }
+
+            // Use actual node count from node_results if available
+            int actualNodeCount = successCount + failedCount;
+            if (actualNodeCount > 0) {
+                nodeCount = actualNodeCount;
             }
 
             int totalLogEntries = 0;
@@ -410,20 +430,24 @@ public class H2LogReader implements AutoCloseable {
     /**
      * Gets all nodes that participated in a session.
      *
+     * <p>Returns only nodes that have results recorded in node_results table,
+     * which represents actual workflow target nodes (not internal actors like
+     * cli, nodeGroup, etc.).</p>
+     *
      * @param sessionId the session ID
      * @return list of node information, ordered by node ID
      */
     public List<NodeInfo> getNodesInSession(long sessionId) {
         List<NodeInfo> nodes = new ArrayList<>();
         String sql = """
-            SELECT l.node_id,
+            SELECT nr.node_id,
                    nr.status,
                    COUNT(l.id) as log_count
-            FROM logs l
-            LEFT JOIN node_results nr ON l.session_id = nr.session_id AND l.node_id = nr.node_id
-            WHERE l.session_id = ?
-            GROUP BY l.node_id, nr.status
-            ORDER BY l.node_id
+            FROM node_results nr
+            LEFT JOIN logs l ON nr.session_id = l.session_id AND nr.node_id = l.node_id
+            WHERE nr.session_id = ?
+            GROUP BY nr.node_id, nr.status
+            ORDER BY nr.node_id
             """;
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -466,6 +490,8 @@ public class H2LogReader implements AutoCloseable {
 
     @Override
     public void close() throws SQLException {
-        connection.close();
+        if (ownsConnection) {
+            connection.close();
+        }
     }
 }

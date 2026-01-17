@@ -254,4 +254,196 @@ class H2LogStoreTest {
         assertTrue(summaryStr.contains("Overlay:  staging"), "Summary should include overlay name");
         assertTrue(summaryStr.contains("Inventory: hosts.yml"), "Summary should include inventory name");
     }
+
+    // ========== Tests for node count derivation from node_results ==========
+
+    @Test
+    @DisplayName("Should derive nodeCount from node_results when available")
+    void testNodeCountDerivedFromNodeResults() throws InterruptedException {
+        // Create session with initial nodeCount=1 (hardcoded in RunCLI)
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        // Mark 3 nodes as successful - this is the actual node count
+        logStore.markNodeSuccess(sessionId, "node-192.168.5.21");
+        logStore.markNodeSuccess(sessionId, "node-192.168.5.22");
+        logStore.markNodeSuccess(sessionId, "node-192.168.5.23");
+
+        // Wait for async writes
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+
+        // nodeCount should be derived from node_results (3), not sessions table (1)
+        assertEquals(3, summary.getNodeCount(), "nodeCount should be derived from node_results count");
+        assertEquals(3, summary.getSuccessCount(), "successCount should be 3");
+        assertEquals(0, summary.getFailedCount(), "failedCount should be 0");
+    }
+
+    @Test
+    @DisplayName("Should use sessions table nodeCount when node_results is empty")
+    void testNodeCountFallbackToSessionsTable() throws InterruptedException {
+        // Create session with initial nodeCount=5
+        long sessionId = logStore.startSession("test-workflow", 5);
+
+        // Don't mark any nodes - simulates old behavior or workflow that doesn't track nodes
+        logStore.log(sessionId, "cli", LogLevel.INFO, "Workflow started");
+
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+
+        // nodeCount should fall back to sessions table value (5)
+        assertEquals(5, summary.getNodeCount(), "nodeCount should fall back to sessions table value");
+        assertEquals(0, summary.getSuccessCount(), "successCount should be 0");
+        assertEquals(0, summary.getFailedCount(), "failedCount should be 0");
+    }
+
+    @Test
+    @DisplayName("Should correctly count mixed success and failure nodes")
+    void testMixedNodeResults() throws InterruptedException {
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        // 2 successes, 2 failures
+        logStore.markNodeSuccess(sessionId, "node-web-01");
+        logStore.markNodeSuccess(sessionId, "node-web-02");
+        logStore.markNodeFailed(sessionId, "node-db-01", "Connection refused");
+        logStore.markNodeFailed(sessionId, "node-db-02", "Timeout");
+
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+
+        assertEquals(4, summary.getNodeCount(), "nodeCount should be total of success + failed");
+        assertEquals(2, summary.getSuccessCount(), "successCount should be 2");
+        assertEquals(2, summary.getFailedCount(), "failedCount should be 2");
+        assertTrue(summary.getFailedNodes().contains("node-db-01"), "failedNodes should contain node-db-01");
+        assertTrue(summary.getFailedNodes().contains("node-db-02"), "failedNodes should contain node-db-02");
+    }
+
+    @Test
+    @DisplayName("Should update node status when marked multiple times")
+    void testNodeStatusUpdate() throws InterruptedException {
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        // First mark as failed, then as success (retry scenario)
+        logStore.markNodeFailed(sessionId, "node-001", "First attempt failed");
+        Thread.sleep(100);
+        logStore.markNodeSuccess(sessionId, "node-001");
+
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+
+        // Node should be counted only once, with latest status (SUCCESS)
+        assertEquals(1, summary.getNodeCount(), "nodeCount should be 1 (node counted once)");
+        assertEquals(1, summary.getSuccessCount(), "successCount should be 1 (latest status)");
+        assertEquals(0, summary.getFailedCount(), "failedCount should be 0");
+    }
+
+    @Test
+    @DisplayName("Session summary toString should show correct Results section")
+    void testSessionSummaryToStringShowsResults() throws InterruptedException {
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        logStore.markNodeSuccess(sessionId, "node-001");
+        logStore.markNodeSuccess(sessionId, "node-002");
+        logStore.markNodeFailed(sessionId, "node-003", "Error");
+
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+        String summaryStr = summary.toString();
+
+        assertTrue(summaryStr.contains("Nodes:    3"), "Summary should show Nodes: 3");
+        assertTrue(summaryStr.contains("SUCCESS: 2 nodes"), "Summary should show SUCCESS: 2 nodes");
+        assertTrue(summaryStr.contains("FAILED:  1 nodes"), "Summary should show FAILED: 1 nodes");
+        assertTrue(summaryStr.contains("node-003"), "Summary should list failed node");
+    }
+
+    // ========== Tests for node counting behavior ==========
+
+    @Test
+    @DisplayName("Only nodes with results should be counted")
+    void testOnlyNodesWithResultsAreCounted() throws Exception {
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        // Log from various actors (cli, nodeGroup are internal, node-* are actual nodes)
+        logStore.log(sessionId, "cli", LogLevel.INFO, "Starting workflow");
+        logStore.log(sessionId, "nodeGroup", LogLevel.INFO, "Creating nodes");
+        logStore.log(sessionId, "node-web-01", LogLevel.INFO, "Running task");
+        logStore.log(sessionId, "node-web-02", LogLevel.INFO, "Running task");
+
+        // Only mark actual workflow nodes in node_results
+        logStore.markNodeSuccess(sessionId, "node-web-01");
+        logStore.markNodeSuccess(sessionId, "node-web-02");
+
+        Thread.sleep(200);
+
+        // Verify via getSummary - nodeCount should come from node_results
+        SessionSummary summary = logStore.getSummary(sessionId);
+        assertEquals(2, summary.getNodeCount(), "Should count only workflow nodes from node_results");
+    }
+
+    @Test
+    @DisplayName("Node results should include log count per node")
+    void testNodeResultsIncludeLogCount() throws InterruptedException {
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        // Log different amounts for different nodes
+        logStore.log(sessionId, "node-001", LogLevel.INFO, "Message 1");
+        logStore.log(sessionId, "node-001", LogLevel.INFO, "Message 2");
+        logStore.log(sessionId, "node-001", LogLevel.INFO, "Message 3");
+        logStore.log(sessionId, "node-002", LogLevel.INFO, "Message 1");
+
+        logStore.markNodeSuccess(sessionId, "node-001");
+        logStore.markNodeSuccess(sessionId, "node-002");
+
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        // Verify via log count from getLogsByNode
+        List<LogEntry> node1Logs = logStore.getLogsByNode(sessionId, "node-001");
+        List<LogEntry> node2Logs = logStore.getLogsByNode(sessionId, "node-002");
+
+        assertEquals(3, node1Logs.size(), "node-001 should have 3 log entries");
+        assertEquals(1, node2Logs.size(), "node-002 should have 1 log entry");
+    }
+
+    @Test
+    @DisplayName("Internal actors (cli, nodeGroup) should not appear in node count")
+    void testInternalActorsNotInNodeCount() throws InterruptedException {
+        long sessionId = logStore.startSession("test-workflow", 1);
+
+        // Log from internal actors
+        logStore.log(sessionId, "cli", LogLevel.INFO, "CLI message");
+        logStore.log(sessionId, "nodeGroup", LogLevel.INFO, "NodeGroup message");
+
+        // Log from actual nodes and mark their results
+        logStore.log(sessionId, "node-host1", LogLevel.INFO, "Node message");
+        logStore.markNodeSuccess(sessionId, "node-host1");
+
+        Thread.sleep(200);
+
+        logStore.endSession(sessionId, SessionStatus.COMPLETED);
+
+        SessionSummary summary = logStore.getSummary(sessionId);
+
+        // Only node-host1 should be counted (cli and nodeGroup are internal)
+        assertEquals(1, summary.getNodeCount(), "Only actual workflow nodes should be counted");
+        assertEquals(1, summary.getSuccessCount(), "successCount should be 1");
+
+        // Total log entries should include all actors
+        assertEquals(3, summary.getTotalLogEntries(), "Total logs should include all actors");
+    }
 }
