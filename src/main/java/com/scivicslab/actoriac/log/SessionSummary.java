@@ -159,7 +159,7 @@ public class SessionSummary {
         }
         sb.append("\n");
         sb.append("\n");
-        sb.append("  Log entries: ").append(totalLogEntries).append(" (").append(errorCount).append(" errors)");
+        sb.append("  Log lines: ").append(totalLogEntries).append(" (").append(errorCount).append(" errors)");
         return sb.toString();
     }
 
