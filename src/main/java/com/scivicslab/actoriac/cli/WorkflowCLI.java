@@ -152,6 +152,13 @@ class ListWorkflowsCLI implements Callable<Integer> {
     )
     private String workflowPath;
 
+    @Option(
+        names = {"-o", "--output"},
+        description = "Output format: table, json, yaml (default: table)",
+        defaultValue = "table"
+    )
+    private String outputFormat;
+
     @Override
     public Integer call() {
         File workflowDir = new File(baseDir, workflowPath);
@@ -160,30 +167,82 @@ class ListWorkflowsCLI implements Callable<Integer> {
             return 1;
         }
 
-        List<WorkflowDisplay> displays = scanWorkflowsForDisplay(workflowDir);
-        if (displays.isEmpty()) {
-            System.out.println("No workflow files found in " + workflowDir.getPath());
+        List<WorkflowInfo> workflows = scanWorkflowsForDisplay(workflowDir, workflowPath);
+        if (workflows.isEmpty()) {
+            if ("json".equalsIgnoreCase(outputFormat)) {
+                System.out.println("[]");
+            } else if ("yaml".equalsIgnoreCase(outputFormat)) {
+                System.out.println("workflows: []");
+            } else {
+                System.out.println("No workflow files found in " + workflowDir.getPath());
+            }
             return 0;
         }
 
-        System.out.println("Workflows in " + workflowDir.getPath() + ":");
-        System.out.println("-".repeat(66));
-        System.out.printf("%-35s %s%n", "-w", "Description");
-        System.out.println("-".repeat(66));
-        for (WorkflowDisplay display : displays) {
-            String description = display.description() != null ? display.description() : "(no description)";
-            // Truncate description if too long
-            if (description.length() > 30) {
-                description = description.substring(0, 27) + "...";
-            }
-            // Show the path relative to base for use with run command
-            String relPath = workflowPath + "/" + display.fileName();
-            System.out.printf("%-35s %s%n", relPath, description);
+        switch (outputFormat.toLowerCase()) {
+            case "json" -> printJson(workflows);
+            case "yaml" -> printYaml(workflows);
+            default -> printTable(workflows, workflowDir.getPath());
         }
         return 0;
     }
 
-    private static List<WorkflowDisplay> scanWorkflowsForDisplay(File directory) {
+    private void printTable(List<WorkflowInfo> workflows, String dirPath) {
+        System.out.println("Workflows in " + dirPath + ":");
+        System.out.println();
+        for (WorkflowInfo wf : workflows) {
+            System.out.println(wf.path());
+            if (wf.name() != null) {
+                System.out.println("  name: " + wf.name());
+            }
+            if (wf.description() != null) {
+                System.out.println("  description: " + wf.description());
+            }
+            if (wf.note() != null) {
+                System.out.println("  note: " + wf.note());
+            }
+            System.out.println();
+        }
+    }
+
+    private void printJson(List<WorkflowInfo> workflows) {
+        org.json.JSONArray arr = new org.json.JSONArray();
+        for (WorkflowInfo wf : workflows) {
+            org.json.JSONObject obj = new org.json.JSONObject();
+            obj.put("path", wf.path());
+            if (wf.name() != null) obj.put("name", wf.name());
+            if (wf.description() != null) obj.put("description", wf.description());
+            if (wf.note() != null) obj.put("note", wf.note());
+            arr.put(obj);
+        }
+        System.out.println(arr.toString(2));
+    }
+
+    private void printYaml(List<WorkflowInfo> workflows) {
+        System.out.println("workflows:");
+        for (WorkflowInfo wf : workflows) {
+            System.out.println("  - path: " + wf.path());
+            if (wf.name() != null) {
+                System.out.println("    name: " + wf.name());
+            }
+            if (wf.description() != null) {
+                // Handle multi-line descriptions
+                if (wf.description().contains("\n")) {
+                    System.out.println("    description: |");
+                    for (String line : wf.description().split("\n")) {
+                        System.out.println("      " + line);
+                    }
+                } else {
+                    System.out.println("    description: " + wf.description());
+                }
+            }
+            if (wf.note() != null) {
+                System.out.println("    note: " + wf.note());
+            }
+        }
+    }
+
+    private static List<WorkflowInfo> scanWorkflowsForDisplay(File directory, String workflowPath) {
         if (directory == null) {
             return List.of();
         }
@@ -198,9 +257,12 @@ class ListWorkflowsCLI implements Callable<Integer> {
                  })
                  .map(path -> {
                      File file = path.toFile();
-                     return new WorkflowDisplay(file.getName(), extractDescription(file));
+                     String relPath = workflowPath.endsWith("/")
+                         ? workflowPath + file.getName()
+                         : workflowPath + "/" + file.getName();
+                     return extractWorkflowInfo(file, relPath);
                  })
-                 .sorted(Comparator.comparing(WorkflowDisplay::fileName, String.CASE_INSENSITIVE_ORDER))
+                 .sorted(Comparator.comparing(WorkflowInfo::path, String.CASE_INSENSITIVE_ORDER))
                  .collect(Collectors.toList());
         } catch (IOException e) {
             System.err.println("Failed to scan workflows: " + e.getMessage());
@@ -208,67 +270,114 @@ class ListWorkflowsCLI implements Callable<Integer> {
         }
     }
 
-    private static String extractDescription(File file) {
+    private static WorkflowInfo extractWorkflowInfo(File file, String path) {
         String fileName = file.getName().toLowerCase();
         if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
-            return extractDescriptionFromYaml(file);
+            return extractWorkflowInfoFromYaml(file, path);
         } else if (fileName.endsWith(".json")) {
-            return extractDescriptionFromJson(file);
+            return extractWorkflowInfoFromJson(file, path);
         }
-        return null;
+        return new WorkflowInfo(path, null, null, null);
     }
 
-    private static String extractDescriptionFromYaml(File file) {
+    private static WorkflowInfo extractWorkflowInfoFromYaml(File file, String path) {
+        String name = null;
+        String description = null;
+        String note = null;
+
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {
             String line;
-            StringBuilder description = new StringBuilder();
-            boolean inDescription = false;
+            StringBuilder currentValue = new StringBuilder();
+            String currentField = null;
+            boolean inMultiLine = false;
+
             while ((line = reader.readLine()) != null) {
-                if (inDescription) {
-                    // Multi-line description handling
-                    if (line.startsWith("  ") || line.startsWith("\t")) {
-                        description.append(line.trim()).append(" ");
-                    } else if (line.trim().isEmpty()) {
-                        continue;
-                    } else {
-                        break;
-                    }
-                } else if (line.trim().startsWith("description:")) {
-                    String value = line.substring(line.indexOf(':') + 1).trim();
-                    if (value.equals("|") || value.equals(">")) {
-                        // Multi-line literal or folded
-                        inDescription = true;
-                    } else if (!value.isEmpty()) {
-                        // Inline description
-                        if ((value.startsWith("\"") && value.endsWith("\"")) ||
-                            (value.startsWith("'") && value.endsWith("'"))) {
-                            value = value.substring(1, value.length() - 1);
-                        }
-                        return value;
-                    }
-                }
+                // Stop at steps or vertices
                 if (line.trim().startsWith("steps:") || line.trim().startsWith("vertices:")) {
                     break;
                 }
+
+                if (inMultiLine) {
+                    if (line.startsWith("  ") || line.startsWith("\t") || line.trim().isEmpty()) {
+                        if (!line.trim().isEmpty()) {
+                            currentValue.append(line.trim()).append(" ");
+                        }
+                        continue;
+                    } else {
+                        // End of multi-line
+                        String value = currentValue.toString().trim();
+                        if ("name".equals(currentField)) name = value;
+                        else if ("description".equals(currentField)) description = value;
+                        else if ("note".equals(currentField)) note = value;
+                        inMultiLine = false;
+                        currentValue = new StringBuilder();
+                        currentField = null;
+                    }
+                }
+
+                if (line.trim().startsWith("name:") && name == null) {
+                    String value = line.substring(line.indexOf(':') + 1).trim();
+                    if (value.equals("|") || value.equals(">")) {
+                        inMultiLine = true;
+                        currentField = "name";
+                    } else if (!value.isEmpty()) {
+                        name = stripQuotes(value);
+                    }
+                } else if (line.trim().startsWith("description:") && description == null) {
+                    String value = line.substring(line.indexOf(':') + 1).trim();
+                    if (value.equals("|") || value.equals(">")) {
+                        inMultiLine = true;
+                        currentField = "description";
+                    } else if (!value.isEmpty()) {
+                        description = stripQuotes(value);
+                    }
+                } else if (line.trim().startsWith("note:") && note == null) {
+                    String value = line.substring(line.indexOf(':') + 1).trim();
+                    if (value.equals("|") || value.equals(">")) {
+                        inMultiLine = true;
+                        currentField = "note";
+                    } else if (!value.isEmpty()) {
+                        note = stripQuotes(value);
+                    }
+                }
             }
-            String result = description.toString().trim();
-            return result.isEmpty() ? null : result;
+
+            // Handle trailing multi-line
+            if (inMultiLine && currentValue.length() > 0) {
+                String value = currentValue.toString().trim();
+                if ("name".equals(currentField)) name = value;
+                else if ("description".equals(currentField)) description = value;
+                else if ("note".equals(currentField)) note = value;
+            }
         } catch (IOException e) {
             // Ignore
         }
-        return null;
+        return new WorkflowInfo(path, name, description, note);
     }
 
-    private static String extractDescriptionFromJson(File file) {
+    private static String stripQuotes(String value) {
+        if ((value.startsWith("\"") && value.endsWith("\"")) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private static WorkflowInfo extractWorkflowInfoFromJson(File file, String path) {
         try (java.io.FileReader reader = new java.io.FileReader(file)) {
             org.json.JSONTokener tokener = new org.json.JSONTokener(reader);
             org.json.JSONObject json = new org.json.JSONObject(tokener);
-            return json.optString("description", null);
+            return new WorkflowInfo(
+                path,
+                json.optString("name", null),
+                json.optString("description", null),
+                json.optString("note", null)
+            );
         } catch (Exception e) {
             // Ignore
         }
-        return null;
+        return new WorkflowInfo(path, null, null, null);
     }
 
-    private static record WorkflowDisplay(String fileName, String description) {}
+    private static record WorkflowInfo(String path, String name, String description, String note) {}
 }
