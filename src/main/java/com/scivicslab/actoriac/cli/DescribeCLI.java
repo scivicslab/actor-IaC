@@ -20,13 +20,9 @@ package com.scivicslab.actoriac.cli;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import java.util.stream.Stream;
 
 import com.scivicslab.pojoactor.workflow.kustomize.WorkflowKustomizer;
 
@@ -39,13 +35,13 @@ import picocli.CommandLine.Option;
  * <p>Usage examples:</p>
  * <pre>
  * # Show workflow description only
- * actor-iac describe -d ./workflows -w my-workflow
+ * actor-iac describe -w sysinfo/main-collect-sysinfo.yaml
  *
  * # Show workflow description with step descriptions
- * actor-iac describe -d ./workflows -w my-workflow --steps
+ * actor-iac describe -w sysinfo/main-collect-sysinfo.yaml --steps
  *
  * # With overlay
- * actor-iac describe -d ./workflows -w my-workflow -o ./overlays/env --steps
+ * actor-iac describe -w sysinfo/main-collect-sysinfo.yaml -o ./overlays/env --steps
  * </pre>
  *
  * @author devteam@scivics-lab.com
@@ -54,24 +50,24 @@ import picocli.CommandLine.Option;
 @Command(
     name = "describe",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC describe 2.12.0",
+    version = "actor-IaC describe 2.12.1",
     description = "Display workflow and step descriptions."
 )
 public class DescribeCLI implements Callable<Integer> {
 
     @Option(
         names = {"-d", "--dir"},
-        description = "Directory containing workflow files (searched recursively)",
-        required = true
+        description = "Base directory. Defaults to current directory.",
+        defaultValue = "."
     )
-    private File workflowDir;
+    private File baseDir;
 
     @Option(
         names = {"-w", "--workflow"},
-        description = "Name of the workflow to describe (with or without extension)",
+        description = "Workflow file path relative to -d (required)",
         required = true
     )
-    private String workflowName;
+    private String workflowPath;
 
     @Option(
         names = {"-o", "--overlay"},
@@ -85,39 +81,50 @@ public class DescribeCLI implements Callable<Integer> {
     )
     private boolean showSteps;
 
-    /** Cache of discovered workflow files: name -> File */
-    private final Map<String, File> workflowCache = new HashMap<>();
-
     @Override
     public Integer call() {
-        // Scan workflow directory
-        scanWorkflowDirectory(workflowDir);
-
-        // Find the workflow file
-        File workflowFile = findWorkflowFile(workflowName);
-        if (workflowFile == null) {
-            System.err.println("Workflow not found: " + workflowName);
-            System.err.println("Available workflows: " + workflowCache.keySet());
+        // Resolve workflow file (try extensions if needed)
+        File resolvedFile = resolveWorkflowFile(new File(baseDir, workflowPath));
+        if (resolvedFile == null || !resolvedFile.isFile()) {
+            System.err.println("Workflow file not found: " + workflowPath);
             return 1;
         }
 
         // Load YAML (with overlay if specified)
         Map<String, Object> yaml;
         if (overlayDir != null) {
-            yaml = loadYamlWithOverlay(workflowFile);
+            yaml = loadYamlWithOverlay(resolvedFile);
         } else {
-            yaml = loadYamlFile(workflowFile);
+            yaml = loadYamlFile(resolvedFile);
         }
 
         if (yaml == null) {
-            System.err.println("Failed to load workflow: " + workflowFile);
+            System.err.println("Failed to load workflow: " + resolvedFile);
             return 1;
         }
 
         // Print workflow description
-        printWorkflowDescription(workflowFile, yaml);
+        printWorkflowDescription(resolvedFile, yaml);
 
         return 0;
+    }
+
+    /**
+     * Resolves the workflow file, trying extensions if the file doesn't exist.
+     */
+    private File resolveWorkflowFile(File file) {
+        if (file.isFile()) {
+            return file;
+        }
+        // Try adding extensions
+        String[] extensions = {".yaml", ".yml", ".json", ".xml"};
+        for (String ext : extensions) {
+            File candidate = new File(file.getPath() + ext);
+            if (candidate.isFile()) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**
@@ -179,53 +186,6 @@ public class DescribeCLI implements Callable<Integer> {
     }
 
     /**
-     * Scans the workflow directory recursively for workflow files.
-     */
-    private void scanWorkflowDirectory(File directory) {
-        if (directory == null || !directory.exists()) {
-            return;
-        }
-
-        try (Stream<Path> paths = Files.walk(directory.toPath())) {
-            paths.filter(Files::isRegularFile)
-                 .filter(path -> {
-                     String name = path.getFileName().toString().toLowerCase();
-                     return name.endsWith(".yaml") || name.endsWith(".yml")
-                         || name.endsWith(".json") || name.endsWith(".xml");
-                 })
-                 .forEach(path -> {
-                     File file = path.toFile();
-                     String baseName = getBaseName(file.getName());
-                     workflowCache.putIfAbsent(baseName, file);
-                     workflowCache.putIfAbsent(file.getName(), file);
-                 });
-        } catch (Exception e) {
-            System.err.println("Warning: Failed to scan directory: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Finds a workflow file by name.
-     */
-    private File findWorkflowFile(String name) {
-        // Try exact match first
-        File file = workflowCache.get(name);
-        if (file != null) {
-            return file;
-        }
-
-        // Try with extensions
-        for (String ext : new String[]{".yaml", ".yml", ".json", ".xml"}) {
-            file = workflowCache.get(name + ext);
-            if (file != null) {
-                return file;
-            }
-        }
-
-        return null;
-    }
-
-    /**
      * Loads a YAML file.
      */
     private Map<String, Object> loadYamlFile(File file) {
@@ -261,14 +221,4 @@ public class DescribeCLI implements Callable<Integer> {
         }
     }
 
-    /**
-     * Gets the base name of a file (without extension).
-     */
-    private static String getBaseName(String fileName) {
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex > 0) {
-            return fileName.substring(0, dotIndex);
-        }
-        return fileName;
-    }
 }

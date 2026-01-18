@@ -79,23 +79,25 @@ import picocli.CommandLine.Option;
 @Command(
     name = "run",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC run 2.12.0",
+    version = "actor-IaC run 2.12.1",
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
 )
 public class RunCLI implements Callable<Integer> {
 
     private static final Logger LOG = Logger.getLogger(RunCLI.class.getName());
-    private static final String ACTORIAC_VERSION = "2.12.0";
+    private static final String ACTORIAC_VERSION = "2.12.1";
 
     @Option(
         names = {"-d", "--dir"},
-        description = "Directory containing workflow files (searched recursively)"
+        description = "Base directory (logs are created here). Defaults to current directory.",
+        defaultValue = "."
     )
     private File workflowDir;
 
     @Option(
         names = {"-w", "--workflow"},
-        description = "Name of the main workflow to execute (with or without extension)"
+        description = "Workflow file path relative to -d (required)",
+        required = true
     )
     private String workflowName;
 
@@ -917,10 +919,12 @@ public class RunCLI implements Callable<Integer> {
     }
 
     /**
-     * Scans the directory recursively for workflow files.
+     * Scans the immediate directory for workflow files (non-recursive).
+     *
+     * @since 2.12.1
      */
     private void scanWorkflowDirectory(Path dir) {
-        try (Stream<Path> paths = Files.walk(dir)) {
+        try (Stream<Path> paths = Files.list(dir)) {
             paths.filter(Files::isRegularFile)
                  .filter(this::isWorkflowFile)
                  .forEach(this::registerWorkflowFile);
@@ -958,21 +962,30 @@ public class RunCLI implements Callable<Integer> {
     }
 
     /**
-     * Finds a workflow file by name.
+     * Finds a workflow file by path relative to workflowDir.
+     *
+     * <p>Supports paths like "sysinfo/main-collect-sysinfo.yaml" or
+     * "sysinfo/main-collect-sysinfo" (extension auto-detected).</p>
+     *
+     * @param path workflow file path relative to workflowDir
+     * @return the workflow file, or null if not found
+     * @since 2.12.1
      */
-    public File findWorkflowFile(String name) {
-        // Try exact match first
-        File file = workflowCache.get(name);
-        if (file != null) {
+    public File findWorkflowFile(String path) {
+        // Resolve path relative to workflowDir
+        File file = new File(workflowDir, path);
+
+        // Try exact path first
+        if (file.isFile()) {
             return file;
         }
 
         // Try with common extensions
         String[] extensions = {".yaml", ".yml", ".json", ".xml"};
         for (String ext : extensions) {
-            file = workflowCache.get(name + ext);
-            if (file != null) {
-                return file;
+            File candidate = new File(workflowDir, path + ext);
+            if (candidate.isFile()) {
+                return candidate;
             }
         }
 
@@ -1081,12 +1094,17 @@ public class RunCLI implements Callable<Integer> {
         }
     }
 
+    /**
+     * Scans the immediate directory for workflow files (non-recursive).
+     *
+     * @since 2.12.1
+     */
     private static List<WorkflowDisplay> scanWorkflowsForDisplay(File directory) {
         if (directory == null) {
             return List.of();
         }
 
-        try (Stream<Path> paths = Files.walk(directory.toPath())) {
+        try (Stream<Path> paths = Files.list(directory.toPath())) {
             Map<String, File> uniqueFiles = new LinkedHashMap<>();
             paths.filter(Files::isRegularFile)
                  .filter(path -> {

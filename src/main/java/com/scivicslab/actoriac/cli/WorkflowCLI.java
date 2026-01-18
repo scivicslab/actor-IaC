@@ -22,11 +22,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.logging.LogManager;
 import java.util.stream.Collectors;
@@ -66,7 +63,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "actor-iac",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC 2.12.0",
+    version = "actor-IaC 2.12.1",
     description = "Infrastructure as Code workflow automation tool.",
     subcommands = {
         RunCLI.class,
@@ -118,12 +115,12 @@ public class WorkflowCLI implements Callable<Integer> {
         System.out.println("  log-merge    Merge scattered log databases into one");
         System.out.println();
         System.out.println("Examples:");
-        System.out.println("  actor-iac run -d ./workflows -w deploy");
-        System.out.println("  actor-iac run -d ./workflows -w deploy -i inventory.ini -g webservers");
-        System.out.println("  actor-iac list -d ./workflows");
+        System.out.println("  actor-iac run -w sysinfo/main-collect-sysinfo.yaml -i inventory.ini");
+        System.out.println("  actor-iac run -d ./sysinfo -w main-collect-sysinfo.yaml -i inventory.ini");
+        System.out.println("  actor-iac list -w sysinfo");
+        System.out.println("  actor-iac describe -w sysinfo/main-collect-sysinfo.yaml");
         System.out.println("  actor-iac log-search --db ./logs --list");
         System.out.println("  actor-iac log-serve --db ./logs/shared");
-        System.out.println("  actor-iac log-merge --scan ./workflows --target ./logs/merged");
         System.out.println();
         System.out.println("Use 'actor-iac <command> --help' for more information about a command.");
         return 0;
@@ -136,20 +133,28 @@ public class WorkflowCLI implements Callable<Integer> {
 @Command(
     name = "list",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC list 2.12.0",
-    description = "List workflows discovered under --dir."
+    version = "actor-IaC list 2.12.1",
+    description = "List workflows in the specified directory."
 )
 class ListWorkflowsCLI implements Callable<Integer> {
 
     @Option(
         names = {"-d", "--dir"},
-        required = true,
-        description = "Directory containing workflow files (searched recursively)"
+        description = "Base directory. Defaults to current directory.",
+        defaultValue = "."
     )
-    private File workflowDir;
+    private File baseDir;
+
+    @Option(
+        names = {"-w", "--workflow"},
+        required = true,
+        description = "Workflow directory path (relative to -d)"
+    )
+    private String workflowPath;
 
     @Override
     public Integer call() {
+        File workflowDir = new File(baseDir, workflowPath);
         if (!workflowDir.isDirectory()) {
             System.err.println("Not a directory: " + workflowDir);
             return 1;
@@ -157,22 +162,24 @@ class ListWorkflowsCLI implements Callable<Integer> {
 
         List<WorkflowDisplay> displays = scanWorkflowsForDisplay(workflowDir);
         if (displays.isEmpty()) {
-            System.out.println("No workflow files found under " + workflowDir.getAbsolutePath());
+            System.out.println("No workflow files found in " + workflowDir.getPath());
             return 0;
         }
 
-        System.out.println("Available workflows (directory: " + workflowDir.getAbsolutePath() + ")");
-        System.out.println("-".repeat(90));
-        System.out.printf("%-4s %-25s %-35s %s%n", "#", "File (-w)", "Path", "Workflow Name (in logs)");
-        System.out.println("-".repeat(90));
-        int index = 1;
+        System.out.println("Workflows in " + workflowDir.getPath() + ":");
+        System.out.println("-".repeat(66));
+        System.out.printf("%-35s %s%n", "-w", "Description");
+        System.out.println("-".repeat(66));
         for (WorkflowDisplay display : displays) {
-            String workflowName = display.workflowName() != null ? display.workflowName() : "(no name)";
-            System.out.printf("%2d.  %-25s %-35s %s%n",
-                index++, display.baseName(), display.relativePath(), workflowName);
+            String description = display.description() != null ? display.description() : "(no description)";
+            // Truncate description if too long
+            if (description.length() > 30) {
+                description = description.substring(0, 27) + "...";
+            }
+            // Show the path relative to base for use with run command
+            String relPath = workflowPath + "/" + display.fileName();
+            System.out.printf("%-35s %s%n", relPath, description);
         }
-        System.out.println("-".repeat(90));
-        System.out.println("Use 'actor-iac run -d " + workflowDir + " -w <File>' to execute a workflow.");
         return 0;
     }
 
@@ -181,89 +188,87 @@ class ListWorkflowsCLI implements Callable<Integer> {
             return List.of();
         }
 
-        try (Stream<Path> paths = Files.walk(directory.toPath())) {
-            Map<String, File> uniqueFiles = new LinkedHashMap<>();
-            paths.filter(Files::isRegularFile)
+        // Non-recursive scan - only files in immediate directory
+        try (Stream<Path> paths = Files.list(directory.toPath())) {
+            return paths.filter(Files::isRegularFile)
                  .filter(path -> {
                      String name = path.getFileName().toString().toLowerCase();
                      return name.endsWith(".yaml") || name.endsWith(".yml")
                          || name.endsWith(".json") || name.endsWith(".xml");
                  })
-                 .forEach(path -> uniqueFiles.putIfAbsent(path.toFile().getAbsolutePath(), path.toFile()));
-
-            Path basePath = directory.toPath();
-            return uniqueFiles.values().stream()
-                .map(file -> new WorkflowDisplay(
-                    getBaseName(file.getName()),
-                    relativize(basePath, file.toPath()),
-                    extractWorkflowName(file)))
-                .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))
-                .collect(Collectors.toList());
+                 .map(path -> {
+                     File file = path.toFile();
+                     return new WorkflowDisplay(file.getName(), extractDescription(file));
+                 })
+                 .sorted(Comparator.comparing(WorkflowDisplay::fileName, String.CASE_INSENSITIVE_ORDER))
+                 .collect(Collectors.toList());
         } catch (IOException e) {
             System.err.println("Failed to scan workflows: " + e.getMessage());
             return List.of();
         }
     }
 
-    private static String getBaseName(String fileName) {
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex > 0) {
-            return fileName.substring(0, dotIndex);
-        }
-        return fileName;
-    }
-
-    private static String relativize(Path base, Path target) {
-        try {
-            return base.relativize(target).toString();
-        } catch (IllegalArgumentException e) {
-            return target.toAbsolutePath().toString();
-        }
-    }
-
-    private static String extractWorkflowName(File file) {
+    private static String extractDescription(File file) {
         String fileName = file.getName().toLowerCase();
         if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
-            return extractNameFromYaml(file);
+            return extractDescriptionFromYaml(file);
         } else if (fileName.endsWith(".json")) {
-            return extractNameFromJson(file);
+            return extractDescriptionFromJson(file);
         }
         return null;
     }
 
-    private static String extractNameFromYaml(File file) {
+    private static String extractDescriptionFromYaml(File file) {
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {
             String line;
+            StringBuilder description = new StringBuilder();
+            boolean inDescription = false;
             while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.startsWith("name:")) {
-                    String value = line.substring(5).trim();
-                    if ((value.startsWith("\"") && value.endsWith("\"")) ||
-                        (value.startsWith("'") && value.endsWith("'"))) {
-                        value = value.substring(1, value.length() - 1);
+                if (inDescription) {
+                    // Multi-line description handling
+                    if (line.startsWith("  ") || line.startsWith("\t")) {
+                        description.append(line.trim()).append(" ");
+                    } else if (line.trim().isEmpty()) {
+                        continue;
+                    } else {
+                        break;
                     }
-                    return value.isEmpty() ? null : value;
+                } else if (line.trim().startsWith("description:")) {
+                    String value = line.substring(line.indexOf(':') + 1).trim();
+                    if (value.equals("|") || value.equals(">")) {
+                        // Multi-line literal or folded
+                        inDescription = true;
+                    } else if (!value.isEmpty()) {
+                        // Inline description
+                        if ((value.startsWith("\"") && value.endsWith("\"")) ||
+                            (value.startsWith("'") && value.endsWith("'"))) {
+                            value = value.substring(1, value.length() - 1);
+                        }
+                        return value;
+                    }
                 }
-                if (line.startsWith("steps:") || line.startsWith("vertices:")) {
+                if (line.trim().startsWith("steps:") || line.trim().startsWith("vertices:")) {
                     break;
                 }
             }
+            String result = description.toString().trim();
+            return result.isEmpty() ? null : result;
         } catch (IOException e) {
             // Ignore
         }
         return null;
     }
 
-    private static String extractNameFromJson(File file) {
+    private static String extractDescriptionFromJson(File file) {
         try (java.io.FileReader reader = new java.io.FileReader(file)) {
             org.json.JSONTokener tokener = new org.json.JSONTokener(reader);
             org.json.JSONObject json = new org.json.JSONObject(tokener);
-            return json.optString("name", null);
+            return json.optString("description", null);
         } catch (Exception e) {
             // Ignore
         }
         return null;
     }
 
-    private static record WorkflowDisplay(String baseName, String relativePath, String workflowName) {}
+    private static record WorkflowDisplay(String fileName, String description) {}
 }
