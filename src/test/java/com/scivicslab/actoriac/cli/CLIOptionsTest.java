@@ -173,4 +173,53 @@ public class CLIOptionsTest {
                 "Description should contain expected text");
         }
     }
+
+    @Nested
+    @DisplayName("Sub-workflow base directory resolution")
+    class SubWorkflowBaseDirectory {
+
+        @Test
+        @DisplayName("Sub-workflow base dir should be parent of main workflow file")
+        void subWorkflowBaseDirShouldBeParentOfMainWorkflow() {
+            // Given: main workflow at sysinfo/main-collect-sysinfo.yaml
+            File mainWorkflowFile = sysinfoDir.resolve("main-collect-sysinfo.yaml").toFile();
+
+            // When: we get the parent directory
+            File workflowBaseDir = mainWorkflowFile.getParentFile();
+
+            // Then: base dir should be sysinfo/
+            assertNotNull(workflowBaseDir, "Parent directory should not be null");
+            assertEquals("sysinfo", workflowBaseDir.getName(),
+                "Base dir should be the directory containing the main workflow");
+        }
+
+        @Test
+        @DisplayName("Sub-workflow should be found relative to main workflow directory")
+        void subWorkflowShouldBeFoundRelativeToMainWorkflow() {
+            // Given: main workflow at sysinfo/main-collect-sysinfo.yaml
+            File mainWorkflowFile = sysinfoDir.resolve("main-collect-sysinfo.yaml").toFile();
+            File workflowBaseDir = mainWorkflowFile.getParentFile();
+
+            // When: searching for sub-workflow "collect-sysinfo.yaml"
+            File subWorkflow = new File(workflowBaseDir, "collect-sysinfo.yaml");
+
+            // Then: sub-workflow should be found
+            assertTrue(subWorkflow.exists(),
+                "Sub-workflow should be found relative to main workflow directory");
+        }
+
+        @Test
+        @DisplayName("Sub-workflow should NOT be found in base directory when main workflow is in subdirectory")
+        void subWorkflowShouldNotBeFoundInBaseDirectory() {
+            // Given: base directory is tempDir (parent of sysinfo/)
+            File baseDir = tempDir.toFile();
+
+            // When: searching for sub-workflow "collect-sysinfo.yaml" in base dir
+            File subWorkflow = new File(baseDir, "collect-sysinfo.yaml");
+
+            // Then: sub-workflow should NOT be found (it's in sysinfo/, not root)
+            assertFalse(subWorkflow.exists(),
+                "Sub-workflow should NOT be in base directory when main workflow is in subdirectory");
+        }
+    }
 }

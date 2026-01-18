@@ -763,7 +763,13 @@ public class RunCLI implements Callable<Integer> {
 
             // Step 1: Create NodeGroupInterpreter
             NodeGroupInterpreter nodeGroupInterpreter = new NodeGroupInterpreter(nodeGroup, system);
-            nodeGroupInterpreter.setWorkflowBaseDir(workflowDir.getAbsolutePath());
+            // Set workflow base dir to the directory containing the main workflow file
+            // so that sub-workflows can be found relative to the main workflow
+            File workflowBaseDir = mainWorkflowFile.getParentFile();
+            if (workflowBaseDir == null) {
+                workflowBaseDir = workflowDir;
+            }
+            nodeGroupInterpreter.setWorkflowBaseDir(workflowBaseDir.getAbsolutePath());
             if (overlayDir != null) {
                 nodeGroupInterpreter.setOverlayDir(overlayDir.getAbsolutePath());
             }
