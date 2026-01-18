@@ -374,20 +374,27 @@ Merge scattered log databases into a single database.
 
 ## Installation
 
-First, install POJO-actor to your local repository:
+### Development Version (v2.12.1)
+
+First, install POJO-actor to your local Maven repository:
 
 ```bash
 git clone https://github.com/scivicslab/POJO-actor
 cd POJO-actor
-./mvnw install
+git checkout v2.12.1
+mvn install
 ```
 
-Then build actor-IaC:
+Then install actor-IaC:
 
 ```bash
-cd ../actor-IaC
-mvn clean package
+git clone https://github.com/scivicslab/actor-IaC
+cd actor-IaC
+git checkout v2.12.1
+mvn install
 ```
+
+**Note:** Do not use `mvn clean install`. Use `mvn install` only. The `clean` target may cause issues due to the Maven repository configuration in pom.xml.
 
 ## HashiCorp Vault Integration
 
