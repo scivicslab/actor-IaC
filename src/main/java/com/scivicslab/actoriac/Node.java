@@ -316,16 +316,28 @@ public class Node {
             String message = e.getMessage();
             if (message != null && message.contains("USERAUTH fail")) {
                 throw new IOException(String.format(
-                    "SSH authentication failed for %s@%s:%d. " +
-                    "Please check: (1) ssh-agent is running with your key loaded (ssh-add -l), " +
-                    "(2) your public key is in the remote ~/.ssh/authorized_keys, " +
-                    "(3) correct username is specified in inventory",
-                    user, hostname, port), e);
+                    "SSH authentication failed for %s@%s:%d.%n" +
+                    "%n" +
+                    "[~/.ssh/id_ed25519 or ~/.ssh/id_rsa]%n" +
+                    "  ssh-add || { eval \"$(ssh-agent -s)\" && ssh-add; }%n" +
+                    "%n" +
+                    "[Custom key, e.g. ~/.ssh/mykey]%n" +
+                    "  ssh-add ~/.ssh/mykey || { eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/mykey; }%n" +
+                    "%n" +
+                    "Test: ssh %s@%s echo OK",
+                    user, hostname, port, user, hostname), e);
             } else if (message != null && message.contains("Auth fail")) {
                 throw new IOException(String.format(
-                    "SSH authentication failed for %s@%s:%d. " +
-                    "Verify your credentials and ensure the SSH key or password is correct.",
-                    user, hostname, port), e);
+                    "SSH authentication failed for %s@%s:%d.%n" +
+                    "%n" +
+                    "[~/.ssh/id_ed25519 or ~/.ssh/id_rsa]%n" +
+                    "  ssh-add || { eval \"$(ssh-agent -s)\" && ssh-add; }%n" +
+                    "%n" +
+                    "[Custom key, e.g. ~/.ssh/mykey]%n" +
+                    "  ssh-add ~/.ssh/mykey || { eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/mykey; }%n" +
+                    "%n" +
+                    "Test: ssh %s@%s echo OK",
+                    user, hostname, port, user, hostname), e);
             } else if (message != null && (message.contains("Connection refused") || message.contains("connect timed out"))) {
                 throw new IOException(String.format(
                     "SSH connection failed to %s:%d - %s. " +
@@ -554,9 +566,15 @@ public class Node {
 
             if (!authConfigured) {
                 throw new IOException("SSH authentication failed: No usable authentication method found.\n" +
-                    "For Ed25519 keys, please start ssh-agent: eval \"$(ssh-agent -s)\" && ssh-add\n" +
-                    "Or ensure you have RSA/ECDSA keys in ~/.ssh/ without passphrase.\n" +
-                    "Or use --ask-pass for password authentication.");
+                    "\n" +
+                    "[~/.ssh/id_ed25519 or ~/.ssh/id_rsa]\n" +
+                    "  ssh-add || { eval \"$(ssh-agent -s)\" && ssh-add; }\n" +
+                    "\n" +
+                    "[Custom key, e.g. ~/.ssh/mykey]\n" +
+                    "  ssh-add ~/.ssh/mykey || { eval \"$(ssh-agent -s)\" && ssh-add ~/.ssh/mykey; }\n" +
+                    "\n" +
+                    "[Password authentication]\n" +
+                    "  Use --ask-pass option");
             }
         }
     }
