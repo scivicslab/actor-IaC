@@ -395,9 +395,34 @@ public class H2LogStore implements DistributedLogStore {
     @Override
     public void logAction(long sessionId, String nodeId, String label,
                           String actionName, int exitCode, long durationMs, String output) {
-        LogLevel level = exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;
+        LogLevel level = parseLogLevelFromLabel(label, exitCode);
         writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, actionName, level, output, exitCode, durationMs));
         writeToTextLog(nodeId, label, level, output);
+    }
+
+    /**
+     * Parses log level from the label parameter.
+     *
+     * <p>Maps java.util.logging levels to LogLevel:</p>
+     * <ul>
+     *   <li>SEVERE → ERROR</li>
+     *   <li>WARNING → WARN</li>
+     *   <li>INFO → INFO</li>
+     *   <li>CONFIG, FINE, FINER, FINEST → DEBUG</li>
+     * </ul>
+     */
+    private LogLevel parseLogLevelFromLabel(String label, int exitCode) {
+        if (label != null && label.startsWith("log-")) {
+            String levelName = label.substring(4).toUpperCase();
+            return switch (levelName) {
+                case "SEVERE" -> LogLevel.ERROR;
+                case "WARNING" -> LogLevel.WARN;
+                case "INFO" -> LogLevel.INFO;
+                case "CONFIG", "FINE", "FINER", "FINEST" -> LogLevel.DEBUG;
+                default -> exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;
+            };
+        }
+        return exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;
     }
 
     /**

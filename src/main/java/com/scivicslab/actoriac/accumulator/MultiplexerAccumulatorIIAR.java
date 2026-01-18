@@ -99,7 +99,7 @@ public class MultiplexerAccumulatorIIAR extends IIActorRef<MultiplexerAccumulato
      */
     @Override
     public ActionResult callByActionName(String actionName, String arg) {
-        logger.fine(String.format("actionName = %s, arg = %s", actionName, arg));
+        // Note: Do NOT log here - it causes infinite loop via MultiplexerLogHandler
 
         try {
             switch (actionName) {

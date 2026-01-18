@@ -112,7 +112,7 @@
 <span class="source-line-no">099</span><span id="line-99">     */</span>
 <span class="source-line-no">100</span><span id="line-100">    @Override</span>
 <span class="source-line-no">101</span><span id="line-101">    public ActionResult callByActionName(String actionName, String arg) {</span>
-<span class="source-line-no">102</span><span id="line-102">        logger.fine(String.format("actionName = %s, arg = %s", actionName, arg));</span>
+<span class="source-line-no">102</span><span id="line-102">        // Note: Do NOT log here - it causes infinite loop via MultiplexerLogHandler</span>
 <span class="source-line-no">103</span><span id="line-103"></span>
 <span class="source-line-no">104</span><span id="line-104">        try {</span>
 <span class="source-line-no">105</span><span id="line-105">            switch (actionName) {</span>

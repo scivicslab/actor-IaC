@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -53,6 +54,8 @@ import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.actoriac.log.SessionStatus;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.core.ActorRef;
+import com.scivicslab.pojoactor.workflow.DynamicActorLoaderActor;
+import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 import com.scivicslab.pojoactor.workflow.kustomize.WorkflowKustomizer;
 
@@ -209,6 +212,14 @@ public class RunCLI implements Callable<Integer> {
         description = "Render overlay-applied workflows to specified directory (does not execute)"
     )
     private File renderToDir;
+
+    @Option(
+        names = {"--max-steps", "-m"},
+        description = "Maximum number of state transitions allowed (default: ${DEFAULT-VALUE}). " +
+                     "Use a smaller value for debugging to prevent infinite loops.",
+        defaultValue = "10000"
+    )
+    private int maxSteps;
 
     /** Cache of discovered workflow files: name -> File */
     private final Map<String, File> workflowCache = new HashMap<>();
@@ -536,7 +547,19 @@ public class RunCLI implements Callable<Integer> {
      * Configures log level based on verbose flag.
      */
     private void configureLogLevel(boolean verbose) {
-        Level targetLevel = verbose ? Level.FINE : Level.INFO;
+        Level targetLevel = verbose ? Level.FINER : Level.INFO;
+
+        // Try to load logging.properties from classpath if verbose mode
+        if (verbose) {
+            try (java.io.InputStream is = getClass().getClassLoader().getResourceAsStream("logging.properties")) {
+                if (is != null) {
+                    LogManager.getLogManager().readConfiguration(is);
+                    LOG.info("Loaded logging.properties from classpath");
+                }
+            } catch (java.io.IOException e) {
+                LOG.fine("Could not load logging.properties: " + e.getMessage());
+            }
+        }
 
         // Configure root logger level
         Logger rootLogger = Logger.getLogger("");
@@ -547,12 +570,16 @@ public class RunCLI implements Callable<Integer> {
             handler.setLevel(targetLevel);
         }
 
-        // Configure POJO-actor Interpreter logger
+        // Configure POJO-actor loggers for tracing
         Logger interpreterLogger = Logger.getLogger("com.scivicslab.pojoactor.workflow.Interpreter");
         interpreterLogger.setLevel(targetLevel);
+        Logger actorSystemLogger = Logger.getLogger("com.scivicslab.pojoactor.workflow.IIActorSystem");
+        actorSystemLogger.setLevel(targetLevel);
+        Logger genericIIARLogger = Logger.getLogger("com.scivicslab.pojoactor.workflow.DynamicActorLoaderActor$GenericIIAR");
+        genericIIARLogger.setLevel(targetLevel);
 
         if (verbose) {
-            LOG.info("Verbose mode enabled - log level set to FINE");
+            LOG.info("Verbose mode enabled - log level set to FINER (tracing enabled)");
         }
     }
 
@@ -822,6 +849,17 @@ public class RunCLI implements Callable<Integer> {
             system.addIIActor(multiplexerActor);
             LOG.fine("MultiplexerAccumulator registered as 'outputMultiplexer'");
 
+            // Step 2.6: Create and register DynamicActorLoaderActor for plugin loading
+            DynamicActorLoaderActor loaderActor = new DynamicActorLoaderActor(system);
+            IIActorRef<DynamicActorLoaderActor> loaderRef = new IIActorRef<>("loader", loaderActor, system) {
+                @Override
+                public ActionResult callByActionName(String actionName, String args) {
+                    return loaderActor.callByActionName(actionName, args);
+                }
+            };
+            system.addIIActor(loaderRef);
+            LOG.fine("DynamicActorLoaderActor registered as 'loader'");
+
             // Add log handler to forward java.util.logging to multiplexer
             MultiplexerLogHandler logHandler = new MultiplexerLogHandler(system);
             logHandler.setLevel(java.util.logging.Level.ALL);
@@ -852,11 +890,12 @@ public class RunCLI implements Callable<Integer> {
 
             // Step 4: Execute the workflow
             LOG.info("Starting workflow execution...");
+            LOG.info("Max steps: " + maxSteps);
             LOG.info("-".repeat(50));
-            logToDb("cli", LogLevel.INFO, "Starting workflow execution");
+            logToDb("cli", LogLevel.INFO, "Starting workflow execution (max steps: " + maxSteps + ")");
 
             long startTime = System.currentTimeMillis();
-            ActionResult result = nodeGroupActor.callByActionName("runUntilEnd", "[10000]");
+            ActionResult result = nodeGroupActor.callByActionName("runUntilEnd", "[" + maxSteps + "]");
             long duration = System.currentTimeMillis() - startTime;
 
             LOG.info("-".repeat(50));
