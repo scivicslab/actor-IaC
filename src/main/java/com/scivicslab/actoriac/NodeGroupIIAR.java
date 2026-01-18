@@ -58,6 +58,7 @@ import com.scivicslab.actoriac.log.DistributedLogStore;
  *   <li>{@code hasAccumulator} - Returns true if accumulator exists (for idempotent workflows)</li>
  *   <li>{@code createAccumulator} - Creates an accumulator for result collection</li>
  *   <li>{@code getAccumulatorSummary} - Gets the collected results</li>
+ *   <li>{@code getSessionId} - Gets the current session ID for log queries</li>
  * </ul>
  *
  * <p><strong>Node Actor Hierarchy:</strong></p>
@@ -247,6 +248,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
 
             case "printSessionSummary":
                 return printSessionSummary();
+
+            case "getSessionId":
+                return getSessionIdAction();
 
             case "doNothing":
                 return new ActionResult(true, arg);
@@ -554,6 +558,23 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             throw new IllegalArgumentException(
                 "Invalid argument format. Expected JSON array: " + arg, e);
         }
+    }
+
+    /**
+     * Gets the current session ID.
+     *
+     * <p>Returns the session ID for the current workflow execution.
+     * This can be used by other actors (like SystemInfoAggregator) to
+     * query logs for the current session.</p>
+     *
+     * @return ActionResult with the session ID as the result string
+     */
+    private ActionResult getSessionIdAction() {
+        long sessionId = this.object.getSessionId();
+        if (sessionId < 0) {
+            return new ActionResult(false, "No session ID set");
+        }
+        return new ActionResult(true, String.valueOf(sessionId));
     }
 
     /**
