@@ -282,442 +282,480 @@
 <span class="source-line-no">269</span><span id="line-269">    }</span>
 <span class="source-line-no">270</span><span id="line-270"></span>
 <span class="source-line-no">271</span><span id="line-271">    /**</span>
-<span class="source-line-no">272</span><span id="line-272">     * Returns the current transition YAML snippet for accumulator reporting.</span>
+<span class="source-line-no">272</span><span id="line-272">     * Hook called after a transition completes (success or failure).</span>
 <span class="source-line-no">273</span><span id="line-273">     *</span>
-<span class="source-line-no">274</span><span id="line-274">     * @return the first 10 lines of the current transition in YAML format</span>
-<span class="source-line-no">275</span><span id="line-275">     */</span>
-<span class="source-line-no">276</span><span id="line-276">    public String getCurrentTransitionYaml() {</span>
-<span class="source-line-no">277</span><span id="line-277">        return currentTransitionYaml;</span>
-<span class="source-line-no">278</span><span id="line-278">    }</span>
-<span class="source-line-no">279</span><span id="line-279"></span>
-<span class="source-line-no">280</span><span id="line-280">    /**</span>
-<span class="source-line-no">281</span><span id="line-281">     * Loads and runs a workflow file to completion with overlay support.</span>
-<span class="source-line-no">282</span><span id="line-282">     *</span>
-<span class="source-line-no">283</span><span id="line-283">     * &lt;p&gt;If overlayDir is set, the workflow is loaded with overlay applied.</span>
-<span class="source-line-no">284</span><span id="line-284">     * Variables defined in overlay-conf.yaml are substituted before execution.&lt;/p&gt;</span>
-<span class="source-line-no">285</span><span id="line-285">     *</span>
-<span class="source-line-no">286</span><span id="line-286">     * @param workflowFile the workflow file path (YAML or JSON)</span>
-<span class="source-line-no">287</span><span id="line-287">     * @param maxIterations maximum number of state transitions allowed</span>
-<span class="source-line-no">288</span><span id="line-288">     * @return ActionResult with success=true if completed, false otherwise</span>
-<span class="source-line-no">289</span><span id="line-289">     */</span>
-<span class="source-line-no">290</span><span id="line-290">    @Override</span>
-<span class="source-line-no">291</span><span id="line-291">    public ActionResult runWorkflow(String workflowFile, int maxIterations) {</span>
-<span class="source-line-no">292</span><span id="line-292">        // If no overlay is set, use parent implementation</span>
-<span class="source-line-no">293</span><span id="line-293">        if (overlayDir == null) {</span>
-<span class="source-line-no">294</span><span id="line-294">            return super.runWorkflow(workflowFile, maxIterations);</span>
-<span class="source-line-no">295</span><span id="line-295">        }</span>
+<span class="source-line-no">274</span><span id="line-274">     * &lt;p&gt;Logs the transition result to the outputMultiplexer for</span>
+<span class="source-line-no">275</span><span id="line-275">     * workflow execution reporting.&lt;/p&gt;</span>
+<span class="source-line-no">276</span><span id="line-276">     *</span>
+<span class="source-line-no">277</span><span id="line-277">     * @param transition the transition that was attempted</span>
+<span class="source-line-no">278</span><span id="line-278">     * @param success true if the transition succeeded, false if it failed</span>
+<span class="source-line-no">279</span><span id="line-279">     * @param result the ActionResult from executing the transition's actions</span>
+<span class="source-line-no">280</span><span id="line-280">     */</span>
+<span class="source-line-no">281</span><span id="line-281">    @Override</span>
+<span class="source-line-no">282</span><span id="line-282">    protected void onExitTransition(Transition transition, boolean success, ActionResult result) {</span>
+<span class="source-line-no">283</span><span id="line-283">        String label = transition.getLabel();</span>
+<span class="source-line-no">284</span><span id="line-284">        if (label == null &amp;&amp; transition.getStates() != null &amp;&amp; transition.getStates().size() &gt;= 2) {</span>
+<span class="source-line-no">285</span><span id="line-285">            label = transition.getStates().get(0) + " -&gt; " + transition.getStates().get(1);</span>
+<span class="source-line-no">286</span><span id="line-286">        }</span>
+<span class="source-line-no">287</span><span id="line-287"></span>
+<span class="source-line-no">288</span><span id="line-288">        String status = success ? "SUCCESS" : "FAILED";</span>
+<span class="source-line-no">289</span><span id="line-289">        String resultMsg = result != null ? result.getResult() : "";</span>
+<span class="source-line-no">290</span><span id="line-290">        // Truncate long result messages</span>
+<span class="source-line-no">291</span><span id="line-291">        if (resultMsg.length() &gt; 500) {</span>
+<span class="source-line-no">292</span><span id="line-292">            resultMsg = resultMsg.substring(0, 500) + "...";</span>
+<span class="source-line-no">293</span><span id="line-293">        }</span>
+<span class="source-line-no">294</span><span id="line-294">        String message = "Transition " + status + ": " + label +</span>
+<span class="source-line-no">295</span><span id="line-295">                (resultMsg.isEmpty() ? "" : " - " + resultMsg);</span>
 <span class="source-line-no">296</span><span id="line-296"></span>
-<span class="source-line-no">297</span><span id="line-297">        try {</span>
-<span class="source-line-no">298</span><span id="line-298">            // Reset state for fresh execution</span>
-<span class="source-line-no">299</span><span id="line-299">            reset();</span>
-<span class="source-line-no">300</span><span id="line-300"></span>
-<span class="source-line-no">301</span><span id="line-301">            // Resolve workflow file path</span>
-<span class="source-line-no">302</span><span id="line-302">            Path workflowPath;</span>
-<span class="source-line-no">303</span><span id="line-303">            if (workflowBaseDir != null) {</span>
-<span class="source-line-no">304</span><span id="line-304">                workflowPath = Path.of(workflowBaseDir, workflowFile);</span>
-<span class="source-line-no">305</span><span id="line-305">            } else {</span>
-<span class="source-line-no">306</span><span id="line-306">                workflowPath = Path.of(workflowFile);</span>
-<span class="source-line-no">307</span><span id="line-307">            }</span>
+<span class="source-line-no">297</span><span id="line-297">        // Send to outputMultiplexer</span>
+<span class="source-line-no">298</span><span id="line-298">        IIActorRef&lt;?&gt; multiplexer = system.getIIActor("outputMultiplexer");</span>
+<span class="source-line-no">299</span><span id="line-299">        if (multiplexer != null) {</span>
+<span class="source-line-no">300</span><span id="line-300">            JSONObject arg = new JSONObject();</span>
+<span class="source-line-no">301</span><span id="line-301">            arg.put("source", selfActorRef != null ? selfActorRef.getName() : "unknown");</span>
+<span class="source-line-no">302</span><span id="line-302">            arg.put("type", success ? "transition-success" : "transition-failed");</span>
+<span class="source-line-no">303</span><span id="line-303">            arg.put("label", label);</span>
+<span class="source-line-no">304</span><span id="line-304">            arg.put("data", message);</span>
+<span class="source-line-no">305</span><span id="line-305">            multiplexer.callByActionName("add", arg.toString());</span>
+<span class="source-line-no">306</span><span id="line-306">        }</span>
+<span class="source-line-no">307</span><span id="line-307">    }</span>
 <span class="source-line-no">308</span><span id="line-308"></span>
-<span class="source-line-no">309</span><span id="line-309">            // Load workflow with overlay applied</span>
-<span class="source-line-no">310</span><span id="line-310">            Path overlayPath = Path.of(overlayDir);</span>
-<span class="source-line-no">311</span><span id="line-311">            readYaml(workflowPath, overlayPath);</span>
-<span class="source-line-no">312</span><span id="line-312"></span>
-<span class="source-line-no">313</span><span id="line-313">            // Run until end</span>
-<span class="source-line-no">314</span><span id="line-314">            return runUntilEnd(maxIterations);</span>
-<span class="source-line-no">315</span><span id="line-315"></span>
-<span class="source-line-no">316</span><span id="line-316">        } catch (Exception e) {</span>
-<span class="source-line-no">317</span><span id="line-317">            logger.log(Level.SEVERE, "Error running workflow with overlay: " + workflowFile, e);</span>
-<span class="source-line-no">318</span><span id="line-318">            return new ActionResult(false, "Error: " + e.getMessage());</span>
-<span class="source-line-no">319</span><span id="line-319">        }</span>
-<span class="source-line-no">320</span><span id="line-320">    }</span>
-<span class="source-line-no">321</span><span id="line-321"></span>
-<span class="source-line-no">322</span><span id="line-322">    // ========================================================================</span>
-<span class="source-line-no">323</span><span id="line-323">    // Document Change Detection API (replaces /tmp file-based approach)</span>
-<span class="source-line-no">324</span><span id="line-324">    // ========================================================================</span>
-<span class="source-line-no">325</span><span id="line-325"></span>
-<span class="source-line-no">326</span><span id="line-326">    /**</span>
-<span class="source-line-no">327</span><span id="line-327">     * Detects changed documents and stores them in POJO state.</span>
-<span class="source-line-no">328</span><span id="line-328">     *</span>
-<span class="source-line-no">329</span><span id="line-329">     * &lt;p&gt;This method replaces the shell script that wrote to /tmp/changed_docs.txt.</span>
-<span class="source-line-no">330</span><span id="line-330">     * It reads the document list, checks git status for each, and stores changed</span>
-<span class="source-line-no">331</span><span id="line-331">     * document names in the changedDocuments set.&lt;/p&gt;</span>
-<span class="source-line-no">332</span><span id="line-332">     *</span>
-<span class="source-line-no">333</span><span id="line-333">     * @param docListPath path to the document list file</span>
-<span class="source-line-no">334</span><span id="line-334">     * @return ActionResult with detection summary</span>
-<span class="source-line-no">335</span><span id="line-335">     * @throws IOException if file operations fail</span>
-<span class="source-line-no">336</span><span id="line-336">     */</span>
-<span class="source-line-no">337</span><span id="line-337">    public ActionResult detectDocumentChanges(String docListPath) throws IOException {</span>
-<span class="source-line-no">338</span><span id="line-338">        // Clear previous results</span>
-<span class="source-line-no">339</span><span id="line-339">        changedDocuments.clear();</span>
-<span class="source-line-no">340</span><span id="line-340"></span>
-<span class="source-line-no">341</span><span id="line-341">        // Expand ~ to home directory</span>
-<span class="source-line-no">342</span><span id="line-342">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
-<span class="source-line-no">343</span><span id="line-343">        Path listPath = Path.of(expandedPath);</span>
-<span class="source-line-no">344</span><span id="line-344"></span>
-<span class="source-line-no">345</span><span id="line-345">        if (!Files.exists(listPath)) {</span>
-<span class="source-line-no">346</span><span id="line-346">            return new ActionResult(false, "Document list not found: " + docListPath);</span>
-<span class="source-line-no">347</span><span id="line-347">        }</span>
-<span class="source-line-no">348</span><span id="line-348"></span>
-<span class="source-line-no">349</span><span id="line-349">        // Check for FORCE_FULL_BUILD environment variable</span>
-<span class="source-line-no">350</span><span id="line-350">        boolean forceBuild = "true".equalsIgnoreCase(System.getenv("FORCE_FULL_BUILD"));</span>
-<span class="source-line-no">351</span><span id="line-351"></span>
-<span class="source-line-no">352</span><span id="line-352">        StringBuilder summary = new StringBuilder();</span>
+<span class="source-line-no">309</span><span id="line-309">    /**</span>
+<span class="source-line-no">310</span><span id="line-310">     * Returns the current transition YAML snippet for accumulator reporting.</span>
+<span class="source-line-no">311</span><span id="line-311">     *</span>
+<span class="source-line-no">312</span><span id="line-312">     * @return the first 10 lines of the current transition in YAML format</span>
+<span class="source-line-no">313</span><span id="line-313">     */</span>
+<span class="source-line-no">314</span><span id="line-314">    public String getCurrentTransitionYaml() {</span>
+<span class="source-line-no">315</span><span id="line-315">        return currentTransitionYaml;</span>
+<span class="source-line-no">316</span><span id="line-316">    }</span>
+<span class="source-line-no">317</span><span id="line-317"></span>
+<span class="source-line-no">318</span><span id="line-318">    /**</span>
+<span class="source-line-no">319</span><span id="line-319">     * Loads and runs a workflow file to completion with overlay support.</span>
+<span class="source-line-no">320</span><span id="line-320">     *</span>
+<span class="source-line-no">321</span><span id="line-321">     * &lt;p&gt;If overlayDir is set, the workflow is loaded with overlay applied.</span>
+<span class="source-line-no">322</span><span id="line-322">     * Variables defined in overlay-conf.yaml are substituted before execution.&lt;/p&gt;</span>
+<span class="source-line-no">323</span><span id="line-323">     *</span>
+<span class="source-line-no">324</span><span id="line-324">     * @param workflowFile the workflow file path (YAML or JSON)</span>
+<span class="source-line-no">325</span><span id="line-325">     * @param maxIterations maximum number of state transitions allowed</span>
+<span class="source-line-no">326</span><span id="line-326">     * @return ActionResult with success=true if completed, false otherwise</span>
+<span class="source-line-no">327</span><span id="line-327">     */</span>
+<span class="source-line-no">328</span><span id="line-328">    @Override</span>
+<span class="source-line-no">329</span><span id="line-329">    public ActionResult runWorkflow(String workflowFile, int maxIterations) {</span>
+<span class="source-line-no">330</span><span id="line-330">        // If no overlay is set, use parent implementation</span>
+<span class="source-line-no">331</span><span id="line-331">        if (overlayDir == null) {</span>
+<span class="source-line-no">332</span><span id="line-332">            return super.runWorkflow(workflowFile, maxIterations);</span>
+<span class="source-line-no">333</span><span id="line-333">        }</span>
+<span class="source-line-no">334</span><span id="line-334"></span>
+<span class="source-line-no">335</span><span id="line-335">        try {</span>
+<span class="source-line-no">336</span><span id="line-336">            // Reset state for fresh execution</span>
+<span class="source-line-no">337</span><span id="line-337">            reset();</span>
+<span class="source-line-no">338</span><span id="line-338"></span>
+<span class="source-line-no">339</span><span id="line-339">            // Resolve workflow file path</span>
+<span class="source-line-no">340</span><span id="line-340">            Path workflowPath;</span>
+<span class="source-line-no">341</span><span id="line-341">            if (workflowBaseDir != null) {</span>
+<span class="source-line-no">342</span><span id="line-342">                workflowPath = Path.of(workflowBaseDir, workflowFile);</span>
+<span class="source-line-no">343</span><span id="line-343">            } else {</span>
+<span class="source-line-no">344</span><span id="line-344">                workflowPath = Path.of(workflowFile);</span>
+<span class="source-line-no">345</span><span id="line-345">            }</span>
+<span class="source-line-no">346</span><span id="line-346"></span>
+<span class="source-line-no">347</span><span id="line-347">            // Load workflow with overlay applied</span>
+<span class="source-line-no">348</span><span id="line-348">            Path overlayPath = Path.of(overlayDir);</span>
+<span class="source-line-no">349</span><span id="line-349">            readYaml(workflowPath, overlayPath);</span>
+<span class="source-line-no">350</span><span id="line-350"></span>
+<span class="source-line-no">351</span><span id="line-351">            // Run until end</span>
+<span class="source-line-no">352</span><span id="line-352">            return runUntilEnd(maxIterations);</span>
 <span class="source-line-no">353</span><span id="line-353"></span>
-<span class="source-line-no">354</span><span id="line-354">        if (forceBuild) {</span>
-<span class="source-line-no">355</span><span id="line-355">            summary.append("=== FORCE_FULL_BUILD enabled: processing all documents ===\n");</span>
-<span class="source-line-no">356</span><span id="line-356">        } else {</span>
-<span class="source-line-no">357</span><span id="line-357">            summary.append("=== Detecting changes via git fetch ===\n");</span>
-<span class="source-line-no">358</span><span id="line-358">        }</span>
+<span class="source-line-no">354</span><span id="line-354">        } catch (Exception e) {</span>
+<span class="source-line-no">355</span><span id="line-355">            logger.log(Level.SEVERE, "Error running workflow with overlay: " + workflowFile, e);</span>
+<span class="source-line-no">356</span><span id="line-356">            return new ActionResult(false, "Error: " + e.getMessage());</span>
+<span class="source-line-no">357</span><span id="line-357">        }</span>
+<span class="source-line-no">358</span><span id="line-358">    }</span>
 <span class="source-line-no">359</span><span id="line-359"></span>
-<span class="source-line-no">360</span><span id="line-360">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
-<span class="source-line-no">361</span><span id="line-361">            String line;</span>
-<span class="source-line-no">362</span><span id="line-362">            while ((line = reader.readLine()) != null) {</span>
-<span class="source-line-no">363</span><span id="line-363">                line = line.trim();</span>
-<span class="source-line-no">364</span><span id="line-364"></span>
-<span class="source-line-no">365</span><span id="line-365">                // Skip comments and empty lines</span>
-<span class="source-line-no">366</span><span id="line-366">                if (line.isEmpty() || line.startsWith("#")) {</span>
-<span class="source-line-no">367</span><span id="line-367">                    continue;</span>
-<span class="source-line-no">368</span><span id="line-368">                }</span>
-<span class="source-line-no">369</span><span id="line-369"></span>
-<span class="source-line-no">370</span><span id="line-370">                // Parse: path git_url</span>
-<span class="source-line-no">371</span><span id="line-371">                String[] parts = line.split("\\s+", 2);</span>
-<span class="source-line-no">372</span><span id="line-372">                String path = parts[0].replace("~", System.getProperty("user.home"));</span>
-<span class="source-line-no">373</span><span id="line-373">                String docName = Path.of(path).getFileName().toString();</span>
-<span class="source-line-no">374</span><span id="line-374"></span>
-<span class="source-line-no">375</span><span id="line-375">                if (forceBuild) {</span>
-<span class="source-line-no">376</span><span id="line-376">                    changedDocuments.add(docName);</span>
-<span class="source-line-no">377</span><span id="line-377">                    summary.append("  [FORCE] ").append(docName).append("\n");</span>
-<span class="source-line-no">378</span><span id="line-378">                    continue;</span>
-<span class="source-line-no">379</span><span id="line-379">                }</span>
-<span class="source-line-no">380</span><span id="line-380"></span>
-<span class="source-line-no">381</span><span id="line-381">                // Check document status</span>
-<span class="source-line-no">382</span><span id="line-382">                Path docPath = Path.of(path);</span>
-<span class="source-line-no">383</span><span id="line-383">                Path gitPath = docPath.resolve(".git");</span>
-<span class="source-line-no">384</span><span id="line-384"></span>
-<span class="source-line-no">385</span><span id="line-385">                if (!Files.exists(docPath)) {</span>
-<span class="source-line-no">386</span><span id="line-386">                    // New document</span>
-<span class="source-line-no">387</span><span id="line-387">                    changedDocuments.add(docName);</span>
-<span class="source-line-no">388</span><span id="line-388">                    summary.append("  [NEW] ").append(docName).append("\n");</span>
-<span class="source-line-no">389</span><span id="line-389">                } else if (!Files.exists(gitPath)) {</span>
-<span class="source-line-no">390</span><span id="line-390">                    // Not a git repository</span>
-<span class="source-line-no">391</span><span id="line-391">                    changedDocuments.add(docName);</span>
-<span class="source-line-no">392</span><span id="line-392">                    summary.append("  [NO-GIT] ").append(docName).append("\n");</span>
-<span class="source-line-no">393</span><span id="line-393">                } else {</span>
-<span class="source-line-no">394</span><span id="line-394">                    // Check for remote changes using git</span>
-<span class="source-line-no">395</span><span id="line-395">                    String status = checkGitStatus(docPath);</span>
-<span class="source-line-no">396</span><span id="line-396">                    if (status.startsWith("[CHANGED]") || status.startsWith("[UNKNOWN]")) {</span>
-<span class="source-line-no">397</span><span id="line-397">                        changedDocuments.add(docName);</span>
-<span class="source-line-no">398</span><span id="line-398">                    }</span>
-<span class="source-line-no">399</span><span id="line-399">                    summary.append("  ").append(status).append(" ").append(docName).append("\n");</span>
-<span class="source-line-no">400</span><span id="line-400">                }</span>
-<span class="source-line-no">401</span><span id="line-401">            }</span>
-<span class="source-line-no">402</span><span id="line-402">        }</span>
-<span class="source-line-no">403</span><span id="line-403"></span>
-<span class="source-line-no">404</span><span id="line-404">        summary.append("\n=== Change detection summary ===\n");</span>
-<span class="source-line-no">405</span><span id="line-405">        if (changedDocuments.isEmpty()) {</span>
-<span class="source-line-no">406</span><span id="line-406">            summary.append("No changes detected. All documents are up to date.\n");</span>
-<span class="source-line-no">407</span><span id="line-407">        } else {</span>
-<span class="source-line-no">408</span><span id="line-408">            summary.append("Documents to process: ").append(changedDocuments.size()).append("\n");</span>
-<span class="source-line-no">409</span><span id="line-409">            for (String doc : changedDocuments) {</span>
-<span class="source-line-no">410</span><span id="line-410">                summary.append(doc).append("\n");</span>
-<span class="source-line-no">411</span><span id="line-411">            }</span>
-<span class="source-line-no">412</span><span id="line-412">        }</span>
-<span class="source-line-no">413</span><span id="line-413"></span>
-<span class="source-line-no">414</span><span id="line-414">        // Print summary (like the original shell script did)</span>
-<span class="source-line-no">415</span><span id="line-415">        System.out.println(summary);</span>
-<span class="source-line-no">416</span><span id="line-416"></span>
-<span class="source-line-no">417</span><span id="line-417">        return new ActionResult(true, "Detected " + changedDocuments.size() + " changed documents");</span>
-<span class="source-line-no">418</span><span id="line-418">    }</span>
-<span class="source-line-no">419</span><span id="line-419"></span>
-<span class="source-line-no">420</span><span id="line-420">    /**</span>
-<span class="source-line-no">421</span><span id="line-421">     * Checks git status for a document directory.</span>
-<span class="source-line-no">422</span><span id="line-422">     *</span>
-<span class="source-line-no">423</span><span id="line-423">     * @param docPath path to the document directory</span>
-<span class="source-line-no">424</span><span id="line-424">     * @return status string like "[CHANGED]", "[UP-TO-DATE]", or "[UNKNOWN]"</span>
-<span class="source-line-no">425</span><span id="line-425">     */</span>
-<span class="source-line-no">426</span><span id="line-426">    private String checkGitStatus(Path docPath) {</span>
-<span class="source-line-no">427</span><span id="line-427">        try {</span>
-<span class="source-line-no">428</span><span id="line-428">            // git fetch</span>
-<span class="source-line-no">429</span><span id="line-429">            ProcessBuilder fetchPb = new ProcessBuilder("git", "fetch", "origin");</span>
-<span class="source-line-no">430</span><span id="line-430">            fetchPb.directory(docPath.toFile());</span>
-<span class="source-line-no">431</span><span id="line-431">            fetchPb.redirectErrorStream(true);</span>
-<span class="source-line-no">432</span><span id="line-432">            Process fetchProcess = fetchPb.start();</span>
-<span class="source-line-no">433</span><span id="line-433">            fetchProcess.waitFor();</span>
-<span class="source-line-no">434</span><span id="line-434"></span>
-<span class="source-line-no">435</span><span id="line-435">            // Get local HEAD</span>
-<span class="source-line-no">436</span><span id="line-436">            String local = runGitCommand(docPath, "git", "rev-parse", "HEAD");</span>
-<span class="source-line-no">437</span><span id="line-437"></span>
-<span class="source-line-no">438</span><span id="line-438">            // Get remote HEAD (try main first, then master)</span>
-<span class="source-line-no">439</span><span id="line-439">            String remote = runGitCommand(docPath, "git", "rev-parse", "origin/main");</span>
-<span class="source-line-no">440</span><span id="line-440">            if (remote == null || remote.equals("unknown")) {</span>
-<span class="source-line-no">441</span><span id="line-441">                remote = runGitCommand(docPath, "git", "rev-parse", "origin/master");</span>
-<span class="source-line-no">442</span><span id="line-442">            }</span>
-<span class="source-line-no">443</span><span id="line-443"></span>
-<span class="source-line-no">444</span><span id="line-444">            if (local == null || remote == null || local.equals("unknown") || remote.equals("unknown")) {</span>
-<span class="source-line-no">445</span><span id="line-445">                return "[UNKNOWN] (cannot determine state)";</span>
-<span class="source-line-no">446</span><span id="line-446">            }</span>
-<span class="source-line-no">447</span><span id="line-447"></span>
-<span class="source-line-no">448</span><span id="line-448">            if (!local.equals(remote)) {</span>
-<span class="source-line-no">449</span><span id="line-449">                String localShort = local.length() &gt; 7 ? local.substring(0, 7) : local;</span>
-<span class="source-line-no">450</span><span id="line-450">                String remoteShort = remote.length() &gt; 7 ? remote.substring(0, 7) : remote;</span>
-<span class="source-line-no">451</span><span id="line-451">                return "[CHANGED] (local: " + localShort + ", remote: " + remoteShort + ")";</span>
-<span class="source-line-no">452</span><span id="line-452">            }</span>
-<span class="source-line-no">453</span><span id="line-453"></span>
-<span class="source-line-no">454</span><span id="line-454">            return "[UP-TO-DATE]";</span>
-<span class="source-line-no">455</span><span id="line-455"></span>
-<span class="source-line-no">456</span><span id="line-456">        } catch (Exception e) {</span>
-<span class="source-line-no">457</span><span id="line-457">            logger.log(Level.WARNING, "Error checking git status for " + docPath, e);</span>
-<span class="source-line-no">458</span><span id="line-458">            return "[UNKNOWN] (error: " + e.getMessage() + ")";</span>
-<span class="source-line-no">459</span><span id="line-459">        }</span>
-<span class="source-line-no">460</span><span id="line-460">    }</span>
-<span class="source-line-no">461</span><span id="line-461"></span>
-<span class="source-line-no">462</span><span id="line-462">    /**</span>
-<span class="source-line-no">463</span><span id="line-463">     * Runs a git command and returns the output.</span>
-<span class="source-line-no">464</span><span id="line-464">     */</span>
-<span class="source-line-no">465</span><span id="line-465">    private String runGitCommand(Path workDir, String... command) {</span>
-<span class="source-line-no">466</span><span id="line-466">        try {</span>
-<span class="source-line-no">467</span><span id="line-467">            ProcessBuilder pb = new ProcessBuilder(command);</span>
-<span class="source-line-no">468</span><span id="line-468">            pb.directory(workDir.toFile());</span>
-<span class="source-line-no">469</span><span id="line-469">            pb.redirectErrorStream(true);</span>
-<span class="source-line-no">470</span><span id="line-470">            Process process = pb.start();</span>
-<span class="source-line-no">471</span><span id="line-471"></span>
-<span class="source-line-no">472</span><span id="line-472">            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {</span>
-<span class="source-line-no">473</span><span id="line-473">                String line = reader.readLine();</span>
-<span class="source-line-no">474</span><span id="line-474">                process.waitFor();</span>
-<span class="source-line-no">475</span><span id="line-475">                return line != null ? line.trim() : "unknown";</span>
-<span class="source-line-no">476</span><span id="line-476">            }</span>
-<span class="source-line-no">477</span><span id="line-477">        } catch (Exception e) {</span>
-<span class="source-line-no">478</span><span id="line-478">            return "unknown";</span>
-<span class="source-line-no">479</span><span id="line-479">        }</span>
-<span class="source-line-no">480</span><span id="line-480">    }</span>
+<span class="source-line-no">360</span><span id="line-360">    // ========================================================================</span>
+<span class="source-line-no">361</span><span id="line-361">    // Document Change Detection API (replaces /tmp file-based approach)</span>
+<span class="source-line-no">362</span><span id="line-362">    // ========================================================================</span>
+<span class="source-line-no">363</span><span id="line-363"></span>
+<span class="source-line-no">364</span><span id="line-364">    /**</span>
+<span class="source-line-no">365</span><span id="line-365">     * Detects changed documents and stores them in POJO state.</span>
+<span class="source-line-no">366</span><span id="line-366">     *</span>
+<span class="source-line-no">367</span><span id="line-367">     * &lt;p&gt;This method replaces the shell script that wrote to /tmp/changed_docs.txt.</span>
+<span class="source-line-no">368</span><span id="line-368">     * It reads the document list, checks git status for each, and stores changed</span>
+<span class="source-line-no">369</span><span id="line-369">     * document names in the changedDocuments set.&lt;/p&gt;</span>
+<span class="source-line-no">370</span><span id="line-370">     *</span>
+<span class="source-line-no">371</span><span id="line-371">     * @param docListPath path to the document list file</span>
+<span class="source-line-no">372</span><span id="line-372">     * @return ActionResult with detection summary</span>
+<span class="source-line-no">373</span><span id="line-373">     * @throws IOException if file operations fail</span>
+<span class="source-line-no">374</span><span id="line-374">     */</span>
+<span class="source-line-no">375</span><span id="line-375">    public ActionResult detectDocumentChanges(String docListPath) throws IOException {</span>
+<span class="source-line-no">376</span><span id="line-376">        // Clear previous results</span>
+<span class="source-line-no">377</span><span id="line-377">        changedDocuments.clear();</span>
+<span class="source-line-no">378</span><span id="line-378"></span>
+<span class="source-line-no">379</span><span id="line-379">        // Expand ~ to home directory</span>
+<span class="source-line-no">380</span><span id="line-380">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
+<span class="source-line-no">381</span><span id="line-381">        Path listPath = Path.of(expandedPath);</span>
+<span class="source-line-no">382</span><span id="line-382"></span>
+<span class="source-line-no">383</span><span id="line-383">        if (!Files.exists(listPath)) {</span>
+<span class="source-line-no">384</span><span id="line-384">            return new ActionResult(false, "Document list not found: " + docListPath);</span>
+<span class="source-line-no">385</span><span id="line-385">        }</span>
+<span class="source-line-no">386</span><span id="line-386"></span>
+<span class="source-line-no">387</span><span id="line-387">        // Check for FORCE_FULL_BUILD environment variable</span>
+<span class="source-line-no">388</span><span id="line-388">        boolean forceBuild = "true".equalsIgnoreCase(System.getenv("FORCE_FULL_BUILD"));</span>
+<span class="source-line-no">389</span><span id="line-389"></span>
+<span class="source-line-no">390</span><span id="line-390">        StringBuilder summary = new StringBuilder();</span>
+<span class="source-line-no">391</span><span id="line-391"></span>
+<span class="source-line-no">392</span><span id="line-392">        if (forceBuild) {</span>
+<span class="source-line-no">393</span><span id="line-393">            summary.append("=== FORCE_FULL_BUILD enabled: processing all documents ===\n");</span>
+<span class="source-line-no">394</span><span id="line-394">        } else {</span>
+<span class="source-line-no">395</span><span id="line-395">            summary.append("=== Detecting changes via git fetch ===\n");</span>
+<span class="source-line-no">396</span><span id="line-396">        }</span>
+<span class="source-line-no">397</span><span id="line-397"></span>
+<span class="source-line-no">398</span><span id="line-398">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
+<span class="source-line-no">399</span><span id="line-399">            String line;</span>
+<span class="source-line-no">400</span><span id="line-400">            while ((line = reader.readLine()) != null) {</span>
+<span class="source-line-no">401</span><span id="line-401">                line = line.trim();</span>
+<span class="source-line-no">402</span><span id="line-402"></span>
+<span class="source-line-no">403</span><span id="line-403">                // Skip comments and empty lines</span>
+<span class="source-line-no">404</span><span id="line-404">                if (line.isEmpty() || line.startsWith("#")) {</span>
+<span class="source-line-no">405</span><span id="line-405">                    continue;</span>
+<span class="source-line-no">406</span><span id="line-406">                }</span>
+<span class="source-line-no">407</span><span id="line-407"></span>
+<span class="source-line-no">408</span><span id="line-408">                // Parse: path git_url</span>
+<span class="source-line-no">409</span><span id="line-409">                String[] parts = line.split("\\s+", 2);</span>
+<span class="source-line-no">410</span><span id="line-410">                String path = parts[0].replace("~", System.getProperty("user.home"));</span>
+<span class="source-line-no">411</span><span id="line-411">                String docName = Path.of(path).getFileName().toString();</span>
+<span class="source-line-no">412</span><span id="line-412"></span>
+<span class="source-line-no">413</span><span id="line-413">                if (forceBuild) {</span>
+<span class="source-line-no">414</span><span id="line-414">                    changedDocuments.add(docName);</span>
+<span class="source-line-no">415</span><span id="line-415">                    summary.append("  [FORCE] ").append(docName).append("\n");</span>
+<span class="source-line-no">416</span><span id="line-416">                    continue;</span>
+<span class="source-line-no">417</span><span id="line-417">                }</span>
+<span class="source-line-no">418</span><span id="line-418"></span>
+<span class="source-line-no">419</span><span id="line-419">                // Check document status</span>
+<span class="source-line-no">420</span><span id="line-420">                Path docPath = Path.of(path);</span>
+<span class="source-line-no">421</span><span id="line-421">                Path gitPath = docPath.resolve(".git");</span>
+<span class="source-line-no">422</span><span id="line-422"></span>
+<span class="source-line-no">423</span><span id="line-423">                if (!Files.exists(docPath)) {</span>
+<span class="source-line-no">424</span><span id="line-424">                    // New document</span>
+<span class="source-line-no">425</span><span id="line-425">                    changedDocuments.add(docName);</span>
+<span class="source-line-no">426</span><span id="line-426">                    summary.append("  [NEW] ").append(docName).append("\n");</span>
+<span class="source-line-no">427</span><span id="line-427">                } else if (!Files.exists(gitPath)) {</span>
+<span class="source-line-no">428</span><span id="line-428">                    // Not a git repository</span>
+<span class="source-line-no">429</span><span id="line-429">                    changedDocuments.add(docName);</span>
+<span class="source-line-no">430</span><span id="line-430">                    summary.append("  [NO-GIT] ").append(docName).append("\n");</span>
+<span class="source-line-no">431</span><span id="line-431">                } else {</span>
+<span class="source-line-no">432</span><span id="line-432">                    // Check for remote changes using git</span>
+<span class="source-line-no">433</span><span id="line-433">                    String status = checkGitStatus(docPath);</span>
+<span class="source-line-no">434</span><span id="line-434">                    if (status.startsWith("[CHANGED]") || status.startsWith("[UNKNOWN]")) {</span>
+<span class="source-line-no">435</span><span id="line-435">                        changedDocuments.add(docName);</span>
+<span class="source-line-no">436</span><span id="line-436">                    }</span>
+<span class="source-line-no">437</span><span id="line-437">                    summary.append("  ").append(status).append(" ").append(docName).append("\n");</span>
+<span class="source-line-no">438</span><span id="line-438">                }</span>
+<span class="source-line-no">439</span><span id="line-439">            }</span>
+<span class="source-line-no">440</span><span id="line-440">        }</span>
+<span class="source-line-no">441</span><span id="line-441"></span>
+<span class="source-line-no">442</span><span id="line-442">        summary.append("\n=== Change detection summary ===\n");</span>
+<span class="source-line-no">443</span><span id="line-443">        if (changedDocuments.isEmpty()) {</span>
+<span class="source-line-no">444</span><span id="line-444">            summary.append("No changes detected. All documents are up to date.\n");</span>
+<span class="source-line-no">445</span><span id="line-445">        } else {</span>
+<span class="source-line-no">446</span><span id="line-446">            summary.append("Documents to process: ").append(changedDocuments.size()).append("\n");</span>
+<span class="source-line-no">447</span><span id="line-447">            for (String doc : changedDocuments) {</span>
+<span class="source-line-no">448</span><span id="line-448">                summary.append(doc).append("\n");</span>
+<span class="source-line-no">449</span><span id="line-449">            }</span>
+<span class="source-line-no">450</span><span id="line-450">        }</span>
+<span class="source-line-no">451</span><span id="line-451"></span>
+<span class="source-line-no">452</span><span id="line-452">        // Print summary (like the original shell script did)</span>
+<span class="source-line-no">453</span><span id="line-453">        System.out.println(summary);</span>
+<span class="source-line-no">454</span><span id="line-454"></span>
+<span class="source-line-no">455</span><span id="line-455">        return new ActionResult(true, "Detected " + changedDocuments.size() + " changed documents");</span>
+<span class="source-line-no">456</span><span id="line-456">    }</span>
+<span class="source-line-no">457</span><span id="line-457"></span>
+<span class="source-line-no">458</span><span id="line-458">    /**</span>
+<span class="source-line-no">459</span><span id="line-459">     * Checks git status for a document directory.</span>
+<span class="source-line-no">460</span><span id="line-460">     *</span>
+<span class="source-line-no">461</span><span id="line-461">     * @param docPath path to the document directory</span>
+<span class="source-line-no">462</span><span id="line-462">     * @return status string like "[CHANGED]", "[UP-TO-DATE]", or "[UNKNOWN]"</span>
+<span class="source-line-no">463</span><span id="line-463">     */</span>
+<span class="source-line-no">464</span><span id="line-464">    private String checkGitStatus(Path docPath) {</span>
+<span class="source-line-no">465</span><span id="line-465">        try {</span>
+<span class="source-line-no">466</span><span id="line-466">            // git fetch</span>
+<span class="source-line-no">467</span><span id="line-467">            ProcessBuilder fetchPb = new ProcessBuilder("git", "fetch", "origin");</span>
+<span class="source-line-no">468</span><span id="line-468">            fetchPb.directory(docPath.toFile());</span>
+<span class="source-line-no">469</span><span id="line-469">            fetchPb.redirectErrorStream(true);</span>
+<span class="source-line-no">470</span><span id="line-470">            Process fetchProcess = fetchPb.start();</span>
+<span class="source-line-no">471</span><span id="line-471">            fetchProcess.waitFor();</span>
+<span class="source-line-no">472</span><span id="line-472"></span>
+<span class="source-line-no">473</span><span id="line-473">            // Get local HEAD</span>
+<span class="source-line-no">474</span><span id="line-474">            String local = runGitCommand(docPath, "git", "rev-parse", "HEAD");</span>
+<span class="source-line-no">475</span><span id="line-475"></span>
+<span class="source-line-no">476</span><span id="line-476">            // Get remote HEAD (try main first, then master)</span>
+<span class="source-line-no">477</span><span id="line-477">            String remote = runGitCommand(docPath, "git", "rev-parse", "origin/main");</span>
+<span class="source-line-no">478</span><span id="line-478">            if (remote == null || remote.equals("unknown")) {</span>
+<span class="source-line-no">479</span><span id="line-479">                remote = runGitCommand(docPath, "git", "rev-parse", "origin/master");</span>
+<span class="source-line-no">480</span><span id="line-480">            }</span>
 <span class="source-line-no">481</span><span id="line-481"></span>
-<span class="source-line-no">482</span><span id="line-482">    /**</span>
-<span class="source-line-no">483</span><span id="line-483">     * Checks if a specific document is in the changed list.</span>
-<span class="source-line-no">484</span><span id="line-484">     *</span>
-<span class="source-line-no">485</span><span id="line-485">     * @param docName the document name to check</span>
-<span class="source-line-no">486</span><span id="line-486">     * @return true if the document was detected as changed</span>
-<span class="source-line-no">487</span><span id="line-487">     */</span>
-<span class="source-line-no">488</span><span id="line-488">    public boolean isDocumentChanged(String docName) {</span>
-<span class="source-line-no">489</span><span id="line-489">        return changedDocuments.contains(docName);</span>
-<span class="source-line-no">490</span><span id="line-490">    }</span>
+<span class="source-line-no">482</span><span id="line-482">            if (local == null || remote == null || local.equals("unknown") || remote.equals("unknown")) {</span>
+<span class="source-line-no">483</span><span id="line-483">                return "[UNKNOWN] (cannot determine state)";</span>
+<span class="source-line-no">484</span><span id="line-484">            }</span>
+<span class="source-line-no">485</span><span id="line-485"></span>
+<span class="source-line-no">486</span><span id="line-486">            if (!local.equals(remote)) {</span>
+<span class="source-line-no">487</span><span id="line-487">                String localShort = local.length() &gt; 7 ? local.substring(0, 7) : local;</span>
+<span class="source-line-no">488</span><span id="line-488">                String remoteShort = remote.length() &gt; 7 ? remote.substring(0, 7) : remote;</span>
+<span class="source-line-no">489</span><span id="line-489">                return "[CHANGED] (local: " + localShort + ", remote: " + remoteShort + ")";</span>
+<span class="source-line-no">490</span><span id="line-490">            }</span>
 <span class="source-line-no">491</span><span id="line-491"></span>
-<span class="source-line-no">492</span><span id="line-492">    /**</span>
-<span class="source-line-no">493</span><span id="line-493">     * Gets the number of changed documents.</span>
-<span class="source-line-no">494</span><span id="line-494">     *</span>
-<span class="source-line-no">495</span><span id="line-495">     * @return the count of changed documents</span>
-<span class="source-line-no">496</span><span id="line-496">     */</span>
-<span class="source-line-no">497</span><span id="line-497">    public int getChangedDocumentsCount() {</span>
-<span class="source-line-no">498</span><span id="line-498">        return changedDocuments.size();</span>
-<span class="source-line-no">499</span><span id="line-499">    }</span>
-<span class="source-line-no">500</span><span id="line-500"></span>
-<span class="source-line-no">501</span><span id="line-501">    /**</span>
-<span class="source-line-no">502</span><span id="line-502">     * Gets all changed document names.</span>
-<span class="source-line-no">503</span><span id="line-503">     *</span>
-<span class="source-line-no">504</span><span id="line-504">     * @return unmodifiable set of changed document names</span>
-<span class="source-line-no">505</span><span id="line-505">     */</span>
-<span class="source-line-no">506</span><span id="line-506">    public Set&lt;String&gt; getChangedDocuments() {</span>
-<span class="source-line-no">507</span><span id="line-507">        return Set.copyOf(changedDocuments);</span>
-<span class="source-line-no">508</span><span id="line-508">    }</span>
+<span class="source-line-no">492</span><span id="line-492">            return "[UP-TO-DATE]";</span>
+<span class="source-line-no">493</span><span id="line-493"></span>
+<span class="source-line-no">494</span><span id="line-494">        } catch (Exception e) {</span>
+<span class="source-line-no">495</span><span id="line-495">            logger.log(Level.WARNING, "Error checking git status for " + docPath, e);</span>
+<span class="source-line-no">496</span><span id="line-496">            return "[UNKNOWN] (error: " + e.getMessage() + ")";</span>
+<span class="source-line-no">497</span><span id="line-497">        }</span>
+<span class="source-line-no">498</span><span id="line-498">    }</span>
+<span class="source-line-no">499</span><span id="line-499"></span>
+<span class="source-line-no">500</span><span id="line-500">    /**</span>
+<span class="source-line-no">501</span><span id="line-501">     * Runs a git command and returns the output.</span>
+<span class="source-line-no">502</span><span id="line-502">     */</span>
+<span class="source-line-no">503</span><span id="line-503">    private String runGitCommand(Path workDir, String... command) {</span>
+<span class="source-line-no">504</span><span id="line-504">        try {</span>
+<span class="source-line-no">505</span><span id="line-505">            ProcessBuilder pb = new ProcessBuilder(command);</span>
+<span class="source-line-no">506</span><span id="line-506">            pb.directory(workDir.toFile());</span>
+<span class="source-line-no">507</span><span id="line-507">            pb.redirectErrorStream(true);</span>
+<span class="source-line-no">508</span><span id="line-508">            Process process = pb.start();</span>
 <span class="source-line-no">509</span><span id="line-509"></span>
-<span class="source-line-no">510</span><span id="line-510">    /**</span>
-<span class="source-line-no">511</span><span id="line-511">     * Checks if there are any changed documents to process.</span>
-<span class="source-line-no">512</span><span id="line-512">     *</span>
-<span class="source-line-no">513</span><span id="line-513">     * @return true if at least one document needs processing</span>
-<span class="source-line-no">514</span><span id="line-514">     */</span>
-<span class="source-line-no">515</span><span id="line-515">    public boolean hasChangedDocuments() {</span>
-<span class="source-line-no">516</span><span id="line-516">        return !changedDocuments.isEmpty();</span>
-<span class="source-line-no">517</span><span id="line-517">    }</span>
-<span class="source-line-no">518</span><span id="line-518"></span>
-<span class="source-line-no">519</span><span id="line-519">    /**</span>
-<span class="source-line-no">520</span><span id="line-520">     * Clears the changed documents list.</span>
-<span class="source-line-no">521</span><span id="line-521">     */</span>
-<span class="source-line-no">522</span><span id="line-522">    public void clearChangedDocuments() {</span>
-<span class="source-line-no">523</span><span id="line-523">        changedDocuments.clear();</span>
-<span class="source-line-no">524</span><span id="line-524">    }</span>
-<span class="source-line-no">525</span><span id="line-525"></span>
-<span class="source-line-no">526</span><span id="line-526">    /**</span>
-<span class="source-line-no">527</span><span id="line-527">     * Adds a document to the changed list (for testing or manual override).</span>
-<span class="source-line-no">528</span><span id="line-528">     *</span>
-<span class="source-line-no">529</span><span id="line-529">     * @param docName the document name to add</span>
-<span class="source-line-no">530</span><span id="line-530">     */</span>
-<span class="source-line-no">531</span><span id="line-531">    public void addChangedDocument(String docName) {</span>
-<span class="source-line-no">532</span><span id="line-532">        changedDocuments.add(docName);</span>
-<span class="source-line-no">533</span><span id="line-533">    }</span>
-<span class="source-line-no">534</span><span id="line-534"></span>
-<span class="source-line-no">535</span><span id="line-535">    /**</span>
-<span class="source-line-no">536</span><span id="line-536">     * Clones changed documents from git.</span>
-<span class="source-line-no">537</span><span id="line-537">     *</span>
-<span class="source-line-no">538</span><span id="line-538">     * &lt;p&gt;Only clones documents that are in the changedDocuments set.</span>
-<span class="source-line-no">539</span><span id="line-539">     * Removes existing directory and does fresh clone to avoid conflicts.&lt;/p&gt;</span>
-<span class="source-line-no">540</span><span id="line-540">     *</span>
-<span class="source-line-no">541</span><span id="line-541">     * @param docListPath path to the document list file</span>
-<span class="source-line-no">542</span><span id="line-542">     * @return ActionResult with clone summary</span>
-<span class="source-line-no">543</span><span id="line-543">     * @throws IOException if operations fail</span>
-<span class="source-line-no">544</span><span id="line-544">     */</span>
-<span class="source-line-no">545</span><span id="line-545">    public ActionResult cloneChangedDocuments(String docListPath) throws IOException {</span>
-<span class="source-line-no">546</span><span id="line-546">        if (changedDocuments.isEmpty()) {</span>
-<span class="source-line-no">547</span><span id="line-547">            System.out.println("=== No documents to clone (all up to date) ===");</span>
-<span class="source-line-no">548</span><span id="line-548">            return new ActionResult(true, "No documents to clone");</span>
-<span class="source-line-no">549</span><span id="line-549">        }</span>
-<span class="source-line-no">550</span><span id="line-550"></span>
-<span class="source-line-no">551</span><span id="line-551">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
-<span class="source-line-no">552</span><span id="line-552">        Path listPath = Path.of(expandedPath);</span>
-<span class="source-line-no">553</span><span id="line-553"></span>
-<span class="source-line-no">554</span><span id="line-554">        // Ensure ~/works exists</span>
-<span class="source-line-no">555</span><span id="line-555">        node.executeCommand("mkdir -p ~/works");</span>
+<span class="source-line-no">510</span><span id="line-510">            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {</span>
+<span class="source-line-no">511</span><span id="line-511">                String line = reader.readLine();</span>
+<span class="source-line-no">512</span><span id="line-512">                process.waitFor();</span>
+<span class="source-line-no">513</span><span id="line-513">                return line != null ? line.trim() : "unknown";</span>
+<span class="source-line-no">514</span><span id="line-514">            }</span>
+<span class="source-line-no">515</span><span id="line-515">        } catch (Exception e) {</span>
+<span class="source-line-no">516</span><span id="line-516">            return "unknown";</span>
+<span class="source-line-no">517</span><span id="line-517">        }</span>
+<span class="source-line-no">518</span><span id="line-518">    }</span>
+<span class="source-line-no">519</span><span id="line-519"></span>
+<span class="source-line-no">520</span><span id="line-520">    /**</span>
+<span class="source-line-no">521</span><span id="line-521">     * Checks if a specific document is in the changed list.</span>
+<span class="source-line-no">522</span><span id="line-522">     *</span>
+<span class="source-line-no">523</span><span id="line-523">     * @param docName the document name to check</span>
+<span class="source-line-no">524</span><span id="line-524">     * @return true if the document was detected as changed</span>
+<span class="source-line-no">525</span><span id="line-525">     */</span>
+<span class="source-line-no">526</span><span id="line-526">    public boolean isDocumentChanged(String docName) {</span>
+<span class="source-line-no">527</span><span id="line-527">        return changedDocuments.contains(docName);</span>
+<span class="source-line-no">528</span><span id="line-528">    }</span>
+<span class="source-line-no">529</span><span id="line-529"></span>
+<span class="source-line-no">530</span><span id="line-530">    /**</span>
+<span class="source-line-no">531</span><span id="line-531">     * Gets the number of changed documents.</span>
+<span class="source-line-no">532</span><span id="line-532">     *</span>
+<span class="source-line-no">533</span><span id="line-533">     * @return the count of changed documents</span>
+<span class="source-line-no">534</span><span id="line-534">     */</span>
+<span class="source-line-no">535</span><span id="line-535">    public int getChangedDocumentsCount() {</span>
+<span class="source-line-no">536</span><span id="line-536">        return changedDocuments.size();</span>
+<span class="source-line-no">537</span><span id="line-537">    }</span>
+<span class="source-line-no">538</span><span id="line-538"></span>
+<span class="source-line-no">539</span><span id="line-539">    /**</span>
+<span class="source-line-no">540</span><span id="line-540">     * Gets all changed document names.</span>
+<span class="source-line-no">541</span><span id="line-541">     *</span>
+<span class="source-line-no">542</span><span id="line-542">     * @return unmodifiable set of changed document names</span>
+<span class="source-line-no">543</span><span id="line-543">     */</span>
+<span class="source-line-no">544</span><span id="line-544">    public Set&lt;String&gt; getChangedDocuments() {</span>
+<span class="source-line-no">545</span><span id="line-545">        return Set.copyOf(changedDocuments);</span>
+<span class="source-line-no">546</span><span id="line-546">    }</span>
+<span class="source-line-no">547</span><span id="line-547"></span>
+<span class="source-line-no">548</span><span id="line-548">    /**</span>
+<span class="source-line-no">549</span><span id="line-549">     * Checks if there are any changed documents to process.</span>
+<span class="source-line-no">550</span><span id="line-550">     *</span>
+<span class="source-line-no">551</span><span id="line-551">     * @return true if at least one document needs processing</span>
+<span class="source-line-no">552</span><span id="line-552">     */</span>
+<span class="source-line-no">553</span><span id="line-553">    public boolean hasChangedDocuments() {</span>
+<span class="source-line-no">554</span><span id="line-554">        return !changedDocuments.isEmpty();</span>
+<span class="source-line-no">555</span><span id="line-555">    }</span>
 <span class="source-line-no">556</span><span id="line-556"></span>
-<span class="source-line-no">557</span><span id="line-557">        System.out.println("=== Cloning changed documents ===");</span>
-<span class="source-line-no">558</span><span id="line-558">        int clonedCount = 0;</span>
-<span class="source-line-no">559</span><span id="line-559"></span>
-<span class="source-line-no">560</span><span id="line-560">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
-<span class="source-line-no">561</span><span id="line-561">            String line;</span>
-<span class="source-line-no">562</span><span id="line-562">            while ((line = reader.readLine()) != null) {</span>
-<span class="source-line-no">563</span><span id="line-563">                line = line.trim();</span>
-<span class="source-line-no">564</span><span id="line-564">                if (line.isEmpty() || line.startsWith("#")) continue;</span>
-<span class="source-line-no">565</span><span id="line-565"></span>
-<span class="source-line-no">566</span><span id="line-566">                String[] parts = line.split("\\s+", 2);</span>
-<span class="source-line-no">567</span><span id="line-567">                String path = parts[0];</span>
-<span class="source-line-no">568</span><span id="line-568">                String gitUrl = parts.length &gt; 1 ? parts[1] : null;</span>
-<span class="source-line-no">569</span><span id="line-569">                String docName = Path.of(path).getFileName().toString();</span>
-<span class="source-line-no">570</span><span id="line-570"></span>
-<span class="source-line-no">571</span><span id="line-571">                if (!changedDocuments.contains(docName)) {</span>
-<span class="source-line-no">572</span><span id="line-572">                    System.out.println("  [SKIP] " + docName + " (unchanged)");</span>
-<span class="source-line-no">573</span><span id="line-573">                    continue;</span>
-<span class="source-line-no">574</span><span id="line-574">                }</span>
-<span class="source-line-no">575</span><span id="line-575"></span>
-<span class="source-line-no">576</span><span id="line-576">                if (gitUrl != null &amp;&amp; !gitUrl.isEmpty()) {</span>
-<span class="source-line-no">577</span><span id="line-577">                    // Remove old and clone fresh</span>
-<span class="source-line-no">578</span><span id="line-578">                    System.out.println("=== Cloning: " + gitUrl + " -&gt; " + path + " ===");</span>
-<span class="source-line-no">579</span><span id="line-579">                    node.executeCommand("rm -rf " + path);</span>
-<span class="source-line-no">580</span><span id="line-580">                    Node.CommandResult result = node.executeCommand("git clone " + gitUrl + " " + path);</span>
-<span class="source-line-no">581</span><span id="line-581">                    if (result.getExitCode() == 0) {</span>
-<span class="source-line-no">582</span><span id="line-582">                        clonedCount++;</span>
-<span class="source-line-no">583</span><span id="line-583">                    } else {</span>
-<span class="source-line-no">584</span><span id="line-584">                        System.err.println("Clone failed: " + result.getStderr());</span>
-<span class="source-line-no">585</span><span id="line-585">                    }</span>
-<span class="source-line-no">586</span><span id="line-586">                } else {</span>
-<span class="source-line-no">587</span><span id="line-587">                    System.out.println("=== No git URL specified for: " + path + " ===");</span>
-<span class="source-line-no">588</span><span id="line-588">                }</span>
-<span class="source-line-no">589</span><span id="line-589">            }</span>
-<span class="source-line-no">590</span><span id="line-590">        }</span>
+<span class="source-line-no">557</span><span id="line-557">    /**</span>
+<span class="source-line-no">558</span><span id="line-558">     * Clears the changed documents list.</span>
+<span class="source-line-no">559</span><span id="line-559">     */</span>
+<span class="source-line-no">560</span><span id="line-560">    public void clearChangedDocuments() {</span>
+<span class="source-line-no">561</span><span id="line-561">        changedDocuments.clear();</span>
+<span class="source-line-no">562</span><span id="line-562">    }</span>
+<span class="source-line-no">563</span><span id="line-563"></span>
+<span class="source-line-no">564</span><span id="line-564">    /**</span>
+<span class="source-line-no">565</span><span id="line-565">     * Adds a document to the changed list (for testing or manual override).</span>
+<span class="source-line-no">566</span><span id="line-566">     *</span>
+<span class="source-line-no">567</span><span id="line-567">     * @param docName the document name to add</span>
+<span class="source-line-no">568</span><span id="line-568">     */</span>
+<span class="source-line-no">569</span><span id="line-569">    public void addChangedDocument(String docName) {</span>
+<span class="source-line-no">570</span><span id="line-570">        changedDocuments.add(docName);</span>
+<span class="source-line-no">571</span><span id="line-571">    }</span>
+<span class="source-line-no">572</span><span id="line-572"></span>
+<span class="source-line-no">573</span><span id="line-573">    /**</span>
+<span class="source-line-no">574</span><span id="line-574">     * Clones changed documents from git.</span>
+<span class="source-line-no">575</span><span id="line-575">     *</span>
+<span class="source-line-no">576</span><span id="line-576">     * &lt;p&gt;Only clones documents that are in the changedDocuments set.</span>
+<span class="source-line-no">577</span><span id="line-577">     * Removes existing directory and does fresh clone to avoid conflicts.&lt;/p&gt;</span>
+<span class="source-line-no">578</span><span id="line-578">     *</span>
+<span class="source-line-no">579</span><span id="line-579">     * @param docListPath path to the document list file</span>
+<span class="source-line-no">580</span><span id="line-580">     * @return ActionResult with clone summary</span>
+<span class="source-line-no">581</span><span id="line-581">     * @throws IOException if operations fail</span>
+<span class="source-line-no">582</span><span id="line-582">     */</span>
+<span class="source-line-no">583</span><span id="line-583">    public ActionResult cloneChangedDocuments(String docListPath) throws IOException {</span>
+<span class="source-line-no">584</span><span id="line-584">        if (changedDocuments.isEmpty()) {</span>
+<span class="source-line-no">585</span><span id="line-585">            System.out.println("=== No documents to clone (all up to date) ===");</span>
+<span class="source-line-no">586</span><span id="line-586">            return new ActionResult(true, "No documents to clone");</span>
+<span class="source-line-no">587</span><span id="line-587">        }</span>
+<span class="source-line-no">588</span><span id="line-588"></span>
+<span class="source-line-no">589</span><span id="line-589">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
+<span class="source-line-no">590</span><span id="line-590">        Path listPath = Path.of(expandedPath);</span>
 <span class="source-line-no">591</span><span id="line-591"></span>
-<span class="source-line-no">592</span><span id="line-592">        return new ActionResult(true, "Cloned " + clonedCount + " documents");</span>
-<span class="source-line-no">593</span><span id="line-593">    }</span>
+<span class="source-line-no">592</span><span id="line-592">        // Ensure ~/works exists</span>
+<span class="source-line-no">593</span><span id="line-593">        node.executeCommand("mkdir -p ~/works");</span>
 <span class="source-line-no">594</span><span id="line-594"></span>
-<span class="source-line-no">595</span><span id="line-595">    /**</span>
-<span class="source-line-no">596</span><span id="line-596">     * Builds changed Docusaurus documents.</span>
-<span class="source-line-no">597</span><span id="line-597">     *</span>
-<span class="source-line-no">598</span><span id="line-598">     * &lt;p&gt;Only builds documents that are in the changedDocuments set.&lt;/p&gt;</span>
-<span class="source-line-no">599</span><span id="line-599">     *</span>
-<span class="source-line-no">600</span><span id="line-600">     * @param docListPath path to the document list file</span>
-<span class="source-line-no">601</span><span id="line-601">     * @return ActionResult with build summary</span>
-<span class="source-line-no">602</span><span id="line-602">     * @throws IOException if operations fail</span>
-<span class="source-line-no">603</span><span id="line-603">     */</span>
-<span class="source-line-no">604</span><span id="line-604">    public ActionResult buildChangedDocuments(String docListPath) throws IOException {</span>
-<span class="source-line-no">605</span><span id="line-605">        if (changedDocuments.isEmpty()) {</span>
-<span class="source-line-no">606</span><span id="line-606">            System.out.println("=== No documents to build (all up to date) ===");</span>
-<span class="source-line-no">607</span><span id="line-607">            return new ActionResult(true, "No documents to build");</span>
-<span class="source-line-no">608</span><span id="line-608">        }</span>
-<span class="source-line-no">609</span><span id="line-609"></span>
-<span class="source-line-no">610</span><span id="line-610">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
-<span class="source-line-no">611</span><span id="line-611">        Path listPath = Path.of(expandedPath);</span>
-<span class="source-line-no">612</span><span id="line-612"></span>
-<span class="source-line-no">613</span><span id="line-613">        System.out.println("=== Building changed documents ===");</span>
-<span class="source-line-no">614</span><span id="line-614">        int builtCount = 0;</span>
-<span class="source-line-no">615</span><span id="line-615"></span>
-<span class="source-line-no">616</span><span id="line-616">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
-<span class="source-line-no">617</span><span id="line-617">            String line;</span>
-<span class="source-line-no">618</span><span id="line-618">            while ((line = reader.readLine()) != null) {</span>
-<span class="source-line-no">619</span><span id="line-619">                line = line.trim();</span>
-<span class="source-line-no">620</span><span id="line-620">                if (line.isEmpty() || line.startsWith("#")) continue;</span>
-<span class="source-line-no">621</span><span id="line-621"></span>
-<span class="source-line-no">622</span><span id="line-622">                String[] parts = line.split("\\s+", 2);</span>
-<span class="source-line-no">623</span><span id="line-623">                String path = parts[0];</span>
-<span class="source-line-no">624</span><span id="line-624">                String docName = Path.of(path).getFileName().toString();</span>
-<span class="source-line-no">625</span><span id="line-625"></span>
-<span class="source-line-no">626</span><span id="line-626">                if (!changedDocuments.contains(docName)) {</span>
-<span class="source-line-no">627</span><span id="line-627">                    System.out.println("  [SKIP] " + docName + " (unchanged)");</span>
-<span class="source-line-no">628</span><span id="line-628">                    continue;</span>
-<span class="source-line-no">629</span><span id="line-629">                }</span>
-<span class="source-line-no">630</span><span id="line-630"></span>
-<span class="source-line-no">631</span><span id="line-631">                System.out.println("=== Building: " + path + " ===");</span>
-<span class="source-line-no">632</span><span id="line-632">                Node.CommandResult result = node.executeCommand(</span>
-<span class="source-line-no">633</span><span id="line-633">                    "cd " + path + " &amp;&amp; yarn install &amp;&amp; yarn build"</span>
-<span class="source-line-no">634</span><span id="line-634">                );</span>
-<span class="source-line-no">635</span><span id="line-635">                if (result.getExitCode() == 0) {</span>
-<span class="source-line-no">636</span><span id="line-636">                    builtCount++;</span>
-<span class="source-line-no">637</span><span id="line-637">                } else {</span>
-<span class="source-line-no">638</span><span id="line-638">                    System.err.println("Build failed for " + docName + ": " + result.getStderr());</span>
-<span class="source-line-no">639</span><span id="line-639">                }</span>
-<span class="source-line-no">640</span><span id="line-640">            }</span>
-<span class="source-line-no">641</span><span id="line-641">        }</span>
-<span class="source-line-no">642</span><span id="line-642"></span>
-<span class="source-line-no">643</span><span id="line-643">        return new ActionResult(true, "Built " + builtCount + " documents");</span>
-<span class="source-line-no">644</span><span id="line-644">    }</span>
-<span class="source-line-no">645</span><span id="line-645"></span>
-<span class="source-line-no">646</span><span id="line-646">    /**</span>
-<span class="source-line-no">647</span><span id="line-647">     * Copies changed document builds to public_html.</span>
-<span class="source-line-no">648</span><span id="line-648">     *</span>
-<span class="source-line-no">649</span><span id="line-649">     * &lt;p&gt;Only copies documents that are in the changedDocuments set.&lt;/p&gt;</span>
-<span class="source-line-no">650</span><span id="line-650">     *</span>
-<span class="source-line-no">651</span><span id="line-651">     * @param docListPath path to the document list file</span>
-<span class="source-line-no">652</span><span id="line-652">     * @return ActionResult with copy summary</span>
-<span class="source-line-no">653</span><span id="line-653">     * @throws IOException if operations fail</span>
-<span class="source-line-no">654</span><span id="line-654">     */</span>
-<span class="source-line-no">655</span><span id="line-655">    public ActionResult deployChangedDocuments(String docListPath) throws IOException {</span>
-<span class="source-line-no">656</span><span id="line-656">        // Ensure public_html exists</span>
-<span class="source-line-no">657</span><span id="line-657">        node.executeCommand("mkdir -p ~/public_html");</span>
-<span class="source-line-no">658</span><span id="line-658"></span>
-<span class="source-line-no">659</span><span id="line-659">        if (changedDocuments.isEmpty()) {</span>
-<span class="source-line-no">660</span><span id="line-660">            System.out.println("=== No documents to copy (all up to date) ===");</span>
-<span class="source-line-no">661</span><span id="line-661">            node.executeCommand("ls -la ~/public_html/");</span>
-<span class="source-line-no">662</span><span id="line-662">            return new ActionResult(true, "No documents to copy");</span>
-<span class="source-line-no">663</span><span id="line-663">        }</span>
-<span class="source-line-no">664</span><span id="line-664"></span>
-<span class="source-line-no">665</span><span id="line-665">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
-<span class="source-line-no">666</span><span id="line-666">        Path listPath = Path.of(expandedPath);</span>
-<span class="source-line-no">667</span><span id="line-667"></span>
-<span class="source-line-no">668</span><span id="line-668">        System.out.println("=== Copying changed documents to public_html ===");</span>
-<span class="source-line-no">669</span><span id="line-669">        int copiedCount = 0;</span>
-<span class="source-line-no">670</span><span id="line-670"></span>
-<span class="source-line-no">671</span><span id="line-671">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
-<span class="source-line-no">672</span><span id="line-672">            String line;</span>
-<span class="source-line-no">673</span><span id="line-673">            while ((line = reader.readLine()) != null) {</span>
-<span class="source-line-no">674</span><span id="line-674">                line = line.trim();</span>
-<span class="source-line-no">675</span><span id="line-675">                if (line.isEmpty() || line.startsWith("#")) continue;</span>
-<span class="source-line-no">676</span><span id="line-676"></span>
-<span class="source-line-no">677</span><span id="line-677">                String[] parts = line.split("\\s+", 2);</span>
-<span class="source-line-no">678</span><span id="line-678">                String path = parts[0];</span>
-<span class="source-line-no">679</span><span id="line-679">                String docName = Path.of(path).getFileName().toString();</span>
+<span class="source-line-no">595</span><span id="line-595">        System.out.println("=== Cloning changed documents ===");</span>
+<span class="source-line-no">596</span><span id="line-596">        int clonedCount = 0;</span>
+<span class="source-line-no">597</span><span id="line-597"></span>
+<span class="source-line-no">598</span><span id="line-598">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
+<span class="source-line-no">599</span><span id="line-599">            String line;</span>
+<span class="source-line-no">600</span><span id="line-600">            while ((line = reader.readLine()) != null) {</span>
+<span class="source-line-no">601</span><span id="line-601">                line = line.trim();</span>
+<span class="source-line-no">602</span><span id="line-602">                if (line.isEmpty() || line.startsWith("#")) continue;</span>
+<span class="source-line-no">603</span><span id="line-603"></span>
+<span class="source-line-no">604</span><span id="line-604">                String[] parts = line.split("\\s+", 2);</span>
+<span class="source-line-no">605</span><span id="line-605">                String path = parts[0];</span>
+<span class="source-line-no">606</span><span id="line-606">                String gitUrl = parts.length &gt; 1 ? parts[1] : null;</span>
+<span class="source-line-no">607</span><span id="line-607">                String docName = Path.of(path).getFileName().toString();</span>
+<span class="source-line-no">608</span><span id="line-608"></span>
+<span class="source-line-no">609</span><span id="line-609">                if (!changedDocuments.contains(docName)) {</span>
+<span class="source-line-no">610</span><span id="line-610">                    System.out.println("  [SKIP] " + docName + " (unchanged)");</span>
+<span class="source-line-no">611</span><span id="line-611">                    continue;</span>
+<span class="source-line-no">612</span><span id="line-612">                }</span>
+<span class="source-line-no">613</span><span id="line-613"></span>
+<span class="source-line-no">614</span><span id="line-614">                if (gitUrl != null &amp;&amp; !gitUrl.isEmpty()) {</span>
+<span class="source-line-no">615</span><span id="line-615">                    // Remove old and clone fresh</span>
+<span class="source-line-no">616</span><span id="line-616">                    System.out.println("=== Cloning: " + gitUrl + " -&gt; " + path + " ===");</span>
+<span class="source-line-no">617</span><span id="line-617">                    node.executeCommand("rm -rf " + path);</span>
+<span class="source-line-no">618</span><span id="line-618">                    Node.CommandResult result = node.executeCommand("git clone " + gitUrl + " " + path);</span>
+<span class="source-line-no">619</span><span id="line-619">                    if (result.getExitCode() == 0) {</span>
+<span class="source-line-no">620</span><span id="line-620">                        clonedCount++;</span>
+<span class="source-line-no">621</span><span id="line-621">                    } else {</span>
+<span class="source-line-no">622</span><span id="line-622">                        System.err.println("Clone failed: " + result.getStderr());</span>
+<span class="source-line-no">623</span><span id="line-623">                    }</span>
+<span class="source-line-no">624</span><span id="line-624">                } else {</span>
+<span class="source-line-no">625</span><span id="line-625">                    System.out.println("=== No git URL specified for: " + path + " ===");</span>
+<span class="source-line-no">626</span><span id="line-626">                }</span>
+<span class="source-line-no">627</span><span id="line-627">            }</span>
+<span class="source-line-no">628</span><span id="line-628">        }</span>
+<span class="source-line-no">629</span><span id="line-629"></span>
+<span class="source-line-no">630</span><span id="line-630">        return new ActionResult(true, "Cloned " + clonedCount + " documents");</span>
+<span class="source-line-no">631</span><span id="line-631">    }</span>
+<span class="source-line-no">632</span><span id="line-632"></span>
+<span class="source-line-no">633</span><span id="line-633">    /**</span>
+<span class="source-line-no">634</span><span id="line-634">     * Builds changed Docusaurus documents.</span>
+<span class="source-line-no">635</span><span id="line-635">     *</span>
+<span class="source-line-no">636</span><span id="line-636">     * &lt;p&gt;Only builds documents that are in the changedDocuments set.&lt;/p&gt;</span>
+<span class="source-line-no">637</span><span id="line-637">     *</span>
+<span class="source-line-no">638</span><span id="line-638">     * @param docListPath path to the document list file</span>
+<span class="source-line-no">639</span><span id="line-639">     * @return ActionResult with build summary</span>
+<span class="source-line-no">640</span><span id="line-640">     * @throws IOException if operations fail</span>
+<span class="source-line-no">641</span><span id="line-641">     */</span>
+<span class="source-line-no">642</span><span id="line-642">    public ActionResult buildChangedDocuments(String docListPath) throws IOException {</span>
+<span class="source-line-no">643</span><span id="line-643">        if (changedDocuments.isEmpty()) {</span>
+<span class="source-line-no">644</span><span id="line-644">            System.out.println("=== No documents to build (all up to date) ===");</span>
+<span class="source-line-no">645</span><span id="line-645">            return new ActionResult(true, "No documents to build");</span>
+<span class="source-line-no">646</span><span id="line-646">        }</span>
+<span class="source-line-no">647</span><span id="line-647"></span>
+<span class="source-line-no">648</span><span id="line-648">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
+<span class="source-line-no">649</span><span id="line-649">        Path listPath = Path.of(expandedPath);</span>
+<span class="source-line-no">650</span><span id="line-650"></span>
+<span class="source-line-no">651</span><span id="line-651">        System.out.println("=== Building changed documents ===");</span>
+<span class="source-line-no">652</span><span id="line-652">        int builtCount = 0;</span>
+<span class="source-line-no">653</span><span id="line-653"></span>
+<span class="source-line-no">654</span><span id="line-654">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
+<span class="source-line-no">655</span><span id="line-655">            String line;</span>
+<span class="source-line-no">656</span><span id="line-656">            while ((line = reader.readLine()) != null) {</span>
+<span class="source-line-no">657</span><span id="line-657">                line = line.trim();</span>
+<span class="source-line-no">658</span><span id="line-658">                if (line.isEmpty() || line.startsWith("#")) continue;</span>
+<span class="source-line-no">659</span><span id="line-659"></span>
+<span class="source-line-no">660</span><span id="line-660">                String[] parts = line.split("\\s+", 2);</span>
+<span class="source-line-no">661</span><span id="line-661">                String path = parts[0];</span>
+<span class="source-line-no">662</span><span id="line-662">                String docName = Path.of(path).getFileName().toString();</span>
+<span class="source-line-no">663</span><span id="line-663"></span>
+<span class="source-line-no">664</span><span id="line-664">                if (!changedDocuments.contains(docName)) {</span>
+<span class="source-line-no">665</span><span id="line-665">                    System.out.println("  [SKIP] " + docName + " (unchanged)");</span>
+<span class="source-line-no">666</span><span id="line-666">                    continue;</span>
+<span class="source-line-no">667</span><span id="line-667">                }</span>
+<span class="source-line-no">668</span><span id="line-668"></span>
+<span class="source-line-no">669</span><span id="line-669">                System.out.println("=== Building: " + path + " ===");</span>
+<span class="source-line-no">670</span><span id="line-670">                Node.CommandResult result = node.executeCommand(</span>
+<span class="source-line-no">671</span><span id="line-671">                    "cd " + path + " &amp;&amp; yarn install &amp;&amp; yarn build"</span>
+<span class="source-line-no">672</span><span id="line-672">                );</span>
+<span class="source-line-no">673</span><span id="line-673">                if (result.getExitCode() == 0) {</span>
+<span class="source-line-no">674</span><span id="line-674">                    builtCount++;</span>
+<span class="source-line-no">675</span><span id="line-675">                } else {</span>
+<span class="source-line-no">676</span><span id="line-676">                    System.err.println("Build failed for " + docName + ": " + result.getStderr());</span>
+<span class="source-line-no">677</span><span id="line-677">                }</span>
+<span class="source-line-no">678</span><span id="line-678">            }</span>
+<span class="source-line-no">679</span><span id="line-679">        }</span>
 <span class="source-line-no">680</span><span id="line-680"></span>
-<span class="source-line-no">681</span><span id="line-681">                if (!changedDocuments.contains(docName)) {</span>
-<span class="source-line-no">682</span><span id="line-682">                    System.out.println("  [SKIP] " + docName + " (unchanged)");</span>
-<span class="source-line-no">683</span><span id="line-683">                    continue;</span>
-<span class="source-line-no">684</span><span id="line-684">                }</span>
-<span class="source-line-no">685</span><span id="line-685"></span>
-<span class="source-line-no">686</span><span id="line-686">                String buildPath = path + "/build";</span>
-<span class="source-line-no">687</span><span id="line-687">                String destPath = "~/public_html/" + docName;</span>
-<span class="source-line-no">688</span><span id="line-688"></span>
-<span class="source-line-no">689</span><span id="line-689">                System.out.println("=== Copying " + docName + " to public_html ===");</span>
-<span class="source-line-no">690</span><span id="line-690">                node.executeCommand("rm -rf " + destPath);</span>
-<span class="source-line-no">691</span><span id="line-691">                Node.CommandResult result = node.executeCommand(</span>
-<span class="source-line-no">692</span><span id="line-692">                    "cp -r " + buildPath + " " + destPath</span>
-<span class="source-line-no">693</span><span id="line-693">                );</span>
-<span class="source-line-no">694</span><span id="line-694">                if (result.getExitCode() == 0) {</span>
-<span class="source-line-no">695</span><span id="line-695">                    copiedCount++;</span>
-<span class="source-line-no">696</span><span id="line-696">                } else {</span>
-<span class="source-line-no">697</span><span id="line-697">                    System.err.println("Copy failed for " + docName + ": " + result.getStderr());</span>
-<span class="source-line-no">698</span><span id="line-698">                }</span>
-<span class="source-line-no">699</span><span id="line-699">            }</span>
-<span class="source-line-no">700</span><span id="line-700">        }</span>
-<span class="source-line-no">701</span><span id="line-701"></span>
-<span class="source-line-no">702</span><span id="line-702">        System.out.println("=== public_html contents ===");</span>
-<span class="source-line-no">703</span><span id="line-703">        node.executeCommand("ls -la ~/public_html/");</span>
-<span class="source-line-no">704</span><span id="line-704"></span>
-<span class="source-line-no">705</span><span id="line-705">        return new ActionResult(true, "Deployed " + copiedCount + " documents");</span>
-<span class="source-line-no">706</span><span id="line-706">    }</span>
-<span class="source-line-no">707</span><span id="line-707">}</span>
+<span class="source-line-no">681</span><span id="line-681">        return new ActionResult(true, "Built " + builtCount + " documents");</span>
+<span class="source-line-no">682</span><span id="line-682">    }</span>
+<span class="source-line-no">683</span><span id="line-683"></span>
+<span class="source-line-no">684</span><span id="line-684">    /**</span>
+<span class="source-line-no">685</span><span id="line-685">     * Copies changed document builds to public_html.</span>
+<span class="source-line-no">686</span><span id="line-686">     *</span>
+<span class="source-line-no">687</span><span id="line-687">     * &lt;p&gt;Only copies documents that are in the changedDocuments set.&lt;/p&gt;</span>
+<span class="source-line-no">688</span><span id="line-688">     *</span>
+<span class="source-line-no">689</span><span id="line-689">     * @param docListPath path to the document list file</span>
+<span class="source-line-no">690</span><span id="line-690">     * @return ActionResult with copy summary</span>
+<span class="source-line-no">691</span><span id="line-691">     * @throws IOException if operations fail</span>
+<span class="source-line-no">692</span><span id="line-692">     */</span>
+<span class="source-line-no">693</span><span id="line-693">    public ActionResult deployChangedDocuments(String docListPath) throws IOException {</span>
+<span class="source-line-no">694</span><span id="line-694">        // Ensure public_html exists</span>
+<span class="source-line-no">695</span><span id="line-695">        node.executeCommand("mkdir -p ~/public_html");</span>
+<span class="source-line-no">696</span><span id="line-696"></span>
+<span class="source-line-no">697</span><span id="line-697">        if (changedDocuments.isEmpty()) {</span>
+<span class="source-line-no">698</span><span id="line-698">            System.out.println("=== No documents to copy (all up to date) ===");</span>
+<span class="source-line-no">699</span><span id="line-699">            node.executeCommand("ls -la ~/public_html/");</span>
+<span class="source-line-no">700</span><span id="line-700">            return new ActionResult(true, "No documents to copy");</span>
+<span class="source-line-no">701</span><span id="line-701">        }</span>
+<span class="source-line-no">702</span><span id="line-702"></span>
+<span class="source-line-no">703</span><span id="line-703">        String expandedPath = docListPath.replace("~", System.getProperty("user.home"));</span>
+<span class="source-line-no">704</span><span id="line-704">        Path listPath = Path.of(expandedPath);</span>
+<span class="source-line-no">705</span><span id="line-705"></span>
+<span class="source-line-no">706</span><span id="line-706">        System.out.println("=== Copying changed documents to public_html ===");</span>
+<span class="source-line-no">707</span><span id="line-707">        int copiedCount = 0;</span>
+<span class="source-line-no">708</span><span id="line-708"></span>
+<span class="source-line-no">709</span><span id="line-709">        try (BufferedReader reader = Files.newBufferedReader(listPath)) {</span>
+<span class="source-line-no">710</span><span id="line-710">            String line;</span>
+<span class="source-line-no">711</span><span id="line-711">            while ((line = reader.readLine()) != null) {</span>
+<span class="source-line-no">712</span><span id="line-712">                line = line.trim();</span>
+<span class="source-line-no">713</span><span id="line-713">                if (line.isEmpty() || line.startsWith("#")) continue;</span>
+<span class="source-line-no">714</span><span id="line-714"></span>
+<span class="source-line-no">715</span><span id="line-715">                String[] parts = line.split("\\s+", 2);</span>
+<span class="source-line-no">716</span><span id="line-716">                String path = parts[0];</span>
+<span class="source-line-no">717</span><span id="line-717">                String docName = Path.of(path).getFileName().toString();</span>
+<span class="source-line-no">718</span><span id="line-718"></span>
+<span class="source-line-no">719</span><span id="line-719">                if (!changedDocuments.contains(docName)) {</span>
+<span class="source-line-no">720</span><span id="line-720">                    System.out.println("  [SKIP] " + docName + " (unchanged)");</span>
+<span class="source-line-no">721</span><span id="line-721">                    continue;</span>
+<span class="source-line-no">722</span><span id="line-722">                }</span>
+<span class="source-line-no">723</span><span id="line-723"></span>
+<span class="source-line-no">724</span><span id="line-724">                String buildPath = path + "/build";</span>
+<span class="source-line-no">725</span><span id="line-725">                String destPath = "~/public_html/" + docName;</span>
+<span class="source-line-no">726</span><span id="line-726"></span>
+<span class="source-line-no">727</span><span id="line-727">                System.out.println("=== Copying " + docName + " to public_html ===");</span>
+<span class="source-line-no">728</span><span id="line-728">                node.executeCommand("rm -rf " + destPath);</span>
+<span class="source-line-no">729</span><span id="line-729">                Node.CommandResult result = node.executeCommand(</span>
+<span class="source-line-no">730</span><span id="line-730">                    "cp -r " + buildPath + " " + destPath</span>
+<span class="source-line-no">731</span><span id="line-731">                );</span>
+<span class="source-line-no">732</span><span id="line-732">                if (result.getExitCode() == 0) {</span>
+<span class="source-line-no">733</span><span id="line-733">                    copiedCount++;</span>
+<span class="source-line-no">734</span><span id="line-734">                } else {</span>
+<span class="source-line-no">735</span><span id="line-735">                    System.err.println("Copy failed for " + docName + ": " + result.getStderr());</span>
+<span class="source-line-no">736</span><span id="line-736">                }</span>
+<span class="source-line-no">737</span><span id="line-737">            }</span>
+<span class="source-line-no">738</span><span id="line-738">        }</span>
+<span class="source-line-no">739</span><span id="line-739"></span>
+<span class="source-line-no">740</span><span id="line-740">        System.out.println("=== public_html contents ===");</span>
+<span class="source-line-no">741</span><span id="line-741">        node.executeCommand("ls -la ~/public_html/");</span>
+<span class="source-line-no">742</span><span id="line-742"></span>
+<span class="source-line-no">743</span><span id="line-743">        return new ActionResult(true, "Deployed " + copiedCount + " documents");</span>
+<span class="source-line-no">744</span><span id="line-744">    }</span>
+<span class="source-line-no">745</span><span id="line-745">}</span>
 
 
 

@@ -37,322 +37,362 @@
 <span class="source-line-no">024</span><span id="line-24"></span>
 <span class="source-line-no">025</span><span id="line-25">import com.scivicslab.actoriac.log.DistributedLogStore;</span>
 <span class="source-line-no">026</span><span id="line-26">import com.scivicslab.actoriac.log.LogLevel;</span>
-<span class="source-line-no">027</span><span id="line-27">import com.scivicslab.pojoactor.core.ActorRef;</span>
-<span class="source-line-no">028</span><span id="line-28">import com.scivicslab.pojoactor.workflow.IIActorRef;</span>
-<span class="source-line-no">029</span><span id="line-29">import com.scivicslab.pojoactor.workflow.IIActorSystem;</span>
-<span class="source-line-no">030</span><span id="line-30">import com.scivicslab.pojoactor.workflow.Interpreter;</span>
-<span class="source-line-no">031</span><span id="line-31">import com.scivicslab.pojoactor.workflow.Transition;</span>
-<span class="source-line-no">032</span><span id="line-32"></span>
-<span class="source-line-no">033</span><span id="line-33">/**</span>
-<span class="source-line-no">034</span><span id="line-34"> * Level 3 wrapper that adds workflow capabilities to a NodeGroup POJO.</span>
-<span class="source-line-no">035</span><span id="line-35"> *</span>
-<span class="source-line-no">036</span><span id="line-36"> * &lt;p&gt;This class extends {@link Interpreter} to provide workflow execution</span>
-<span class="source-line-no">037</span><span id="line-37"> * capabilities while delegating node group operations to a wrapped {@link NodeGroup} instance.&lt;/p&gt;</span>
-<span class="source-line-no">038</span><span id="line-38"> *</span>
-<span class="source-line-no">039</span><span id="line-39"> * &lt;p&gt;This follows the same three-level architecture as NodeInterpreter:&lt;/p&gt;</span>
-<span class="source-line-no">040</span><span id="line-40"> * &lt;ul&gt;</span>
-<span class="source-line-no">041</span><span id="line-41"> * &lt;li&gt;&lt;strong&gt;Level 1 (POJO):&lt;/strong&gt; {@link NodeGroup} - pure POJO with inventory management&lt;/li&gt;</span>
-<span class="source-line-no">042</span><span id="line-42"> * &lt;li&gt;&lt;strong&gt;Level 2 (Actor):&lt;/strong&gt; ActorRef&amp;lt;NodeGroup&amp;gt; - actor wrapper for concurrent execution&lt;/li&gt;</span>
-<span class="source-line-no">043</span><span id="line-43"> * &lt;li&gt;&lt;strong&gt;Level 3 (Workflow):&lt;/strong&gt; NodeGroupInterpreter - workflow capabilities + IIActorRef wrapper&lt;/li&gt;</span>
-<span class="source-line-no">044</span><span id="line-44"> * &lt;/ul&gt;</span>
-<span class="source-line-no">045</span><span id="line-45"> *</span>
-<span class="source-line-no">046</span><span id="line-46"> * &lt;p&gt;&lt;strong&gt;Design principle:&lt;/strong&gt; NodeGroup remains a pure POJO, independent of ActorSystem.</span>
-<span class="source-line-no">047</span><span id="line-47"> * NodeGroupInterpreter wraps NodeGroup to add workflow capabilities without modifying the NodeGroup class.&lt;/p&gt;</span>
-<span class="source-line-no">048</span><span id="line-48"> *</span>
-<span class="source-line-no">049</span><span id="line-49"> * @author devteam@scivics-lab.com</span>
-<span class="source-line-no">050</span><span id="line-50"> */</span>
-<span class="source-line-no">051</span><span id="line-51">public class NodeGroupInterpreter extends Interpreter {</span>
-<span class="source-line-no">052</span><span id="line-52"></span>
-<span class="source-line-no">053</span><span id="line-53">    /**</span>
-<span class="source-line-no">054</span><span id="line-54">     * The wrapped NodeGroup POJO that handles inventory and node creation.</span>
-<span class="source-line-no">055</span><span id="line-55">     */</span>
-<span class="source-line-no">056</span><span id="line-56">    private final NodeGroup nodeGroup;</span>
-<span class="source-line-no">057</span><span id="line-57"></span>
-<span class="source-line-no">058</span><span id="line-58">    /**</span>
-<span class="source-line-no">059</span><span id="line-59">     * The overlay directory path for YAML overlay feature.</span>
-<span class="source-line-no">060</span><span id="line-60">     * When set, workflows are loaded with overlay applied.</span>
-<span class="source-line-no">061</span><span id="line-61">     */</span>
-<span class="source-line-no">062</span><span id="line-62">    private String overlayDir;</span>
-<span class="source-line-no">063</span><span id="line-63"></span>
-<span class="source-line-no">064</span><span id="line-64">    /**</span>
-<span class="source-line-no">065</span><span id="line-65">     * Verbose output flag.</span>
-<span class="source-line-no">066</span><span id="line-66">     * When true, displays full YAML for each transition instead of truncated version.</span>
-<span class="source-line-no">067</span><span id="line-67">     */</span>
-<span class="source-line-no">068</span><span id="line-68">    private boolean verbose = false;</span>
-<span class="source-line-no">069</span><span id="line-69"></span>
-<span class="source-line-no">070</span><span id="line-70">    /**</span>
-<span class="source-line-no">071</span><span id="line-71">     * IaCStreamingAccumulator for displaying workflow steps with cowsay ASCII art.</span>
-<span class="source-line-no">072</span><span id="line-72">     * When set, workflow step transitions are displayed using this accumulator.</span>
-<span class="source-line-no">073</span><span id="line-73">     */</span>
-<span class="source-line-no">074</span><span id="line-74">    private IaCStreamingAccumulator accumulator = null;</span>
-<span class="source-line-no">075</span><span id="line-75"></span>
-<span class="source-line-no">076</span><span id="line-76">    /**</span>
-<span class="source-line-no">077</span><span id="line-77">     * Actor reference for the distributed log store.</span>
-<span class="source-line-no">078</span><span id="line-78">     * Used to send log messages asynchronously to avoid blocking workflow execution.</span>
-<span class="source-line-no">079</span><span id="line-79">     */</span>
-<span class="source-line-no">080</span><span id="line-80">    private ActorRef&lt;DistributedLogStore&gt; logStoreActor;</span>
-<span class="source-line-no">081</span><span id="line-81"></span>
-<span class="source-line-no">082</span><span id="line-82">    /**</span>
-<span class="source-line-no">083</span><span id="line-83">     * Direct reference to the log store for synchronous read operations.</span>
-<span class="source-line-no">084</span><span id="line-84">     * Reads don't need to go through the actor since they don't need serialization.</span>
-<span class="source-line-no">085</span><span id="line-85">     */</span>
-<span class="source-line-no">086</span><span id="line-86">    private DistributedLogStore logStore;</span>
-<span class="source-line-no">087</span><span id="line-87"></span>
-<span class="source-line-no">088</span><span id="line-88">    /**</span>
-<span class="source-line-no">089</span><span id="line-89">     * Dedicated executor service for DB writes.</span>
-<span class="source-line-no">090</span><span id="line-90">     * Should be a single-threaded pool to ensure serialized writes.</span>
-<span class="source-line-no">091</span><span id="line-91">     */</span>
-<span class="source-line-no">092</span><span id="line-92">    private ExecutorService dbExecutor;</span>
-<span class="source-line-no">093</span><span id="line-93"></span>
-<span class="source-line-no">094</span><span id="line-94">    /**</span>
-<span class="source-line-no">095</span><span id="line-95">     * Session ID for the current workflow execution.</span>
-<span class="source-line-no">096</span><span id="line-96">     */</span>
-<span class="source-line-no">097</span><span id="line-97">    private long sessionId = -1;</span>
-<span class="source-line-no">098</span><span id="line-98"></span>
-<span class="source-line-no">099</span><span id="line-99">    /**</span>
-<span class="source-line-no">100</span><span id="line-100">     * Constructs a NodeGroupInterpreter that wraps the specified NodeGroup.</span>
-<span class="source-line-no">101</span><span id="line-101">     *</span>
-<span class="source-line-no">102</span><span id="line-102">     * @param nodeGroup the {@link NodeGroup} instance to wrap</span>
-<span class="source-line-no">103</span><span id="line-103">     * @param system the actor system for workflow execution</span>
-<span class="source-line-no">104</span><span id="line-104">     */</span>
-<span class="source-line-no">105</span><span id="line-105">    public NodeGroupInterpreter(NodeGroup nodeGroup, IIActorSystem system) {</span>
-<span class="source-line-no">106</span><span id="line-106">        super();</span>
-<span class="source-line-no">107</span><span id="line-107">        this.nodeGroup = nodeGroup;</span>
-<span class="source-line-no">108</span><span id="line-108">        this.system = system;</span>
-<span class="source-line-no">109</span><span id="line-109">    }</span>
-<span class="source-line-no">110</span><span id="line-110"></span>
-<span class="source-line-no">111</span><span id="line-111">    /**</span>
-<span class="source-line-no">112</span><span id="line-112">     * Creates Node objects for all hosts in the specified group.</span>
-<span class="source-line-no">113</span><span id="line-113">     *</span>
-<span class="source-line-no">114</span><span id="line-114">     * &lt;p&gt;Delegates to the wrapped {@link NodeGroup#createNodesForGroup(String)} method.&lt;/p&gt;</span>
-<span class="source-line-no">115</span><span id="line-115">     *</span>
-<span class="source-line-no">116</span><span id="line-116">     * @param groupName the name of the group from the inventory file</span>
-<span class="source-line-no">117</span><span id="line-117">     * @return the list of created Node objects</span>
-<span class="source-line-no">118</span><span id="line-118">     */</span>
-<span class="source-line-no">119</span><span id="line-119">    public List&lt;Node&gt; createNodesForGroup(String groupName) {</span>
-<span class="source-line-no">120</span><span id="line-120">        return nodeGroup.createNodesForGroup(groupName);</span>
-<span class="source-line-no">121</span><span id="line-121">    }</span>
-<span class="source-line-no">122</span><span id="line-122"></span>
-<span class="source-line-no">123</span><span id="line-123">    /**</span>
-<span class="source-line-no">124</span><span id="line-124">     * Creates a single Node for localhost execution.</span>
-<span class="source-line-no">125</span><span id="line-125">     *</span>
-<span class="source-line-no">126</span><span id="line-126">     * &lt;p&gt;Delegates to the wrapped {@link NodeGroup#createLocalNode()} method.&lt;/p&gt;</span>
-<span class="source-line-no">127</span><span id="line-127">     *</span>
-<span class="source-line-no">128</span><span id="line-128">     * @return a list containing a single localhost Node</span>
-<span class="source-line-no">129</span><span id="line-129">     */</span>
-<span class="source-line-no">130</span><span id="line-130">    public List&lt;Node&gt; createLocalNode() {</span>
-<span class="source-line-no">131</span><span id="line-131">        return nodeGroup.createLocalNode();</span>
-<span class="source-line-no">132</span><span id="line-132">    }</span>
-<span class="source-line-no">133</span><span id="line-133"></span>
-<span class="source-line-no">134</span><span id="line-134">    /**</span>
-<span class="source-line-no">135</span><span id="line-135">     * Gets the inventory object.</span>
-<span class="source-line-no">136</span><span id="line-136">     *</span>
-<span class="source-line-no">137</span><span id="line-137">     * @return the loaded inventory, or null if not loaded</span>
-<span class="source-line-no">138</span><span id="line-138">     */</span>
-<span class="source-line-no">139</span><span id="line-139">    public InventoryParser.Inventory getInventory() {</span>
-<span class="source-line-no">140</span><span id="line-140">        return nodeGroup.getInventory();</span>
-<span class="source-line-no">141</span><span id="line-141">    }</span>
-<span class="source-line-no">142</span><span id="line-142"></span>
-<span class="source-line-no">143</span><span id="line-143">    /**</span>
-<span class="source-line-no">144</span><span id="line-144">     * Gets the wrapped NodeGroup instance.</span>
-<span class="source-line-no">145</span><span id="line-145">     *</span>
-<span class="source-line-no">146</span><span id="line-146">     * &lt;p&gt;This allows direct access to the underlying POJO when needed.&lt;/p&gt;</span>
-<span class="source-line-no">147</span><span id="line-147">     *</span>
-<span class="source-line-no">148</span><span id="line-148">     * @return the wrapped NodeGroup</span>
-<span class="source-line-no">149</span><span id="line-149">     */</span>
-<span class="source-line-no">150</span><span id="line-150">    public NodeGroup getNodeGroup() {</span>
-<span class="source-line-no">151</span><span id="line-151">        return nodeGroup;</span>
-<span class="source-line-no">152</span><span id="line-152">    }</span>
-<span class="source-line-no">153</span><span id="line-153"></span>
-<span class="source-line-no">154</span><span id="line-154">    /**</span>
-<span class="source-line-no">155</span><span id="line-155">     * Sets the overlay directory for YAML overlay feature.</span>
-<span class="source-line-no">156</span><span id="line-156">     *</span>
-<span class="source-line-no">157</span><span id="line-157">     * &lt;p&gt;When an overlay directory is set, workflows will be loaded with</span>
-<span class="source-line-no">158</span><span id="line-158">     * overlay applied, allowing environment-specific configuration.&lt;/p&gt;</span>
-<span class="source-line-no">159</span><span id="line-159">     *</span>
-<span class="source-line-no">160</span><span id="line-160">     * @param overlayDir the path to the overlay directory containing overlay-conf.yaml</span>
-<span class="source-line-no">161</span><span id="line-161">     */</span>
-<span class="source-line-no">162</span><span id="line-162">    public void setOverlayDir(String overlayDir) {</span>
-<span class="source-line-no">163</span><span id="line-163">        this.overlayDir = overlayDir;</span>
-<span class="source-line-no">164</span><span id="line-164">    }</span>
-<span class="source-line-no">165</span><span id="line-165"></span>
-<span class="source-line-no">166</span><span id="line-166">    /**</span>
-<span class="source-line-no">167</span><span id="line-167">     * Gets the overlay directory path.</span>
-<span class="source-line-no">168</span><span id="line-168">     *</span>
-<span class="source-line-no">169</span><span id="line-169">     * @return the overlay directory path, or null if not set</span>
-<span class="source-line-no">170</span><span id="line-170">     */</span>
-<span class="source-line-no">171</span><span id="line-171">    public String getOverlayDir() {</span>
-<span class="source-line-no">172</span><span id="line-172">        return overlayDir;</span>
-<span class="source-line-no">173</span><span id="line-173">    }</span>
-<span class="source-line-no">174</span><span id="line-174"></span>
-<span class="source-line-no">175</span><span id="line-175">    /**</span>
-<span class="source-line-no">176</span><span id="line-176">     * Sets verbose mode for detailed output.</span>
-<span class="source-line-no">177</span><span id="line-177">     *</span>
-<span class="source-line-no">178</span><span id="line-178">     * &lt;p&gt;When enabled, displays full YAML for each transition in cowsay output</span>
-<span class="source-line-no">179</span><span id="line-179">     * instead of the truncated version.&lt;/p&gt;</span>
-<span class="source-line-no">180</span><span id="line-180">     *</span>
-<span class="source-line-no">181</span><span id="line-181">     * @param verbose true to enable verbose output</span>
-<span class="source-line-no">182</span><span id="line-182">     */</span>
-<span class="source-line-no">183</span><span id="line-183">    public void setVerbose(boolean verbose) {</span>
-<span class="source-line-no">184</span><span id="line-184">        this.verbose = verbose;</span>
-<span class="source-line-no">185</span><span id="line-185">    }</span>
-<span class="source-line-no">186</span><span id="line-186"></span>
-<span class="source-line-no">187</span><span id="line-187">    /**</span>
-<span class="source-line-no">188</span><span id="line-188">     * Checks if verbose mode is enabled.</span>
-<span class="source-line-no">189</span><span id="line-189">     *</span>
-<span class="source-line-no">190</span><span id="line-190">     * @return true if verbose mode is enabled</span>
-<span class="source-line-no">191</span><span id="line-191">     */</span>
-<span class="source-line-no">192</span><span id="line-192">    public boolean isVerbose() {</span>
-<span class="source-line-no">193</span><span id="line-193">        return verbose;</span>
-<span class="source-line-no">194</span><span id="line-194">    }</span>
-<span class="source-line-no">195</span><span id="line-195"></span>
-<span class="source-line-no">196</span><span id="line-196">    /**</span>
-<span class="source-line-no">197</span><span id="line-197">     * Sets the IaCStreamingAccumulator for displaying workflow steps.</span>
-<span class="source-line-no">198</span><span id="line-198">     *</span>
-<span class="source-line-no">199</span><span id="line-199">     * &lt;p&gt;When set, workflow step transitions are displayed using cowsay ASCII art</span>
-<span class="source-line-no">200</span><span id="line-200">     * via this accumulator. The accumulator's cowfile setting determines which</span>
-<span class="source-line-no">201</span><span id="line-201">     * character is used.&lt;/p&gt;</span>
-<span class="source-line-no">202</span><span id="line-202">     *</span>
-<span class="source-line-no">203</span><span id="line-203">     * @param accumulator the accumulator to use for cowsay display</span>
-<span class="source-line-no">204</span><span id="line-204">     */</span>
-<span class="source-line-no">205</span><span id="line-205">    public void setAccumulator(IaCStreamingAccumulator accumulator) {</span>
-<span class="source-line-no">206</span><span id="line-206">        this.accumulator = accumulator;</span>
-<span class="source-line-no">207</span><span id="line-207">    }</span>
-<span class="source-line-no">208</span><span id="line-208"></span>
-<span class="source-line-no">209</span><span id="line-209">    /**</span>
-<span class="source-line-no">210</span><span id="line-210">     * Gets the IaCStreamingAccumulator for displaying workflow steps.</span>
-<span class="source-line-no">211</span><span id="line-211">     *</span>
-<span class="source-line-no">212</span><span id="line-212">     * @return the cowsay accumulator, or null if not set</span>
-<span class="source-line-no">213</span><span id="line-213">     */</span>
-<span class="source-line-no">214</span><span id="line-214">    public IaCStreamingAccumulator getAccumulator() {</span>
-<span class="source-line-no">215</span><span id="line-215">        return accumulator;</span>
-<span class="source-line-no">216</span><span id="line-216">    }</span>
-<span class="source-line-no">217</span><span id="line-217"></span>
-<span class="source-line-no">218</span><span id="line-218">    /**</span>
-<span class="source-line-no">219</span><span id="line-219">     * Sets the distributed log store for structured logging.</span>
-<span class="source-line-no">220</span><span id="line-220">     *</span>
-<span class="source-line-no">221</span><span id="line-221">     * &lt;p&gt;Database writes are performed asynchronously via the logStore actor</span>
-<span class="source-line-no">222</span><span id="line-222">     * using the dedicated dbExecutor to avoid blocking workflow execution.</span>
-<span class="source-line-no">223</span><span id="line-223">     * Direct reads can use the logStore reference directly.&lt;/p&gt;</span>
-<span class="source-line-no">224</span><span id="line-224">     *</span>
-<span class="source-line-no">225</span><span id="line-225">     * @param logStore the log store instance (for direct reads)</span>
-<span class="source-line-no">226</span><span id="line-226">     * @param logStoreActor the actor reference for the log store (for async writes)</span>
-<span class="source-line-no">227</span><span id="line-227">     * @param dbExecutor the dedicated executor service for DB writes</span>
-<span class="source-line-no">228</span><span id="line-228">     * @param sessionId the session ID for this execution</span>
-<span class="source-line-no">229</span><span id="line-229">     */</span>
-<span class="source-line-no">230</span><span id="line-230">    public void setLogStore(DistributedLogStore logStore,</span>
-<span class="source-line-no">231</span><span id="line-231">                            ActorRef&lt;DistributedLogStore&gt; logStoreActor,</span>
-<span class="source-line-no">232</span><span id="line-232">                            ExecutorService dbExecutor, long sessionId) {</span>
-<span class="source-line-no">233</span><span id="line-233">        this.logStore = logStore;</span>
-<span class="source-line-no">234</span><span id="line-234">        this.logStoreActor = logStoreActor;</span>
-<span class="source-line-no">235</span><span id="line-235">        this.dbExecutor = dbExecutor;</span>
-<span class="source-line-no">236</span><span id="line-236">        this.sessionId = sessionId;</span>
-<span class="source-line-no">237</span><span id="line-237">    }</span>
-<span class="source-line-no">238</span><span id="line-238"></span>
-<span class="source-line-no">239</span><span id="line-239">    /**</span>
-<span class="source-line-no">240</span><span id="line-240">     * Gets the log store for direct read operations.</span>
-<span class="source-line-no">241</span><span id="line-241">     *</span>
-<span class="source-line-no">242</span><span id="line-242">     * @return the log store, or null if not set</span>
-<span class="source-line-no">243</span><span id="line-243">     */</span>
-<span class="source-line-no">244</span><span id="line-244">    public DistributedLogStore getLogStore() {</span>
-<span class="source-line-no">245</span><span id="line-245">        return logStore;</span>
-<span class="source-line-no">246</span><span id="line-246">    }</span>
-<span class="source-line-no">247</span><span id="line-247"></span>
-<span class="source-line-no">248</span><span id="line-248">    /**</span>
-<span class="source-line-no">249</span><span id="line-249">     * Gets the log store actor for async write operations.</span>
-<span class="source-line-no">250</span><span id="line-250">     *</span>
-<span class="source-line-no">251</span><span id="line-251">     * @return the log store actor, or null if not set</span>
-<span class="source-line-no">252</span><span id="line-252">     */</span>
-<span class="source-line-no">253</span><span id="line-253">    public ActorRef&lt;DistributedLogStore&gt; getLogStoreActor() {</span>
-<span class="source-line-no">254</span><span id="line-254">        return logStoreActor;</span>
-<span class="source-line-no">255</span><span id="line-255">    }</span>
-<span class="source-line-no">256</span><span id="line-256"></span>
-<span class="source-line-no">257</span><span id="line-257">    /**</span>
-<span class="source-line-no">258</span><span id="line-258">     * Gets the DB executor service.</span>
-<span class="source-line-no">259</span><span id="line-259">     *</span>
-<span class="source-line-no">260</span><span id="line-260">     * @return the DB executor service, or null if not set</span>
-<span class="source-line-no">261</span><span id="line-261">     */</span>
-<span class="source-line-no">262</span><span id="line-262">    public ExecutorService getDbExecutor() {</span>
-<span class="source-line-no">263</span><span id="line-263">        return dbExecutor;</span>
-<span class="source-line-no">264</span><span id="line-264">    }</span>
-<span class="source-line-no">265</span><span id="line-265"></span>
-<span class="source-line-no">266</span><span id="line-266">    /**</span>
-<span class="source-line-no">267</span><span id="line-267">     * Gets the session ID.</span>
-<span class="source-line-no">268</span><span id="line-268">     *</span>
-<span class="source-line-no">269</span><span id="line-269">     * @return the session ID, or -1 if not set</span>
-<span class="source-line-no">270</span><span id="line-270">     */</span>
-<span class="source-line-no">271</span><span id="line-271">    public long getSessionId() {</span>
-<span class="source-line-no">272</span><span id="line-272">        return sessionId;</span>
-<span class="source-line-no">273</span><span id="line-273">    }</span>
-<span class="source-line-no">274</span><span id="line-274"></span>
-<span class="source-line-no">275</span><span id="line-275">    /**</span>
-<span class="source-line-no">276</span><span id="line-276">     * Hook called when entering a transition during workflow execution.</span>
-<span class="source-line-no">277</span><span id="line-277">     *</span>
-<span class="source-line-no">278</span><span id="line-278">     * &lt;p&gt;Displays the workflow name and transition definition using cowsay.</span>
-<span class="source-line-no">279</span><span id="line-279">     * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML</span>
-<span class="source-line-no">280</span><span id="line-280">     * after the cowsay output.&lt;/p&gt;</span>
-<span class="source-line-no">281</span><span id="line-281">     *</span>
-<span class="source-line-no">282</span><span id="line-282">     * @param transition the transition being entered</span>
-<span class="source-line-no">283</span><span id="line-283">     */</span>
-<span class="source-line-no">284</span><span id="line-284">    @Override</span>
-<span class="source-line-no">285</span><span id="line-285">    protected void onEnterTransition(Transition transition) {</span>
-<span class="source-line-no">286</span><span id="line-286">        // Get workflow name</span>
-<span class="source-line-no">287</span><span id="line-287">        String workflowName = (getCode() != null &amp;&amp; getCode().getName() != null)</span>
-<span class="source-line-no">288</span><span id="line-288">                ? getCode().getName()</span>
-<span class="source-line-no">289</span><span id="line-289">                : "unknown-workflow";</span>
-<span class="source-line-no">290</span><span id="line-290"></span>
-<span class="source-line-no">291</span><span id="line-291">        // Get YAML-formatted output (first 10 lines for cowsay)</span>
-<span class="source-line-no">292</span><span id="line-292">        String yamlText = transition.toYamlString(10).trim();</span>
-<span class="source-line-no">293</span><span id="line-293"></span>
-<span class="source-line-no">294</span><span id="line-294">        // Render cowsay output</span>
-<span class="source-line-no">295</span><span id="line-295">        String cowsayOutput;</span>
-<span class="source-line-no">296</span><span id="line-296">        if (accumulator != null) {</span>
-<span class="source-line-no">297</span><span id="line-297">            cowsayOutput = accumulator.renderCowsay(workflowName, yamlText);</span>
-<span class="source-line-no">298</span><span id="line-298">        } else {</span>
-<span class="source-line-no">299</span><span id="line-299">            // Fallback to simple text if no accumulator</span>
-<span class="source-line-no">300</span><span id="line-300">            cowsayOutput = "[" + workflowName + "]\n" + yamlText;</span>
-<span class="source-line-no">301</span><span id="line-301">        }</span>
-<span class="source-line-no">302</span><span id="line-302"></span>
-<span class="source-line-no">303</span><span id="line-303">        // Send cowsay output to outputMultiplexer (loose coupling via ActorSystem)</span>
-<span class="source-line-no">304</span><span id="line-304">        IIActorRef&lt;?&gt; multiplexer = system.getIIActor("outputMultiplexer");</span>
-<span class="source-line-no">305</span><span id="line-305">        // Use actor name as source (consistent across all output)</span>
-<span class="source-line-no">306</span><span id="line-306">        String actorName = selfActorRef != null ? selfActorRef.getName() : "unknown";</span>
-<span class="source-line-no">307</span><span id="line-307">        if (multiplexer != null) {</span>
-<span class="source-line-no">308</span><span id="line-308">            JSONObject arg = new JSONObject();</span>
-<span class="source-line-no">309</span><span id="line-309">            arg.put("source", actorName);</span>
-<span class="source-line-no">310</span><span id="line-310">            arg.put("type", "cowsay");</span>
-<span class="source-line-no">311</span><span id="line-311">            arg.put("data", cowsayOutput);</span>
-<span class="source-line-no">312</span><span id="line-312">            multiplexer.callByActionName("add", arg.toString());</span>
-<span class="source-line-no">313</span><span id="line-313">        }</span>
-<span class="source-line-no">314</span><span id="line-314"></span>
-<span class="source-line-no">315</span><span id="line-315">        // In verbose mode, also send the full YAML</span>
-<span class="source-line-no">316</span><span id="line-316">        if (verbose) {</span>
-<span class="source-line-no">317</span><span id="line-317">            String fullYaml = transition.toYamlString(-1);</span>
-<span class="source-line-no">318</span><span id="line-318">            String verboseOutput = "--- Full transition YAML ---\n" + fullYaml + "\n----------------------------";</span>
-<span class="source-line-no">319</span><span id="line-319">            if (multiplexer != null) {</span>
-<span class="source-line-no">320</span><span id="line-320">                JSONObject arg = new JSONObject();</span>
-<span class="source-line-no">321</span><span id="line-321">                arg.put("source", actorName);</span>
-<span class="source-line-no">322</span><span id="line-322">                arg.put("type", "verbose");</span>
-<span class="source-line-no">323</span><span id="line-323">                arg.put("data", verboseOutput);</span>
-<span class="source-line-no">324</span><span id="line-324">                multiplexer.callByActionName("add", arg.toString());</span>
-<span class="source-line-no">325</span><span id="line-325">            }</span>
-<span class="source-line-no">326</span><span id="line-326">        }</span>
-<span class="source-line-no">327</span><span id="line-327"></span>
-<span class="source-line-no">328</span><span id="line-328">        // Log to distributed log store asynchronously</span>
-<span class="source-line-no">329</span><span id="line-329">        if (logStoreActor != null &amp;&amp; sessionId &gt;= 0) {</span>
-<span class="source-line-no">330</span><span id="line-330">            String label = transition.getLabel();</span>
-<span class="source-line-no">331</span><span id="line-331">            if (label == null &amp;&amp; transition.getStates() != null &amp;&amp; transition.getStates().size() &gt;= 2) {</span>
-<span class="source-line-no">332</span><span id="line-332">                label = transition.getStates().get(0) + " -&gt; " + transition.getStates().get(1);</span>
-<span class="source-line-no">333</span><span id="line-333">            }</span>
-<span class="source-line-no">334</span><span id="line-334">            final String finalLabel = label;</span>
-<span class="source-line-no">335</span><span id="line-335">            final String message = "Entering transition: " + yamlText.split("\n")[0];</span>
-<span class="source-line-no">336</span><span id="line-336">            // Fire-and-forget: don't wait for DB write to complete</span>
-<span class="source-line-no">337</span><span id="line-337">            logStoreActor.tell(</span>
-<span class="source-line-no">338</span><span id="line-338">                store -&gt; store.log(sessionId, "nodeGroup", finalLabel, LogLevel.INFO, message),</span>
-<span class="source-line-no">339</span><span id="line-339">                dbExecutor);</span>
-<span class="source-line-no">340</span><span id="line-340">        }</span>
-<span class="source-line-no">341</span><span id="line-341">    }</span>
-<span class="source-line-no">342</span><span id="line-342">}</span>
+<span class="source-line-no">027</span><span id="line-27">import com.scivicslab.pojoactor.core.ActionResult;</span>
+<span class="source-line-no">028</span><span id="line-28">import com.scivicslab.pojoactor.core.ActorRef;</span>
+<span class="source-line-no">029</span><span id="line-29">import com.scivicslab.pojoactor.workflow.IIActorRef;</span>
+<span class="source-line-no">030</span><span id="line-30">import com.scivicslab.pojoactor.workflow.IIActorSystem;</span>
+<span class="source-line-no">031</span><span id="line-31">import com.scivicslab.pojoactor.workflow.Interpreter;</span>
+<span class="source-line-no">032</span><span id="line-32">import com.scivicslab.pojoactor.workflow.Transition;</span>
+<span class="source-line-no">033</span><span id="line-33"></span>
+<span class="source-line-no">034</span><span id="line-34">/**</span>
+<span class="source-line-no">035</span><span id="line-35"> * Level 3 wrapper that adds workflow capabilities to a NodeGroup POJO.</span>
+<span class="source-line-no">036</span><span id="line-36"> *</span>
+<span class="source-line-no">037</span><span id="line-37"> * &lt;p&gt;This class extends {@link Interpreter} to provide workflow execution</span>
+<span class="source-line-no">038</span><span id="line-38"> * capabilities while delegating node group operations to a wrapped {@link NodeGroup} instance.&lt;/p&gt;</span>
+<span class="source-line-no">039</span><span id="line-39"> *</span>
+<span class="source-line-no">040</span><span id="line-40"> * &lt;p&gt;This follows the same three-level architecture as NodeInterpreter:&lt;/p&gt;</span>
+<span class="source-line-no">041</span><span id="line-41"> * &lt;ul&gt;</span>
+<span class="source-line-no">042</span><span id="line-42"> * &lt;li&gt;&lt;strong&gt;Level 1 (POJO):&lt;/strong&gt; {@link NodeGroup} - pure POJO with inventory management&lt;/li&gt;</span>
+<span class="source-line-no">043</span><span id="line-43"> * &lt;li&gt;&lt;strong&gt;Level 2 (Actor):&lt;/strong&gt; ActorRef&amp;lt;NodeGroup&amp;gt; - actor wrapper for concurrent execution&lt;/li&gt;</span>
+<span class="source-line-no">044</span><span id="line-44"> * &lt;li&gt;&lt;strong&gt;Level 3 (Workflow):&lt;/strong&gt; NodeGroupInterpreter - workflow capabilities + IIActorRef wrapper&lt;/li&gt;</span>
+<span class="source-line-no">045</span><span id="line-45"> * &lt;/ul&gt;</span>
+<span class="source-line-no">046</span><span id="line-46"> *</span>
+<span class="source-line-no">047</span><span id="line-47"> * &lt;p&gt;&lt;strong&gt;Design principle:&lt;/strong&gt; NodeGroup remains a pure POJO, independent of ActorSystem.</span>
+<span class="source-line-no">048</span><span id="line-48"> * NodeGroupInterpreter wraps NodeGroup to add workflow capabilities without modifying the NodeGroup class.&lt;/p&gt;</span>
+<span class="source-line-no">049</span><span id="line-49"> *</span>
+<span class="source-line-no">050</span><span id="line-50"> * @author devteam@scivics-lab.com</span>
+<span class="source-line-no">051</span><span id="line-51"> */</span>
+<span class="source-line-no">052</span><span id="line-52">public class NodeGroupInterpreter extends Interpreter {</span>
+<span class="source-line-no">053</span><span id="line-53"></span>
+<span class="source-line-no">054</span><span id="line-54">    /**</span>
+<span class="source-line-no">055</span><span id="line-55">     * The wrapped NodeGroup POJO that handles inventory and node creation.</span>
+<span class="source-line-no">056</span><span id="line-56">     */</span>
+<span class="source-line-no">057</span><span id="line-57">    private final NodeGroup nodeGroup;</span>
+<span class="source-line-no">058</span><span id="line-58"></span>
+<span class="source-line-no">059</span><span id="line-59">    /**</span>
+<span class="source-line-no">060</span><span id="line-60">     * The overlay directory path for YAML overlay feature.</span>
+<span class="source-line-no">061</span><span id="line-61">     * When set, workflows are loaded with overlay applied.</span>
+<span class="source-line-no">062</span><span id="line-62">     */</span>
+<span class="source-line-no">063</span><span id="line-63">    private String overlayDir;</span>
+<span class="source-line-no">064</span><span id="line-64"></span>
+<span class="source-line-no">065</span><span id="line-65">    /**</span>
+<span class="source-line-no">066</span><span id="line-66">     * Verbose output flag.</span>
+<span class="source-line-no">067</span><span id="line-67">     * When true, displays full YAML for each transition instead of truncated version.</span>
+<span class="source-line-no">068</span><span id="line-68">     */</span>
+<span class="source-line-no">069</span><span id="line-69">    private boolean verbose = false;</span>
+<span class="source-line-no">070</span><span id="line-70"></span>
+<span class="source-line-no">071</span><span id="line-71">    /**</span>
+<span class="source-line-no">072</span><span id="line-72">     * IaCStreamingAccumulator for displaying workflow steps with cowsay ASCII art.</span>
+<span class="source-line-no">073</span><span id="line-73">     * When set, workflow step transitions are displayed using this accumulator.</span>
+<span class="source-line-no">074</span><span id="line-74">     */</span>
+<span class="source-line-no">075</span><span id="line-75">    private IaCStreamingAccumulator accumulator = null;</span>
+<span class="source-line-no">076</span><span id="line-76"></span>
+<span class="source-line-no">077</span><span id="line-77">    /**</span>
+<span class="source-line-no">078</span><span id="line-78">     * Actor reference for the distributed log store.</span>
+<span class="source-line-no">079</span><span id="line-79">     * Used to send log messages asynchronously to avoid blocking workflow execution.</span>
+<span class="source-line-no">080</span><span id="line-80">     */</span>
+<span class="source-line-no">081</span><span id="line-81">    private ActorRef&lt;DistributedLogStore&gt; logStoreActor;</span>
+<span class="source-line-no">082</span><span id="line-82"></span>
+<span class="source-line-no">083</span><span id="line-83">    /**</span>
+<span class="source-line-no">084</span><span id="line-84">     * Direct reference to the log store for synchronous read operations.</span>
+<span class="source-line-no">085</span><span id="line-85">     * Reads don't need to go through the actor since they don't need serialization.</span>
+<span class="source-line-no">086</span><span id="line-86">     */</span>
+<span class="source-line-no">087</span><span id="line-87">    private DistributedLogStore logStore;</span>
+<span class="source-line-no">088</span><span id="line-88"></span>
+<span class="source-line-no">089</span><span id="line-89">    /**</span>
+<span class="source-line-no">090</span><span id="line-90">     * Dedicated executor service for DB writes.</span>
+<span class="source-line-no">091</span><span id="line-91">     * Should be a single-threaded pool to ensure serialized writes.</span>
+<span class="source-line-no">092</span><span id="line-92">     */</span>
+<span class="source-line-no">093</span><span id="line-93">    private ExecutorService dbExecutor;</span>
+<span class="source-line-no">094</span><span id="line-94"></span>
+<span class="source-line-no">095</span><span id="line-95">    /**</span>
+<span class="source-line-no">096</span><span id="line-96">     * Session ID for the current workflow execution.</span>
+<span class="source-line-no">097</span><span id="line-97">     */</span>
+<span class="source-line-no">098</span><span id="line-98">    private long sessionId = -1;</span>
+<span class="source-line-no">099</span><span id="line-99"></span>
+<span class="source-line-no">100</span><span id="line-100">    /**</span>
+<span class="source-line-no">101</span><span id="line-101">     * Constructs a NodeGroupInterpreter that wraps the specified NodeGroup.</span>
+<span class="source-line-no">102</span><span id="line-102">     *</span>
+<span class="source-line-no">103</span><span id="line-103">     * @param nodeGroup the {@link NodeGroup} instance to wrap</span>
+<span class="source-line-no">104</span><span id="line-104">     * @param system the actor system for workflow execution</span>
+<span class="source-line-no">105</span><span id="line-105">     */</span>
+<span class="source-line-no">106</span><span id="line-106">    public NodeGroupInterpreter(NodeGroup nodeGroup, IIActorSystem system) {</span>
+<span class="source-line-no">107</span><span id="line-107">        super();</span>
+<span class="source-line-no">108</span><span id="line-108">        this.nodeGroup = nodeGroup;</span>
+<span class="source-line-no">109</span><span id="line-109">        this.system = system;</span>
+<span class="source-line-no">110</span><span id="line-110">    }</span>
+<span class="source-line-no">111</span><span id="line-111"></span>
+<span class="source-line-no">112</span><span id="line-112">    /**</span>
+<span class="source-line-no">113</span><span id="line-113">     * Creates Node objects for all hosts in the specified group.</span>
+<span class="source-line-no">114</span><span id="line-114">     *</span>
+<span class="source-line-no">115</span><span id="line-115">     * &lt;p&gt;Delegates to the wrapped {@link NodeGroup#createNodesForGroup(String)} method.&lt;/p&gt;</span>
+<span class="source-line-no">116</span><span id="line-116">     *</span>
+<span class="source-line-no">117</span><span id="line-117">     * @param groupName the name of the group from the inventory file</span>
+<span class="source-line-no">118</span><span id="line-118">     * @return the list of created Node objects</span>
+<span class="source-line-no">119</span><span id="line-119">     */</span>
+<span class="source-line-no">120</span><span id="line-120">    public List&lt;Node&gt; createNodesForGroup(String groupName) {</span>
+<span class="source-line-no">121</span><span id="line-121">        return nodeGroup.createNodesForGroup(groupName);</span>
+<span class="source-line-no">122</span><span id="line-122">    }</span>
+<span class="source-line-no">123</span><span id="line-123"></span>
+<span class="source-line-no">124</span><span id="line-124">    /**</span>
+<span class="source-line-no">125</span><span id="line-125">     * Creates a single Node for localhost execution.</span>
+<span class="source-line-no">126</span><span id="line-126">     *</span>
+<span class="source-line-no">127</span><span id="line-127">     * &lt;p&gt;Delegates to the wrapped {@link NodeGroup#createLocalNode()} method.&lt;/p&gt;</span>
+<span class="source-line-no">128</span><span id="line-128">     *</span>
+<span class="source-line-no">129</span><span id="line-129">     * @return a list containing a single localhost Node</span>
+<span class="source-line-no">130</span><span id="line-130">     */</span>
+<span class="source-line-no">131</span><span id="line-131">    public List&lt;Node&gt; createLocalNode() {</span>
+<span class="source-line-no">132</span><span id="line-132">        return nodeGroup.createLocalNode();</span>
+<span class="source-line-no">133</span><span id="line-133">    }</span>
+<span class="source-line-no">134</span><span id="line-134"></span>
+<span class="source-line-no">135</span><span id="line-135">    /**</span>
+<span class="source-line-no">136</span><span id="line-136">     * Gets the inventory object.</span>
+<span class="source-line-no">137</span><span id="line-137">     *</span>
+<span class="source-line-no">138</span><span id="line-138">     * @return the loaded inventory, or null if not loaded</span>
+<span class="source-line-no">139</span><span id="line-139">     */</span>
+<span class="source-line-no">140</span><span id="line-140">    public InventoryParser.Inventory getInventory() {</span>
+<span class="source-line-no">141</span><span id="line-141">        return nodeGroup.getInventory();</span>
+<span class="source-line-no">142</span><span id="line-142">    }</span>
+<span class="source-line-no">143</span><span id="line-143"></span>
+<span class="source-line-no">144</span><span id="line-144">    /**</span>
+<span class="source-line-no">145</span><span id="line-145">     * Gets the wrapped NodeGroup instance.</span>
+<span class="source-line-no">146</span><span id="line-146">     *</span>
+<span class="source-line-no">147</span><span id="line-147">     * &lt;p&gt;This allows direct access to the underlying POJO when needed.&lt;/p&gt;</span>
+<span class="source-line-no">148</span><span id="line-148">     *</span>
+<span class="source-line-no">149</span><span id="line-149">     * @return the wrapped NodeGroup</span>
+<span class="source-line-no">150</span><span id="line-150">     */</span>
+<span class="source-line-no">151</span><span id="line-151">    public NodeGroup getNodeGroup() {</span>
+<span class="source-line-no">152</span><span id="line-152">        return nodeGroup;</span>
+<span class="source-line-no">153</span><span id="line-153">    }</span>
+<span class="source-line-no">154</span><span id="line-154"></span>
+<span class="source-line-no">155</span><span id="line-155">    /**</span>
+<span class="source-line-no">156</span><span id="line-156">     * Sets the overlay directory for YAML overlay feature.</span>
+<span class="source-line-no">157</span><span id="line-157">     *</span>
+<span class="source-line-no">158</span><span id="line-158">     * &lt;p&gt;When an overlay directory is set, workflows will be loaded with</span>
+<span class="source-line-no">159</span><span id="line-159">     * overlay applied, allowing environment-specific configuration.&lt;/p&gt;</span>
+<span class="source-line-no">160</span><span id="line-160">     *</span>
+<span class="source-line-no">161</span><span id="line-161">     * @param overlayDir the path to the overlay directory containing overlay-conf.yaml</span>
+<span class="source-line-no">162</span><span id="line-162">     */</span>
+<span class="source-line-no">163</span><span id="line-163">    public void setOverlayDir(String overlayDir) {</span>
+<span class="source-line-no">164</span><span id="line-164">        this.overlayDir = overlayDir;</span>
+<span class="source-line-no">165</span><span id="line-165">    }</span>
+<span class="source-line-no">166</span><span id="line-166"></span>
+<span class="source-line-no">167</span><span id="line-167">    /**</span>
+<span class="source-line-no">168</span><span id="line-168">     * Gets the overlay directory path.</span>
+<span class="source-line-no">169</span><span id="line-169">     *</span>
+<span class="source-line-no">170</span><span id="line-170">     * @return the overlay directory path, or null if not set</span>
+<span class="source-line-no">171</span><span id="line-171">     */</span>
+<span class="source-line-no">172</span><span id="line-172">    public String getOverlayDir() {</span>
+<span class="source-line-no">173</span><span id="line-173">        return overlayDir;</span>
+<span class="source-line-no">174</span><span id="line-174">    }</span>
+<span class="source-line-no">175</span><span id="line-175"></span>
+<span class="source-line-no">176</span><span id="line-176">    /**</span>
+<span class="source-line-no">177</span><span id="line-177">     * Sets verbose mode for detailed output.</span>
+<span class="source-line-no">178</span><span id="line-178">     *</span>
+<span class="source-line-no">179</span><span id="line-179">     * &lt;p&gt;When enabled, displays full YAML for each transition in cowsay output</span>
+<span class="source-line-no">180</span><span id="line-180">     * instead of the truncated version.&lt;/p&gt;</span>
+<span class="source-line-no">181</span><span id="line-181">     *</span>
+<span class="source-line-no">182</span><span id="line-182">     * @param verbose true to enable verbose output</span>
+<span class="source-line-no">183</span><span id="line-183">     */</span>
+<span class="source-line-no">184</span><span id="line-184">    public void setVerbose(boolean verbose) {</span>
+<span class="source-line-no">185</span><span id="line-185">        this.verbose = verbose;</span>
+<span class="source-line-no">186</span><span id="line-186">    }</span>
+<span class="source-line-no">187</span><span id="line-187"></span>
+<span class="source-line-no">188</span><span id="line-188">    /**</span>
+<span class="source-line-no">189</span><span id="line-189">     * Checks if verbose mode is enabled.</span>
+<span class="source-line-no">190</span><span id="line-190">     *</span>
+<span class="source-line-no">191</span><span id="line-191">     * @return true if verbose mode is enabled</span>
+<span class="source-line-no">192</span><span id="line-192">     */</span>
+<span class="source-line-no">193</span><span id="line-193">    public boolean isVerbose() {</span>
+<span class="source-line-no">194</span><span id="line-194">        return verbose;</span>
+<span class="source-line-no">195</span><span id="line-195">    }</span>
+<span class="source-line-no">196</span><span id="line-196"></span>
+<span class="source-line-no">197</span><span id="line-197">    /**</span>
+<span class="source-line-no">198</span><span id="line-198">     * Sets the IaCStreamingAccumulator for displaying workflow steps.</span>
+<span class="source-line-no">199</span><span id="line-199">     *</span>
+<span class="source-line-no">200</span><span id="line-200">     * &lt;p&gt;When set, workflow step transitions are displayed using cowsay ASCII art</span>
+<span class="source-line-no">201</span><span id="line-201">     * via this accumulator. The accumulator's cowfile setting determines which</span>
+<span class="source-line-no">202</span><span id="line-202">     * character is used.&lt;/p&gt;</span>
+<span class="source-line-no">203</span><span id="line-203">     *</span>
+<span class="source-line-no">204</span><span id="line-204">     * @param accumulator the accumulator to use for cowsay display</span>
+<span class="source-line-no">205</span><span id="line-205">     */</span>
+<span class="source-line-no">206</span><span id="line-206">    public void setAccumulator(IaCStreamingAccumulator accumulator) {</span>
+<span class="source-line-no">207</span><span id="line-207">        this.accumulator = accumulator;</span>
+<span class="source-line-no">208</span><span id="line-208">    }</span>
+<span class="source-line-no">209</span><span id="line-209"></span>
+<span class="source-line-no">210</span><span id="line-210">    /**</span>
+<span class="source-line-no">211</span><span id="line-211">     * Gets the IaCStreamingAccumulator for displaying workflow steps.</span>
+<span class="source-line-no">212</span><span id="line-212">     *</span>
+<span class="source-line-no">213</span><span id="line-213">     * @return the cowsay accumulator, or null if not set</span>
+<span class="source-line-no">214</span><span id="line-214">     */</span>
+<span class="source-line-no">215</span><span id="line-215">    public IaCStreamingAccumulator getAccumulator() {</span>
+<span class="source-line-no">216</span><span id="line-216">        return accumulator;</span>
+<span class="source-line-no">217</span><span id="line-217">    }</span>
+<span class="source-line-no">218</span><span id="line-218"></span>
+<span class="source-line-no">219</span><span id="line-219">    /**</span>
+<span class="source-line-no">220</span><span id="line-220">     * Sets the distributed log store for structured logging.</span>
+<span class="source-line-no">221</span><span id="line-221">     *</span>
+<span class="source-line-no">222</span><span id="line-222">     * &lt;p&gt;Database writes are performed asynchronously via the logStore actor</span>
+<span class="source-line-no">223</span><span id="line-223">     * using the dedicated dbExecutor to avoid blocking workflow execution.</span>
+<span class="source-line-no">224</span><span id="line-224">     * Direct reads can use the logStore reference directly.&lt;/p&gt;</span>
+<span class="source-line-no">225</span><span id="line-225">     *</span>
+<span class="source-line-no">226</span><span id="line-226">     * @param logStore the log store instance (for direct reads)</span>
+<span class="source-line-no">227</span><span id="line-227">     * @param logStoreActor the actor reference for the log store (for async writes)</span>
+<span class="source-line-no">228</span><span id="line-228">     * @param dbExecutor the dedicated executor service for DB writes</span>
+<span class="source-line-no">229</span><span id="line-229">     * @param sessionId the session ID for this execution</span>
+<span class="source-line-no">230</span><span id="line-230">     */</span>
+<span class="source-line-no">231</span><span id="line-231">    public void setLogStore(DistributedLogStore logStore,</span>
+<span class="source-line-no">232</span><span id="line-232">                            ActorRef&lt;DistributedLogStore&gt; logStoreActor,</span>
+<span class="source-line-no">233</span><span id="line-233">                            ExecutorService dbExecutor, long sessionId) {</span>
+<span class="source-line-no">234</span><span id="line-234">        this.logStore = logStore;</span>
+<span class="source-line-no">235</span><span id="line-235">        this.logStoreActor = logStoreActor;</span>
+<span class="source-line-no">236</span><span id="line-236">        this.dbExecutor = dbExecutor;</span>
+<span class="source-line-no">237</span><span id="line-237">        this.sessionId = sessionId;</span>
+<span class="source-line-no">238</span><span id="line-238">    }</span>
+<span class="source-line-no">239</span><span id="line-239"></span>
+<span class="source-line-no">240</span><span id="line-240">    /**</span>
+<span class="source-line-no">241</span><span id="line-241">     * Gets the log store for direct read operations.</span>
+<span class="source-line-no">242</span><span id="line-242">     *</span>
+<span class="source-line-no">243</span><span id="line-243">     * @return the log store, or null if not set</span>
+<span class="source-line-no">244</span><span id="line-244">     */</span>
+<span class="source-line-no">245</span><span id="line-245">    public DistributedLogStore getLogStore() {</span>
+<span class="source-line-no">246</span><span id="line-246">        return logStore;</span>
+<span class="source-line-no">247</span><span id="line-247">    }</span>
+<span class="source-line-no">248</span><span id="line-248"></span>
+<span class="source-line-no">249</span><span id="line-249">    /**</span>
+<span class="source-line-no">250</span><span id="line-250">     * Gets the log store actor for async write operations.</span>
+<span class="source-line-no">251</span><span id="line-251">     *</span>
+<span class="source-line-no">252</span><span id="line-252">     * @return the log store actor, or null if not set</span>
+<span class="source-line-no">253</span><span id="line-253">     */</span>
+<span class="source-line-no">254</span><span id="line-254">    public ActorRef&lt;DistributedLogStore&gt; getLogStoreActor() {</span>
+<span class="source-line-no">255</span><span id="line-255">        return logStoreActor;</span>
+<span class="source-line-no">256</span><span id="line-256">    }</span>
+<span class="source-line-no">257</span><span id="line-257"></span>
+<span class="source-line-no">258</span><span id="line-258">    /**</span>
+<span class="source-line-no">259</span><span id="line-259">     * Gets the DB executor service.</span>
+<span class="source-line-no">260</span><span id="line-260">     *</span>
+<span class="source-line-no">261</span><span id="line-261">     * @return the DB executor service, or null if not set</span>
+<span class="source-line-no">262</span><span id="line-262">     */</span>
+<span class="source-line-no">263</span><span id="line-263">    public ExecutorService getDbExecutor() {</span>
+<span class="source-line-no">264</span><span id="line-264">        return dbExecutor;</span>
+<span class="source-line-no">265</span><span id="line-265">    }</span>
+<span class="source-line-no">266</span><span id="line-266"></span>
+<span class="source-line-no">267</span><span id="line-267">    /**</span>
+<span class="source-line-no">268</span><span id="line-268">     * Gets the session ID.</span>
+<span class="source-line-no">269</span><span id="line-269">     *</span>
+<span class="source-line-no">270</span><span id="line-270">     * @return the session ID, or -1 if not set</span>
+<span class="source-line-no">271</span><span id="line-271">     */</span>
+<span class="source-line-no">272</span><span id="line-272">    public long getSessionId() {</span>
+<span class="source-line-no">273</span><span id="line-273">        return sessionId;</span>
+<span class="source-line-no">274</span><span id="line-274">    }</span>
+<span class="source-line-no">275</span><span id="line-275"></span>
+<span class="source-line-no">276</span><span id="line-276">    /**</span>
+<span class="source-line-no">277</span><span id="line-277">     * Hook called when entering a transition during workflow execution.</span>
+<span class="source-line-no">278</span><span id="line-278">     *</span>
+<span class="source-line-no">279</span><span id="line-279">     * &lt;p&gt;Displays the workflow name and transition definition using cowsay.</span>
+<span class="source-line-no">280</span><span id="line-280">     * In normal mode, shows first 10 lines. In verbose mode, shows the full YAML</span>
+<span class="source-line-no">281</span><span id="line-281">     * after the cowsay output.&lt;/p&gt;</span>
+<span class="source-line-no">282</span><span id="line-282">     *</span>
+<span class="source-line-no">283</span><span id="line-283">     * @param transition the transition being entered</span>
+<span class="source-line-no">284</span><span id="line-284">     */</span>
+<span class="source-line-no">285</span><span id="line-285">    @Override</span>
+<span class="source-line-no">286</span><span id="line-286">    protected void onEnterTransition(Transition transition) {</span>
+<span class="source-line-no">287</span><span id="line-287">        // Get workflow name</span>
+<span class="source-line-no">288</span><span id="line-288">        String workflowName = (getCode() != null &amp;&amp; getCode().getName() != null)</span>
+<span class="source-line-no">289</span><span id="line-289">                ? getCode().getName()</span>
+<span class="source-line-no">290</span><span id="line-290">                : "unknown-workflow";</span>
+<span class="source-line-no">291</span><span id="line-291"></span>
+<span class="source-line-no">292</span><span id="line-292">        // Get YAML-formatted output (first 10 lines for cowsay)</span>
+<span class="source-line-no">293</span><span id="line-293">        String yamlText = transition.toYamlString(10).trim();</span>
+<span class="source-line-no">294</span><span id="line-294"></span>
+<span class="source-line-no">295</span><span id="line-295">        // Render cowsay output</span>
+<span class="source-line-no">296</span><span id="line-296">        String cowsayOutput;</span>
+<span class="source-line-no">297</span><span id="line-297">        if (accumulator != null) {</span>
+<span class="source-line-no">298</span><span id="line-298">            cowsayOutput = accumulator.renderCowsay(workflowName, yamlText);</span>
+<span class="source-line-no">299</span><span id="line-299">        } else {</span>
+<span class="source-line-no">300</span><span id="line-300">            // Fallback to simple text if no accumulator</span>
+<span class="source-line-no">301</span><span id="line-301">            cowsayOutput = "[" + workflowName + "]\n" + yamlText;</span>
+<span class="source-line-no">302</span><span id="line-302">        }</span>
+<span class="source-line-no">303</span><span id="line-303"></span>
+<span class="source-line-no">304</span><span id="line-304">        // Send cowsay output to outputMultiplexer (loose coupling via ActorSystem)</span>
+<span class="source-line-no">305</span><span id="line-305">        IIActorRef&lt;?&gt; multiplexer = system.getIIActor("outputMultiplexer");</span>
+<span class="source-line-no">306</span><span id="line-306">        // Use actor name as source (consistent across all output)</span>
+<span class="source-line-no">307</span><span id="line-307">        String actorName = selfActorRef != null ? selfActorRef.getName() : "unknown";</span>
+<span class="source-line-no">308</span><span id="line-308">        if (multiplexer != null) {</span>
+<span class="source-line-no">309</span><span id="line-309">            JSONObject arg = new JSONObject();</span>
+<span class="source-line-no">310</span><span id="line-310">            arg.put("source", actorName);</span>
+<span class="source-line-no">311</span><span id="line-311">            arg.put("type", "cowsay");</span>
+<span class="source-line-no">312</span><span id="line-312">            arg.put("data", cowsayOutput);</span>
+<span class="source-line-no">313</span><span id="line-313">            multiplexer.callByActionName("add", arg.toString());</span>
+<span class="source-line-no">314</span><span id="line-314">        }</span>
+<span class="source-line-no">315</span><span id="line-315"></span>
+<span class="source-line-no">316</span><span id="line-316">        // In verbose mode, also send the full YAML</span>
+<span class="source-line-no">317</span><span id="line-317">        if (verbose) {</span>
+<span class="source-line-no">318</span><span id="line-318">            String fullYaml = transition.toYamlString(-1);</span>
+<span class="source-line-no">319</span><span id="line-319">            String verboseOutput = "--- Full transition YAML ---\n" + fullYaml + "\n----------------------------";</span>
+<span class="source-line-no">320</span><span id="line-320">            if (multiplexer != null) {</span>
+<span class="source-line-no">321</span><span id="line-321">                JSONObject arg = new JSONObject();</span>
+<span class="source-line-no">322</span><span id="line-322">                arg.put("source", actorName);</span>
+<span class="source-line-no">323</span><span id="line-323">                arg.put("type", "verbose");</span>
+<span class="source-line-no">324</span><span id="line-324">                arg.put("data", verboseOutput);</span>
+<span class="source-line-no">325</span><span id="line-325">                multiplexer.callByActionName("add", arg.toString());</span>
+<span class="source-line-no">326</span><span id="line-326">            }</span>
+<span class="source-line-no">327</span><span id="line-327">        }</span>
+<span class="source-line-no">328</span><span id="line-328"></span>
+<span class="source-line-no">329</span><span id="line-329">        // Log to distributed log store asynchronously</span>
+<span class="source-line-no">330</span><span id="line-330">        if (logStoreActor != null &amp;&amp; sessionId &gt;= 0) {</span>
+<span class="source-line-no">331</span><span id="line-331">            String label = transition.getLabel();</span>
+<span class="source-line-no">332</span><span id="line-332">            if (label == null &amp;&amp; transition.getStates() != null &amp;&amp; transition.getStates().size() &gt;= 2) {</span>
+<span class="source-line-no">333</span><span id="line-333">                label = transition.getStates().get(0) + " -&gt; " + transition.getStates().get(1);</span>
+<span class="source-line-no">334</span><span id="line-334">            }</span>
+<span class="source-line-no">335</span><span id="line-335">            final String finalLabel = label;</span>
+<span class="source-line-no">336</span><span id="line-336">            final String message = "Entering transition: " + yamlText.split("\n")[0];</span>
+<span class="source-line-no">337</span><span id="line-337">            // Fire-and-forget: don't wait for DB write to complete</span>
+<span class="source-line-no">338</span><span id="line-338">            logStoreActor.tell(</span>
+<span class="source-line-no">339</span><span id="line-339">                store -&gt; store.log(sessionId, "nodeGroup", finalLabel, LogLevel.INFO, message),</span>
+<span class="source-line-no">340</span><span id="line-340">                dbExecutor);</span>
+<span class="source-line-no">341</span><span id="line-341">        }</span>
+<span class="source-line-no">342</span><span id="line-342">    }</span>
+<span class="source-line-no">343</span><span id="line-343"></span>
+<span class="source-line-no">344</span><span id="line-344">    /**</span>
+<span class="source-line-no">345</span><span id="line-345">     * Hook called after a transition completes (success or failure).</span>
+<span class="source-line-no">346</span><span id="line-346">     *</span>
+<span class="source-line-no">347</span><span id="line-347">     * &lt;p&gt;Logs the transition result to the distributed log store for</span>
+<span class="source-line-no">348</span><span id="line-348">     * workflow execution reporting.&lt;/p&gt;</span>
+<span class="source-line-no">349</span><span id="line-349">     *</span>
+<span class="source-line-no">350</span><span id="line-350">     * @param transition the transition that was attempted</span>
+<span class="source-line-no">351</span><span id="line-351">     * @param success true if the transition succeeded, false if it failed</span>
+<span class="source-line-no">352</span><span id="line-352">     * @param result the ActionResult from executing the transition's actions</span>
+<span class="source-line-no">353</span><span id="line-353">     */</span>
+<span class="source-line-no">354</span><span id="line-354">    @Override</span>
+<span class="source-line-no">355</span><span id="line-355">    protected void onExitTransition(Transition transition, boolean success, ActionResult result) {</span>
+<span class="source-line-no">356</span><span id="line-356">        if (logStoreActor == null || sessionId &lt; 0) {</span>
+<span class="source-line-no">357</span><span id="line-357">            return;</span>
+<span class="source-line-no">358</span><span id="line-358">        }</span>
+<span class="source-line-no">359</span><span id="line-359"></span>
+<span class="source-line-no">360</span><span id="line-360">        String label = transition.getLabel();</span>
+<span class="source-line-no">361</span><span id="line-361">        if (label == null &amp;&amp; transition.getStates() != null &amp;&amp; transition.getStates().size() &gt;= 2) {</span>
+<span class="source-line-no">362</span><span id="line-362">            label = transition.getStates().get(0) + " -&gt; " + transition.getStates().get(1);</span>
+<span class="source-line-no">363</span><span id="line-363">        }</span>
+<span class="source-line-no">364</span><span id="line-364">        final String finalLabel = label;</span>
+<span class="source-line-no">365</span><span id="line-365"></span>
+<span class="source-line-no">366</span><span id="line-366">        String status = success ? "SUCCESS" : "FAILED";</span>
+<span class="source-line-no">367</span><span id="line-367">        String resultMsg = result != null ? result.getResult() : "";</span>
+<span class="source-line-no">368</span><span id="line-368">        // Truncate long result messages</span>
+<span class="source-line-no">369</span><span id="line-369">        if (resultMsg.length() &gt; 500) {</span>
+<span class="source-line-no">370</span><span id="line-370">            resultMsg = resultMsg.substring(0, 500) + "...";</span>
+<span class="source-line-no">371</span><span id="line-371">        }</span>
+<span class="source-line-no">372</span><span id="line-372">        final String message = "Transition " + status + ": " + finalLabel +</span>
+<span class="source-line-no">373</span><span id="line-373">                (resultMsg.isEmpty() ? "" : " - " + resultMsg);</span>
+<span class="source-line-no">374</span><span id="line-374"></span>
+<span class="source-line-no">375</span><span id="line-375">        LogLevel level = success ? LogLevel.INFO : LogLevel.WARN;</span>
+<span class="source-line-no">376</span><span id="line-376"></span>
+<span class="source-line-no">377</span><span id="line-377">        // Fire-and-forget: don't wait for DB write to complete</span>
+<span class="source-line-no">378</span><span id="line-378">        logStoreActor.tell(</span>
+<span class="source-line-no">379</span><span id="line-379">            store -&gt; store.log(sessionId, "nodeGroup", finalLabel, level, message),</span>
+<span class="source-line-no">380</span><span id="line-380">            dbExecutor);</span>
+<span class="source-line-no">381</span><span id="line-381">    }</span>
+<span class="source-line-no">382</span><span id="line-382">}</span>
 
 
 

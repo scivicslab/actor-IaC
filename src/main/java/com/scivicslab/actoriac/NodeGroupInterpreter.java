@@ -24,6 +24,7 @@ import org.json.JSONObject;
 
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
+import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.core.ActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
@@ -338,5 +339,44 @@ public class NodeGroupInterpreter extends Interpreter {
                 store -> store.log(sessionId, "nodeGroup", finalLabel, LogLevel.INFO, message),
                 dbExecutor);
         }
+    }
+
+    /**
+     * Hook called after a transition completes (success or failure).
+     *
+     * <p>Logs the transition result to the distributed log store for
+     * workflow execution reporting.</p>
+     *
+     * @param transition the transition that was attempted
+     * @param success true if the transition succeeded, false if it failed
+     * @param result the ActionResult from executing the transition's actions
+     */
+    @Override
+    protected void onExitTransition(Transition transition, boolean success, ActionResult result) {
+        if (logStoreActor == null || sessionId < 0) {
+            return;
+        }
+
+        String label = transition.getLabel();
+        if (label == null && transition.getStates() != null && transition.getStates().size() >= 2) {
+            label = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
+        }
+        final String finalLabel = label;
+
+        String status = success ? "SUCCESS" : "FAILED";
+        String resultMsg = result != null ? result.getResult() : "";
+        // Truncate long result messages
+        if (resultMsg.length() > 500) {
+            resultMsg = resultMsg.substring(0, 500) + "...";
+        }
+        final String message = "Transition " + status + ": " + finalLabel +
+                (resultMsg.isEmpty() ? "" : " - " + resultMsg);
+
+        LogLevel level = success ? LogLevel.INFO : LogLevel.WARN;
+
+        // Fire-and-forget: don't wait for DB write to complete
+        logStoreActor.tell(
+            store -> store.log(sessionId, "nodeGroup", finalLabel, level, message),
+            dbExecutor);
     }
 }

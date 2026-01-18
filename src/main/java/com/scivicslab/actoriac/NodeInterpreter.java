@@ -269,6 +269,44 @@ public class NodeInterpreter extends Interpreter {
     }
 
     /**
+     * Hook called after a transition completes (success or failure).
+     *
+     * <p>Logs the transition result to the outputMultiplexer for
+     * workflow execution reporting.</p>
+     *
+     * @param transition the transition that was attempted
+     * @param success true if the transition succeeded, false if it failed
+     * @param result the ActionResult from executing the transition's actions
+     */
+    @Override
+    protected void onExitTransition(Transition transition, boolean success, ActionResult result) {
+        String label = transition.getLabel();
+        if (label == null && transition.getStates() != null && transition.getStates().size() >= 2) {
+            label = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
+        }
+
+        String status = success ? "SUCCESS" : "FAILED";
+        String resultMsg = result != null ? result.getResult() : "";
+        // Truncate long result messages
+        if (resultMsg.length() > 500) {
+            resultMsg = resultMsg.substring(0, 500) + "...";
+        }
+        String message = "Transition " + status + ": " + label +
+                (resultMsg.isEmpty() ? "" : " - " + resultMsg);
+
+        // Send to outputMultiplexer
+        IIActorRef<?> multiplexer = system.getIIActor("outputMultiplexer");
+        if (multiplexer != null) {
+            JSONObject arg = new JSONObject();
+            arg.put("source", selfActorRef != null ? selfActorRef.getName() : "unknown");
+            arg.put("type", success ? "transition-success" : "transition-failed");
+            arg.put("label", label);
+            arg.put("data", message);
+            multiplexer.callByActionName("add", arg.toString());
+        }
+    }
+
+    /**
      * Returns the current transition YAML snippet for accumulator reporting.
      *
      * @return the first 10 lines of the current transition in YAML format
