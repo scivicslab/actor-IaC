@@ -679,6 +679,7 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         };
 
         int totalOk = 0, totalWarn = 0, totalError = 0;
+        int executedChecks = 0;
         List<String> errorDetails = new ArrayList<>();
         List<String> warnDetails = new ArrayList<>();
 
@@ -688,9 +689,10 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             VerifyResult result = resultsByLabel.get(label);
 
             if (result == null) {
-                sb.append(String.format("| %-35s | %-20s |\n", displayName, "-"));
+                sb.append(String.format("| %-35s | %-20s |\n", displayName, "SKIP"));
                 continue;
             }
+            executedChecks++;
 
             totalOk += result.okCount;
             totalWarn += result.warnCount;
@@ -730,7 +732,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         }
 
         sb.append("\n");
-        if (totalError == 0 && totalWarn == 0) {
+        if (executedChecks == 0) {
+            sb.append("No verification checks were executed.\n");
+        } else if (totalError == 0 && totalWarn == 0) {
             sb.append("All checks passed!\n");
         } else if (totalError > 0) {
             sb.append("To fix issues, run:\n");
