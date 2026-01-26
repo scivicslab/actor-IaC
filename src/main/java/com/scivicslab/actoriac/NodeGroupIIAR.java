@@ -19,7 +19,11 @@ package com.scivicslab.actoriac;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -413,6 +417,17 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
      * @param actionDef JSON string defining the action to apply
      * @return ActionResult indicating success or failure
      */
+    /**
+     * Applies an action to multiple actors matching a pattern in parallel.
+     *
+     * <p>This method executes the specified action on all matching actors
+     * asynchronously and in parallel, then waits for all executions to complete
+     * before returning. This provides significant performance benefits when
+     * executing actions on many nodes.</p>
+     *
+     * @param actionDef JSON string defining the action to apply
+     * @return ActionResult indicating success or failure
+     */
     private ActionResult apply(String actionDef) {
         try {
             JSONObject action = new JSONObject(actionDef);
@@ -428,41 +443,57 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
                 return new ActionResult(false, "No actors matched pattern: " + actorPattern);
             }
 
-            logger.info(String.format("Applying method '%s' to %d actors matching '%s'",
+            logger.info(String.format("Applying method '%s' to %d actors matching '%s' (async parallel)",
                 method, matchedActors.size(), actorPattern));
 
-            // Apply action to each matching actor (continue on failure, report all errors)
-            int successCount = 0;
-            List<String> failures = new ArrayList<>();
+            // Thread-safe collections for gathering results
+            AtomicInteger successCount = new AtomicInteger(0);
+            Map<String, String> failures = new ConcurrentHashMap<>();
             DistributedLogStore logStore = this.object.getLogStore();
             long sessionId = this.object.getSessionId();
 
+            // Create async tasks for all actors
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+
             for (IIActorRef<?> actor : matchedActors) {
-                ActionResult result = actor.callByActionName(method, args);
-                if (!result.isSuccess()) {
-                    failures.add(String.format("%s: %s", actor.getName(), result.getResult()));
-                    logger.warning(String.format("Failed on %s: %s", actor.getName(), result.getResult()));
-                    // Record node failure in log store
-                    if (logStore != null && sessionId >= 0) {
-                        logStore.markNodeFailed(sessionId, actor.getName(), result.getResult());
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    try {
+                        ActionResult result = actor.callByActionName(method, args);
+                        if (!result.isSuccess()) {
+                            failures.put(actor.getName(), result.getResult());
+                            logger.warning(String.format("Failed on %s: %s", actor.getName(), result.getResult()));
+                            // Record node failure in log store
+                            if (logStore != null && sessionId >= 0) {
+                                logStore.markNodeFailed(sessionId, actor.getName(), result.getResult());
+                            }
+                        } else {
+                            successCount.incrementAndGet();
+                            logger.fine(String.format("Applied to %s: %s", actor.getName(), result.getResult()));
+                            // Record node success in log store
+                            if (logStore != null && sessionId >= 0) {
+                                logStore.markNodeSuccess(sessionId, actor.getName());
+                            }
+                        }
+                    } catch (Exception e) {
+                        failures.put(actor.getName(), e.getMessage());
+                        logger.log(Level.WARNING, "Exception on " + actor.getName(), e);
                     }
-                } else {
-                    successCount++;
-                    logger.fine(String.format("Applied to %s: %s", actor.getName(), result.getResult()));
-                    // Record node success in log store
-                    if (logStore != null && sessionId >= 0) {
-                        logStore.markNodeSuccess(sessionId, actor.getName());
-                    }
-                }
+                });
+                futures.add(future);
             }
+
+            // Wait for all async tasks to complete
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
             if (failures.isEmpty()) {
                 return new ActionResult(true,
-                    String.format("Applied to %d actors", successCount));
+                    String.format("Applied to %d actors", successCount.get()));
             } else {
+                List<String> failureMessages = new ArrayList<>();
+                failures.forEach((name, msg) -> failureMessages.add(name + ": " + msg));
                 return new ActionResult(false,
                     String.format("Applied to %d/%d actors. Failures: %s",
-                        successCount, matchedActors.size(), String.join("; ", failures)));
+                        successCount.get(), matchedActors.size(), String.join("; ", failureMessages)));
             }
 
         } catch (Exception e) {
