@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 devteam@scivics-lab.com
+ * Copyright 2025 devteam@scivicslab.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,7 +89,7 @@ import com.scivicslab.actoriac.log.DistributedLogStore;
  *         arguments: ['{"actor": "node-*", "method": "runWorkflow", "arguments": ["deploy.yaml"]}']
  * }</pre>
  *
- * @author devteam@scivics-lab.com
+ * @author devteam@scivicslab.com
  */
 public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
 
@@ -153,6 +153,12 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             ActionResult nodeGroupResult = handleNodeGroupAction(actionName, arg);
             if (nodeGroupResult != null) {
                 return nodeGroupResult;
+            }
+
+            // Try parent class (IIActorRef) for JSON State API actions (putJson, getJson, etc.)
+            ActionResult parentResult = super.callByActionName(actionName, arg);
+            if (parentResult.isSuccess() || !parentResult.getResult().startsWith("Unknown action:")) {
+                return parentResult;
             }
 
             // Unknown action
