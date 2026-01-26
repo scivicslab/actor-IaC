@@ -95,6 +95,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
 
     Logger logger = null;
 
+    /** Current workflow file path being executed. */
+    private String currentWorkflowPath = null;
+
     /**
      * Constructs a new NodeGroupIIAR with the specified actor name and nodeGroupInterpreter object.
      *
@@ -190,6 +193,7 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             case "runWorkflow":
                 JSONArray runArgs = new JSONArray(arg);
                 String workflowFile = runArgs.getString(0);
+                this.currentWorkflowPath = workflowFile;  // Store for WorkflowReporter
                 int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
                 logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, runMaxIterations));
                 ActionResult result = this.object.runWorkflow(workflowFile, runMaxIterations);
@@ -252,6 +256,9 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             case "getSessionId":
                 return getSessionIdAction();
 
+            case "getWorkflowPath":
+                return getWorkflowPathAction();
+
             case "doNothing":
                 return new ActionResult(true, arg);
 
@@ -264,6 +271,7 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
 
     private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {
         String filePath = extractSingleArgument(arg);
+        this.currentWorkflowPath = filePath;  // Store for WorkflowReporter
         try {
             String overlayPath = this.object.getOverlayDir();
             if (overlayPath != null) {
@@ -575,6 +583,21 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             return new ActionResult(false, "No session ID set");
         }
         return new ActionResult(true, String.valueOf(sessionId));
+    }
+
+    /**
+     * Gets the current workflow file path.
+     *
+     * <p>Returns the workflow file path that was passed to runWorkflow.
+     * This is used by WorkflowReporter to read workflow metadata.</p>
+     *
+     * @return ActionResult with the workflow path as the result string
+     */
+    private ActionResult getWorkflowPathAction() {
+        if (currentWorkflowPath == null) {
+            return new ActionResult(false, "No workflow path set");
+        }
+        return new ActionResult(true, currentWorkflowPath);
     }
 
     /**

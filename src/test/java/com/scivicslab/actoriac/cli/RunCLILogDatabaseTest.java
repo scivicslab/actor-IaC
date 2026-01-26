@@ -37,13 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>Verifies that the default log database path is in the current directory
  * (where the command is executed), not in the workflow directory.</p>
  *
- * <h2>Specification (per doc/036_AutoLogServerDiscovery)</h2>
- * <ul>
- *   <li>Default: actor-iac-logs in current directory</li>
- *   <li>--log-db=path: Use specified path</li>
- *   <li>--embedded: Use embedded H2 mode (no TCP server)</li>
- *   <li>--log-serve=host:port: Connect to specified server</li>
- * </ul>
+ * <p>H2's AUTO_SERVER mode handles multiple process access automatically.</p>
  *
  * @author devteam@scivics-lab.com
  * @since 2.12.0
@@ -189,37 +183,6 @@ class RunCLILogDatabaseTest {
 
             assertFalse(logDbPath.getAbsolutePath().contains("workflows"),
                        "Database path should not contain workflow directory");
-        }
-    }
-
-    @Nested
-    @DisplayName("Log Server Discovery")
-    class LogServerDiscoveryTests {
-
-        @Test
-        @DisplayName("LogServerDiscovery should scan reserved port range")
-        void shouldScanReservedPortRange() {
-            LogServerDiscovery discovery = new LogServerDiscovery();
-
-            // When no server is running, discovery should return not found
-            LogServerDiscovery.DiscoveryResult result =
-                discovery.discoverServer(currentDir.resolve("actor-iac-logs"));
-
-            assertFalse(result.isFound(),
-                       "Should not find server when none is running");
-        }
-
-        @Test
-        @DisplayName("Discovery result should have correct structure when not found")
-        void shouldHaveCorrectStructureWhenNotFound() {
-            LogServerDiscovery discovery = new LogServerDiscovery();
-            LogServerDiscovery.DiscoveryResult result =
-                discovery.discoverServer(currentDir.resolve("test-db"));
-
-            assertFalse(result.isFound());
-            assertEquals(-1, result.getTcpPort());
-            assertEquals(-1, result.getHttpPort());
-            assertNull(result.getDbPath());
         }
     }
 
