@@ -114,6 +114,19 @@ public class H2LogStore implements DistributedLogStore {
     }
 
     /**
+     * Gets the database connection for read-only operations.
+     *
+     * <p>This connection is shared and should NOT be closed by the caller.
+     * The connection will be closed when the H2LogStore is closed.</p>
+     *
+     * @return the JDBC connection
+     */
+    @Override
+    public Connection getConnection() {
+        return this.connection;
+    }
+
+    /**
      * Sets the text log file for additional text-based logging.
      *
      * <p>When a text log file is set, all log entries written to the database
