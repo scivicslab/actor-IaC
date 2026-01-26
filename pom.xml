@@ -7,7 +7,7 @@
 
     <groupId>com.scivicslab</groupId>
     <artifactId>actor-IaC</artifactId>
-    <version>2.13.1</version>
+    <version>2.14.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>actor-IaC</name>
@@ -26,7 +26,7 @@
         <developer>
             <id>scivicslab</id>
             <name>Scivics Lab</name>
-            <email>devteam@scivics-lab.com</email>
+            <email>devteam@scivicslab.com</email>
             <organization>Scivics Lab</organization>
             <organizationUrl>https://scivics-lab.com</organizationUrl>
         </developer>
@@ -58,7 +58,7 @@
         <dependency>
             <groupId>com.scivicslab</groupId>
             <artifactId>pojo-actor</artifactId>
-            <version>2.13.1</version>
+            <version>2.14.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>

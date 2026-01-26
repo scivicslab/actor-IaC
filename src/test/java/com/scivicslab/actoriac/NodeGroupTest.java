@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 devteam@scivics-lab.com
+ * Copyright 2025 devteam@scivicslab.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>NodeGroup is a pure POJO that creates Node objects. These tests verify
  * the POJO behavior without requiring ActorSystem.</p>
  *
- * @author devteam@scivics-lab.com
+ * @author devteam@scivicslab.com
  */
 @DisplayName("NodeGroup Tests")
 class NodeGroupTest {

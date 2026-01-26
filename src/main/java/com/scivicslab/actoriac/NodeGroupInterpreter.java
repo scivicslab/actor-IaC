@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 devteam@scivics-lab.com
+ * Copyright 2025 devteam@scivicslab.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ import com.scivicslab.pojoactor.workflow.Transition;
  * <p><strong>Design principle:</strong> NodeGroup remains a pure POJO, independent of ActorSystem.
  * NodeGroupInterpreter wraps NodeGroup to add workflow capabilities without modifying the NodeGroup class.</p>
  *
- * @author devteam@scivics-lab.com
+ * @author devteam@scivicslab.com
  */
 public class NodeGroupInterpreter extends Interpreter {
 

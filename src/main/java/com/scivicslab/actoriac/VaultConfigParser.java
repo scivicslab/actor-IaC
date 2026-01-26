@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 devteam@scivics-lab.com
+ * Copyright 2025 devteam@scivicslab.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import java.util.Map;
  * Parser for vault-config.ini files.
  * Supports global, group-specific, and host-specific Vault path configurations.
  *
- * @author devteam@scivics-lab.com
+ * @author devteam@scivicslab.com
  */
 public class VaultConfigParser {
 
