@@ -161,21 +161,6 @@ public class RunCLI implements Callable<Integer> {
     private boolean noLogDb;
 
     @Option(
-        names = {"--log-serve"},
-        description = "H2 log server address (host:port, e.g., localhost:29090). " +
-                     "Enables multiple workflows to share a single log database. " +
-                     "Falls back to embedded mode if server is unreachable."
-    )
-    private String logServer;
-
-    @Option(
-        names = {"--embedded"},
-        description = "Use embedded H2 database mode. " +
-                     "Default behavior is to auto-start a TCP server with auto-shutdown."
-    )
-    private boolean embedded;
-
-    @Option(
         names = {"-k", "--ask-pass"},
         description = "Prompt for SSH password (uses password authentication instead of ssh-agent)"
     )
@@ -344,187 +329,14 @@ public class RunCLI implements Callable<Integer> {
     /**
      * Sets up H2 database for distributed logging.
      *
-     * <p>Connection priority:</p>
-     * <ol>
-     *   <li>If --embedded is specified, use embedded mode</li>
-     *   <li>If --log-serve is specified, connect to that server</li>
-     *   <li>Otherwise (default): auto-detect or start a background TCP server with auto-shutdown</li>
-     * </ol>
+     * <p>Uses H2's AUTO_SERVER mode which automatically handles multiple processes
+     * accessing the same database. The first process starts a TCP server, and
+     * subsequent processes connect to it automatically.</p>
      */
     private void setupLogDatabase() throws SQLException {
         Path dbPath = logDbPath.toPath();
-
-        // Priority 1: Explicit embedded mode
-        if (embedded) {
-            logStore = new H2LogStore(dbPath);
-            System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db (embedded mode)");
-            return;
-        }
-
-        // Priority 2: Explicit log server specified
-        if (logServer != null && !logServer.isBlank()) {
-            logStore = H2LogStore.createWithFallback(logServer, dbPath);
-            System.out.println("Log database: " + logServer + " (TCP mode)");
-            return;
-        }
-
-        // Priority 3 (default): Auto-detect existing server or start a new one
-        LogServerDiscovery discovery = new LogServerDiscovery();
-        LogServerDiscovery.DiscoveryResult result = discovery.discoverServer(dbPath);
-
-        if (result.isFound()) {
-            // Found existing server, connect to it
-            logStore = H2LogStore.createWithFallback(result.getServerAddress(), dbPath);
-            System.out.println("Auto-detected log server at " + result.getServerAddress());
-            System.out.println("Log database: " + result.getServerAddress() + " (TCP mode)");
-            return;
-        }
-
-        // No existing server found - start a background server with auto-shutdown
-        int serverPort = startBackgroundLogServer(dbPath);
-        if (serverPort > 0) {
-            String serverAddress = "localhost:" + serverPort;
-            logStore = H2LogStore.createWithFallback(serverAddress, dbPath);
-            System.out.println("Started background log server on port " + serverPort);
-            System.out.println("Log database: " + serverAddress + " (TCP mode, auto-shutdown enabled)");
-        } else {
-            // Failed to start server, fall back to embedded mode
-            System.out.println("Warning: Failed to start background log server, using embedded mode");
-            logStore = new H2LogStore(dbPath);
-            System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db (embedded mode)");
-        }
-    }
-
-    /** Background log server process (for auto-shutdown) */
-    private Process backgroundServerProcess;
-
-    /** Background log server port */
-    private int backgroundServerPort = -1;
-
-    /**
-     * Starts a background H2 log server with auto-shutdown.
-     *
-     * <p>The server runs in a separate process and will automatically shut down
-     * when there are no connections for 5 minutes.</p>
-     *
-     * @param dbPath database path
-     * @return the TCP port of the started server, or -1 if failed
-     */
-    private int startBackgroundLogServer(Path dbPath) {
-        // Find an available port in the reserved range
-        int port = findAvailablePort();
-        if (port < 0) {
-            LOG.warning("No available ports in range 29090-29100");
-            return -1;
-        }
-
-        try {
-            // Get the path to actor_iac.java
-            String actorIacPath = findActorIacScript();
-            if (actorIacPath == null) {
-                LOG.warning("Could not find actor_iac.java script");
-                return -1;
-            }
-
-            // Build the command to start log server with auto-shutdown
-            ProcessBuilder pb = new ProcessBuilder(
-                actorIacPath,
-                "log-serve",
-                "--port", String.valueOf(port),
-                "--db", dbPath.toAbsolutePath().toString(),
-                "--auto-shutdown",
-                "--idle-timeout", "300",  // 5 minutes
-                "--check-interval", "60"   // Check every 1 minute
-            );
-
-            // Redirect output to null (server runs silently in background)
-            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
-            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
-
-            // Start the server process
-            backgroundServerProcess = pb.start();
-            backgroundServerPort = port;
-
-            // Wait briefly for server to start
-            Thread.sleep(1000);
-
-            // Verify server is running
-            if (!backgroundServerProcess.isAlive()) {
-                LOG.warning("Background log server process exited unexpectedly");
-                return -1;
-            }
-
-            // Verify we can connect
-            LogServerDiscovery.DiscoveryResult verify = new LogServerDiscovery().discoverServer(dbPath);
-            if (!verify.isFound()) {
-                LOG.warning("Background log server started but not responding");
-                backgroundServerProcess.destroy();
-                return -1;
-            }
-
-            if (verbose) {
-                LOG.info("Background log server started on port " + port + " (PID: " + backgroundServerProcess.pid() + ")");
-            }
-
-            return port;
-
-        } catch (Exception e) {
-            LOG.warning("Failed to start background log server: " + e.getMessage());
-            return -1;
-        }
-    }
-
-    /**
-     * Finds an available port in the actor-IaC reserved range (29090-29100).
-     */
-    private int findAvailablePort() {
-        int[] ports = {29090, 29091, 29092, 29093, 29094, 29095, 29096, 29097, 29098, 29099, 29100};
-        for (int port : ports) {
-            try (java.net.Socket socket = new java.net.Socket("localhost", port)) {
-                // Port is in use
-            } catch (Exception e) {
-                // Port is available
-                return port;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * Finds the path to the actor_iac.java script.
-     */
-    private String findActorIacScript() {
-        // Try common locations
-        String[] candidates = {
-            "./actor_iac.java",
-            "../actor_iac.java",
-            System.getProperty("user.dir") + "/actor_iac.java",
-            workflowDir.getParent() + "/actor_iac.java"
-        };
-
-        for (String path : candidates) {
-            java.io.File file = new java.io.File(path);
-            if (file.exists() && file.canExecute()) {
-                return file.getAbsolutePath();
-            }
-        }
-
-        // Try to find via PATH
-        try {
-            ProcessBuilder pb = new ProcessBuilder("which", "actor_iac.java");
-            Process p = pb.start();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(p.getInputStream()))) {
-                String line = reader.readLine();
-                if (line != null && !line.isBlank()) {
-                    return line.trim();
-                }
-            }
-        } catch (Exception e) {
-            // Ignore
-        }
-
-        return null;
+        logStore = new H2LogStore(dbPath);
+        System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
     }
 
     /**

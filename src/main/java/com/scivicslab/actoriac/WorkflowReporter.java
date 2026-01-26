@@ -17,7 +17,6 @@
 
 package com.scivicslab.actoriac;
 
-import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.core.CallableByActionName;
 import com.scivicslab.pojoactor.workflow.ActorSystemAware;
@@ -25,7 +24,10 @@ import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
 
 import org.json.JSONObject;
+import org.yaml.snakeyaml.Yaml;
 
+import java.io.*;
+import java.nio.file.*;
 import java.sql.*;
 import java.util.*;
 import java.util.logging.Level;
@@ -116,6 +118,7 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
                 case "report" -> generateReport(args);
                 case "transition-summary" -> transitionSummary(args);
                 case "addLine" -> addLine(args);
+                case "addWorkflowInfo" -> addWorkflowInfo(args);
                 default -> {
                     logger.warning("WorkflowReporter: Unknown action: " + actionName);
                     yield new ActionResult(false, "Unknown action: " + actionName);
@@ -162,6 +165,112 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
             }
             return new ActionResult(true, "Line added (fallback)");
         }
+    }
+
+    /**
+     * Add workflow metadata (file, name, description) to the report.
+     *
+     * <p>This action reads the workflow YAML file and extracts the name and
+     * description fields, adding them to the report header. The workflow
+     * file path is obtained from nodeGroup.</p>
+     *
+     * @param args unused (workflow path is obtained from nodeGroup)
+     * @return ActionResult indicating success or failure
+     */
+    private ActionResult addWorkflowInfo(String args) {
+        logger.info("WorkflowReporter.addWorkflowInfo called");
+
+        try {
+            // Get workflow path from nodeGroup
+            String workflowPath = getWorkflowPathFromNodeGroup();
+            if (workflowPath == null) {
+                logger.warning("WorkflowReporter.addWorkflowInfo: could not get workflow path from nodeGroup");
+                return new ActionResult(false, "Could not retrieve workflow path from nodeGroup");
+            }
+            logger.info("WorkflowReporter.addWorkflowInfo: workflowPath=" + workflowPath);
+
+            // Read and parse the YAML file
+            Path path = Paths.get(workflowPath);
+            if (!Files.exists(path)) {
+                // Try relative to current working directory
+                path = Paths.get(System.getProperty("user.dir"), workflowPath);
+            }
+            if (!Files.exists(path)) {
+                // Workflow info without reading file - use only database info
+                preLines.add("[Workflow Info]");
+                preLines.add("  File: " + workflowPath);
+                logger.info("WorkflowReporter.addWorkflowInfo: file not found, using DB info only");
+                return new ActionResult(true, "Workflow info added (file not found, DB info only)");
+            }
+
+            Map<String, Object> yaml;
+            try (InputStream is = Files.newInputStream(path)) {
+                Yaml yamlParser = new Yaml();
+                yaml = yamlParser.load(is);
+            }
+
+            if (yaml == null) {
+                return new ActionResult(false, "Failed to parse workflow YAML");
+            }
+
+            // Extract name and description
+            String name = (String) yaml.get("name");
+            Object descObj = yaml.get("description");
+            String description = descObj != null ? descObj.toString().trim() : null;
+
+            // Add to preLines
+            preLines.add("[Workflow Info]");
+            preLines.add("  File: " + workflowPath);
+            if (name != null) {
+                preLines.add("  Name: " + name);
+            }
+            if (description != null) {
+                preLines.add("");
+                preLines.add("[Description]");
+                // Indent each line of description
+                for (String line : description.split("\n")) {
+                    preLines.add("  " + line.trim());
+                }
+            }
+
+            logger.info("WorkflowReporter.addWorkflowInfo: added workflow info for " + workflowPath);
+            return new ActionResult(true, "Workflow info added");
+
+        } catch (Exception e) {
+            logger.warning("WorkflowReporter.addWorkflowInfo: exception: " + e.getMessage());
+            return new ActionResult(false, "Failed to add workflow info: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves workflow file path from session in database.
+     */
+    private String getWorkflowPathFromSession(long sessionId) throws SQLException {
+        String sql = "SELECT workflow_name FROM sessions WHERE id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("workflow_name");
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Retrieves workflow file path from nodeGroup actor.
+     */
+    private String getWorkflowPathFromNodeGroup() {
+        if (system == null) {
+            return null;
+        }
+        IIActorRef<?> nodeGroup = system.getIIActor("nodeGroup");
+        if (nodeGroup == null) {
+            return null;
+        }
+        ActionResult result = nodeGroup.callByActionName("getWorkflowPath", "");
+        return result.isSuccess() ? result.getResult() : null;
     }
 
     /**

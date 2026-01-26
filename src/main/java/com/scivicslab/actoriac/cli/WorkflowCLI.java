@@ -45,7 +45,6 @@ import picocli.CommandLine.Option;
  *   <li>{@code list} - List available workflows</li>
  *   <li>{@code describe} - Describe workflow structure</li>
  *   <li>{@code logs} - Query execution logs</li>
- *   <li>{@code log-server} - Start H2 log server</li>
  *   <li>{@code db-clear} - Clear (delete) the log database</li>
  * </ul>
  *
@@ -54,7 +53,6 @@ import picocli.CommandLine.Option;
  * actor-iac run -d ./workflows -w deploy
  * actor-iac list -d ./workflows
  * actor-iac logs --db ./logs --list
- * actor-iac log-server --db ./logs
  * </pre>
  *
  * @author devteam@scivics-lab.com
@@ -70,7 +68,6 @@ import picocli.CommandLine.Option;
         ListWorkflowsCLI.class,
         DescribeCLI.class,
         LogsCLI.class,
-        LogServerCLI.class,
         MergeLogsCLI.class,
         DbClearCLI.class
     }
@@ -111,7 +108,6 @@ public class WorkflowCLI implements Callable<Integer> {
         System.out.println("  list         List available workflows");
         System.out.println("  describe     Describe workflow structure");
         System.out.println("  log-search   Search execution logs");
-        System.out.println("  log-serve    Start H2 log server for centralized logging");
         System.out.println("  log-merge    Merge scattered log databases into one");
         System.out.println();
         System.out.println("Examples:");
@@ -120,7 +116,6 @@ public class WorkflowCLI implements Callable<Integer> {
         System.out.println("  actor-iac list -w sysinfo");
         System.out.println("  actor-iac describe -w sysinfo/main-collect-sysinfo.yaml");
         System.out.println("  actor-iac log-search --db ./logs --list");
-        System.out.println("  actor-iac log-serve --db ./logs/shared");
         System.out.println();
         System.out.println("Use 'actor-iac <command> --help' for more information about a command.");
         return 0;
