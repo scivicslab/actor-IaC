@@ -298,6 +298,8 @@ public class RunCLI implements Callable<Integer> {
             return executeMain();
         } finally {
             // Clean up resources (H2LogStore.close() also closes text log writer)
+            // Clear singleton before closing
+            DistributedLogStore.setInstance(null);
             if (logStore != null) {
                 try {
                     logStore.close();
@@ -336,6 +338,8 @@ public class RunCLI implements Callable<Integer> {
     private void setupLogDatabase() throws SQLException {
         Path dbPath = logDbPath.toPath();
         logStore = new H2LogStore(dbPath);
+        // Set singleton for WorkflowReporter and other components
+        DistributedLogStore.setInstance(logStore);
         System.out.println("Log database: " + logDbPath.getAbsolutePath() + ".mv.db");
     }
 

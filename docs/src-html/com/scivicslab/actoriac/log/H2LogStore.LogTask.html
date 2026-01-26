@@ -127,379 +127,392 @@
 <span class="source-line-no">114</span><span id="line-114">    }</span>
 <span class="source-line-no">115</span><span id="line-115"></span>
 <span class="source-line-no">116</span><span id="line-116">    /**</span>
-<span class="source-line-no">117</span><span id="line-117">     * Sets the text log file for additional text-based logging.</span>
+<span class="source-line-no">117</span><span id="line-117">     * Gets the database connection for read-only operations.</span>
 <span class="source-line-no">118</span><span id="line-118">     *</span>
-<span class="source-line-no">119</span><span id="line-119">     * &lt;p&gt;When a text log file is set, all log entries written to the database</span>
-<span class="source-line-no">120</span><span id="line-120">     * are also appended to this text file in a human-readable format.&lt;/p&gt;</span>
+<span class="source-line-no">119</span><span id="line-119">     * &lt;p&gt;This connection is shared and should NOT be closed by the caller.</span>
+<span class="source-line-no">120</span><span id="line-120">     * The connection will be closed when the H2LogStore is closed.&lt;/p&gt;</span>
 <span class="source-line-no">121</span><span id="line-121">     *</span>
-<span class="source-line-no">122</span><span id="line-122">     * @param textLogPath path to the text log file</span>
-<span class="source-line-no">123</span><span id="line-123">     * @throws IOException if the file cannot be opened for writing</span>
-<span class="source-line-no">124</span><span id="line-124">     */</span>
-<span class="source-line-no">125</span><span id="line-125">    public void setTextLogFile(Path textLogPath) throws IOException {</span>
-<span class="source-line-no">126</span><span id="line-126">        if (this.textLogWriter != null) {</span>
-<span class="source-line-no">127</span><span id="line-127">            this.textLogWriter.close();</span>
-<span class="source-line-no">128</span><span id="line-128">        }</span>
-<span class="source-line-no">129</span><span id="line-129">        this.textLogWriter = new PrintWriter(new BufferedWriter(new FileWriter(textLogPath.toFile(), true)), true);</span>
-<span class="source-line-no">130</span><span id="line-130">        LOG.info("Text logging enabled: " + textLogPath);</span>
-<span class="source-line-no">131</span><span id="line-131">    }</span>
-<span class="source-line-no">132</span><span id="line-132"></span>
-<span class="source-line-no">133</span><span id="line-133">    /**</span>
-<span class="source-line-no">134</span><span id="line-134">     * Disables text file logging.</span>
-<span class="source-line-no">135</span><span id="line-135">     */</span>
-<span class="source-line-no">136</span><span id="line-136">    public void disableTextLog() {</span>
-<span class="source-line-no">137</span><span id="line-137">        if (this.textLogWriter != null) {</span>
-<span class="source-line-no">138</span><span id="line-138">            this.textLogWriter.close();</span>
-<span class="source-line-no">139</span><span id="line-139">            this.textLogWriter = null;</span>
-<span class="source-line-no">140</span><span id="line-140">        }</span>
-<span class="source-line-no">141</span><span id="line-141">    }</span>
-<span class="source-line-no">142</span><span id="line-142"></span>
-<span class="source-line-no">143</span><span id="line-143">    private void initSchema() throws SQLException {</span>
-<span class="source-line-no">144</span><span id="line-144">        initSchema(connection);</span>
-<span class="source-line-no">145</span><span id="line-145">    }</span>
-<span class="source-line-no">146</span><span id="line-146"></span>
-<span class="source-line-no">147</span><span id="line-147">    /**</span>
-<span class="source-line-no">148</span><span id="line-148">     * Initializes the log database schema on the given connection.</span>
-<span class="source-line-no">149</span><span id="line-149">     *</span>
-<span class="source-line-no">150</span><span id="line-150">     * &lt;p&gt;This method can be called from external components (e.g., log server)</span>
-<span class="source-line-no">151</span><span id="line-151">     * to ensure consistent schema across all database access points.&lt;/p&gt;</span>
-<span class="source-line-no">152</span><span id="line-152">     *</span>
-<span class="source-line-no">153</span><span id="line-153">     * @param conn the database connection</span>
-<span class="source-line-no">154</span><span id="line-154">     * @throws SQLException if schema initialization fails</span>
-<span class="source-line-no">155</span><span id="line-155">     */</span>
-<span class="source-line-no">156</span><span id="line-156">    public static void initSchema(Connection conn) throws SQLException {</span>
-<span class="source-line-no">157</span><span id="line-157">        try (Statement stmt = conn.createStatement()) {</span>
-<span class="source-line-no">158</span><span id="line-158">            // Sessions table</span>
-<span class="source-line-no">159</span><span id="line-159">            stmt.execute("""</span>
-<span class="source-line-no">160</span><span id="line-160">                CREATE TABLE IF NOT EXISTS sessions (</span>
-<span class="source-line-no">161</span><span id="line-161">                    id IDENTITY PRIMARY KEY,</span>
-<span class="source-line-no">162</span><span id="line-162">                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,</span>
-<span class="source-line-no">163</span><span id="line-163">                    ended_at TIMESTAMP,</span>
-<span class="source-line-no">164</span><span id="line-164">                    workflow_name VARCHAR(255),</span>
-<span class="source-line-no">165</span><span id="line-165">                    overlay_name VARCHAR(255),</span>
-<span class="source-line-no">166</span><span id="line-166">                    inventory_name VARCHAR(255),</span>
-<span class="source-line-no">167</span><span id="line-167">                    node_count INT,</span>
-<span class="source-line-no">168</span><span id="line-168">                    status VARCHAR(20) DEFAULT 'RUNNING',</span>
-<span class="source-line-no">169</span><span id="line-169">                    cwd VARCHAR(1000),</span>
-<span class="source-line-no">170</span><span id="line-170">                    git_commit VARCHAR(50),</span>
-<span class="source-line-no">171</span><span id="line-171">                    git_branch VARCHAR(255),</span>
-<span class="source-line-no">172</span><span id="line-172">                    command_line VARCHAR(2000),</span>
-<span class="source-line-no">173</span><span id="line-173">                    actoriac_version VARCHAR(50),</span>
-<span class="source-line-no">174</span><span id="line-174">                    actoriac_commit VARCHAR(50)</span>
-<span class="source-line-no">175</span><span id="line-175">                )</span>
-<span class="source-line-no">176</span><span id="line-176">                """);</span>
-<span class="source-line-no">177</span><span id="line-177"></span>
-<span class="source-line-no">178</span><span id="line-178">            // Logs table</span>
-<span class="source-line-no">179</span><span id="line-179">            // label and action_name use CLOB to store long YAML snippets</span>
-<span class="source-line-no">180</span><span id="line-180">            stmt.execute("""</span>
-<span class="source-line-no">181</span><span id="line-181">                CREATE TABLE IF NOT EXISTS logs (</span>
-<span class="source-line-no">182</span><span id="line-182">                    id IDENTITY PRIMARY KEY,</span>
-<span class="source-line-no">183</span><span id="line-183">                    session_id BIGINT,</span>
-<span class="source-line-no">184</span><span id="line-184">                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,</span>
-<span class="source-line-no">185</span><span id="line-185">                    node_id VARCHAR(255) NOT NULL,</span>
-<span class="source-line-no">186</span><span id="line-186">                    label CLOB,</span>
-<span class="source-line-no">187</span><span id="line-187">                    action_name CLOB,</span>
-<span class="source-line-no">188</span><span id="line-188">                    level VARCHAR(10) NOT NULL,</span>
-<span class="source-line-no">189</span><span id="line-189">                    message CLOB,</span>
-<span class="source-line-no">190</span><span id="line-190">                    exit_code INT,</span>
-<span class="source-line-no">191</span><span id="line-191">                    duration_ms BIGINT,</span>
-<span class="source-line-no">192</span><span id="line-192">                    FOREIGN KEY (session_id) REFERENCES sessions(id)</span>
-<span class="source-line-no">193</span><span id="line-193">                )</span>
-<span class="source-line-no">194</span><span id="line-194">                """);</span>
-<span class="source-line-no">195</span><span id="line-195"></span>
-<span class="source-line-no">196</span><span id="line-196">            // Node results table</span>
-<span class="source-line-no">197</span><span id="line-197">            stmt.execute("""</span>
-<span class="source-line-no">198</span><span id="line-198">                CREATE TABLE IF NOT EXISTS node_results (</span>
-<span class="source-line-no">199</span><span id="line-199">                    id IDENTITY PRIMARY KEY,</span>
-<span class="source-line-no">200</span><span id="line-200">                    session_id BIGINT,</span>
-<span class="source-line-no">201</span><span id="line-201">                    node_id VARCHAR(255) NOT NULL,</span>
-<span class="source-line-no">202</span><span id="line-202">                    status VARCHAR(20) NOT NULL,</span>
-<span class="source-line-no">203</span><span id="line-203">                    reason VARCHAR(1000),</span>
-<span class="source-line-no">204</span><span id="line-204">                    FOREIGN KEY (session_id) REFERENCES sessions(id),</span>
-<span class="source-line-no">205</span><span id="line-205">                    UNIQUE (session_id, node_id)</span>
+<span class="source-line-no">122</span><span id="line-122">     * @return the JDBC connection</span>
+<span class="source-line-no">123</span><span id="line-123">     */</span>
+<span class="source-line-no">124</span><span id="line-124">    @Override</span>
+<span class="source-line-no">125</span><span id="line-125">    public Connection getConnection() {</span>
+<span class="source-line-no">126</span><span id="line-126">        return this.connection;</span>
+<span class="source-line-no">127</span><span id="line-127">    }</span>
+<span class="source-line-no">128</span><span id="line-128"></span>
+<span class="source-line-no">129</span><span id="line-129">    /**</span>
+<span class="source-line-no">130</span><span id="line-130">     * Sets the text log file for additional text-based logging.</span>
+<span class="source-line-no">131</span><span id="line-131">     *</span>
+<span class="source-line-no">132</span><span id="line-132">     * &lt;p&gt;When a text log file is set, all log entries written to the database</span>
+<span class="source-line-no">133</span><span id="line-133">     * are also appended to this text file in a human-readable format.&lt;/p&gt;</span>
+<span class="source-line-no">134</span><span id="line-134">     *</span>
+<span class="source-line-no">135</span><span id="line-135">     * @param textLogPath path to the text log file</span>
+<span class="source-line-no">136</span><span id="line-136">     * @throws IOException if the file cannot be opened for writing</span>
+<span class="source-line-no">137</span><span id="line-137">     */</span>
+<span class="source-line-no">138</span><span id="line-138">    public void setTextLogFile(Path textLogPath) throws IOException {</span>
+<span class="source-line-no">139</span><span id="line-139">        if (this.textLogWriter != null) {</span>
+<span class="source-line-no">140</span><span id="line-140">            this.textLogWriter.close();</span>
+<span class="source-line-no">141</span><span id="line-141">        }</span>
+<span class="source-line-no">142</span><span id="line-142">        this.textLogWriter = new PrintWriter(new BufferedWriter(new FileWriter(textLogPath.toFile(), true)), true);</span>
+<span class="source-line-no">143</span><span id="line-143">        LOG.info("Text logging enabled: " + textLogPath);</span>
+<span class="source-line-no">144</span><span id="line-144">    }</span>
+<span class="source-line-no">145</span><span id="line-145"></span>
+<span class="source-line-no">146</span><span id="line-146">    /**</span>
+<span class="source-line-no">147</span><span id="line-147">     * Disables text file logging.</span>
+<span class="source-line-no">148</span><span id="line-148">     */</span>
+<span class="source-line-no">149</span><span id="line-149">    public void disableTextLog() {</span>
+<span class="source-line-no">150</span><span id="line-150">        if (this.textLogWriter != null) {</span>
+<span class="source-line-no">151</span><span id="line-151">            this.textLogWriter.close();</span>
+<span class="source-line-no">152</span><span id="line-152">            this.textLogWriter = null;</span>
+<span class="source-line-no">153</span><span id="line-153">        }</span>
+<span class="source-line-no">154</span><span id="line-154">    }</span>
+<span class="source-line-no">155</span><span id="line-155"></span>
+<span class="source-line-no">156</span><span id="line-156">    private void initSchema() throws SQLException {</span>
+<span class="source-line-no">157</span><span id="line-157">        initSchema(connection);</span>
+<span class="source-line-no">158</span><span id="line-158">    }</span>
+<span class="source-line-no">159</span><span id="line-159"></span>
+<span class="source-line-no">160</span><span id="line-160">    /**</span>
+<span class="source-line-no">161</span><span id="line-161">     * Initializes the log database schema on the given connection.</span>
+<span class="source-line-no">162</span><span id="line-162">     *</span>
+<span class="source-line-no">163</span><span id="line-163">     * &lt;p&gt;This method can be called from external components (e.g., log server)</span>
+<span class="source-line-no">164</span><span id="line-164">     * to ensure consistent schema across all database access points.&lt;/p&gt;</span>
+<span class="source-line-no">165</span><span id="line-165">     *</span>
+<span class="source-line-no">166</span><span id="line-166">     * @param conn the database connection</span>
+<span class="source-line-no">167</span><span id="line-167">     * @throws SQLException if schema initialization fails</span>
+<span class="source-line-no">168</span><span id="line-168">     */</span>
+<span class="source-line-no">169</span><span id="line-169">    public static void initSchema(Connection conn) throws SQLException {</span>
+<span class="source-line-no">170</span><span id="line-170">        try (Statement stmt = conn.createStatement()) {</span>
+<span class="source-line-no">171</span><span id="line-171">            // Sessions table</span>
+<span class="source-line-no">172</span><span id="line-172">            stmt.execute("""</span>
+<span class="source-line-no">173</span><span id="line-173">                CREATE TABLE IF NOT EXISTS sessions (</span>
+<span class="source-line-no">174</span><span id="line-174">                    id IDENTITY PRIMARY KEY,</span>
+<span class="source-line-no">175</span><span id="line-175">                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,</span>
+<span class="source-line-no">176</span><span id="line-176">                    ended_at TIMESTAMP,</span>
+<span class="source-line-no">177</span><span id="line-177">                    workflow_name VARCHAR(255),</span>
+<span class="source-line-no">178</span><span id="line-178">                    overlay_name VARCHAR(255),</span>
+<span class="source-line-no">179</span><span id="line-179">                    inventory_name VARCHAR(255),</span>
+<span class="source-line-no">180</span><span id="line-180">                    node_count INT,</span>
+<span class="source-line-no">181</span><span id="line-181">                    status VARCHAR(20) DEFAULT 'RUNNING',</span>
+<span class="source-line-no">182</span><span id="line-182">                    cwd VARCHAR(1000),</span>
+<span class="source-line-no">183</span><span id="line-183">                    git_commit VARCHAR(50),</span>
+<span class="source-line-no">184</span><span id="line-184">                    git_branch VARCHAR(255),</span>
+<span class="source-line-no">185</span><span id="line-185">                    command_line VARCHAR(2000),</span>
+<span class="source-line-no">186</span><span id="line-186">                    actoriac_version VARCHAR(50),</span>
+<span class="source-line-no">187</span><span id="line-187">                    actoriac_commit VARCHAR(50)</span>
+<span class="source-line-no">188</span><span id="line-188">                )</span>
+<span class="source-line-no">189</span><span id="line-189">                """);</span>
+<span class="source-line-no">190</span><span id="line-190"></span>
+<span class="source-line-no">191</span><span id="line-191">            // Logs table</span>
+<span class="source-line-no">192</span><span id="line-192">            // label and action_name use CLOB to store long YAML snippets</span>
+<span class="source-line-no">193</span><span id="line-193">            stmt.execute("""</span>
+<span class="source-line-no">194</span><span id="line-194">                CREATE TABLE IF NOT EXISTS logs (</span>
+<span class="source-line-no">195</span><span id="line-195">                    id IDENTITY PRIMARY KEY,</span>
+<span class="source-line-no">196</span><span id="line-196">                    session_id BIGINT,</span>
+<span class="source-line-no">197</span><span id="line-197">                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,</span>
+<span class="source-line-no">198</span><span id="line-198">                    node_id VARCHAR(255) NOT NULL,</span>
+<span class="source-line-no">199</span><span id="line-199">                    label CLOB,</span>
+<span class="source-line-no">200</span><span id="line-200">                    action_name CLOB,</span>
+<span class="source-line-no">201</span><span id="line-201">                    level VARCHAR(10) NOT NULL,</span>
+<span class="source-line-no">202</span><span id="line-202">                    message CLOB,</span>
+<span class="source-line-no">203</span><span id="line-203">                    exit_code INT,</span>
+<span class="source-line-no">204</span><span id="line-204">                    duration_ms BIGINT,</span>
+<span class="source-line-no">205</span><span id="line-205">                    FOREIGN KEY (session_id) REFERENCES sessions(id)</span>
 <span class="source-line-no">206</span><span id="line-206">                )</span>
 <span class="source-line-no">207</span><span id="line-207">                """);</span>
 <span class="source-line-no">208</span><span id="line-208"></span>
-<span class="source-line-no">209</span><span id="line-209">            // Indexes</span>
-<span class="source-line-no">210</span><span id="line-210">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_session ON logs(session_id)");</span>
-<span class="source-line-no">211</span><span id="line-211">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_node ON logs(node_id)");</span>
-<span class="source-line-no">212</span><span id="line-212">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)");</span>
-<span class="source-line-no">213</span><span id="line-213">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)");</span>
-<span class="source-line-no">214</span><span id="line-214">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_workflow ON sessions(workflow_name)");</span>
-<span class="source-line-no">215</span><span id="line-215">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_overlay ON sessions(overlay_name)");</span>
-<span class="source-line-no">216</span><span id="line-216">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_inventory ON sessions(inventory_name)");</span>
-<span class="source-line-no">217</span><span id="line-217">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)");</span>
-<span class="source-line-no">218</span><span id="line-218">        }</span>
-<span class="source-line-no">219</span><span id="line-219">    }</span>
-<span class="source-line-no">220</span><span id="line-220"></span>
-<span class="source-line-no">221</span><span id="line-221">    private void writerLoop() {</span>
-<span class="source-line-no">222</span><span id="line-222">        List&lt;LogTask&gt; batch = new ArrayList&lt;&gt;(BATCH_SIZE);</span>
-<span class="source-line-no">223</span><span id="line-223">        while (running.get() || !writeQueue.isEmpty()) {</span>
-<span class="source-line-no">224</span><span id="line-224">            try {</span>
-<span class="source-line-no">225</span><span id="line-225">                LogTask task = writeQueue.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS);</span>
-<span class="source-line-no">226</span><span id="line-226">                if (task != null) {</span>
-<span class="source-line-no">227</span><span id="line-227">                    batch.add(task);</span>
-<span class="source-line-no">228</span><span id="line-228">                    writeQueue.drainTo(batch, BATCH_SIZE - 1);</span>
-<span class="source-line-no">229</span><span id="line-229">                    processBatch(batch);</span>
-<span class="source-line-no">230</span><span id="line-230">                    batch.clear();</span>
-<span class="source-line-no">231</span><span id="line-231">                }</span>
-<span class="source-line-no">232</span><span id="line-232">            } catch (InterruptedException e) {</span>
-<span class="source-line-no">233</span><span id="line-233">                Thread.currentThread().interrupt();</span>
-<span class="source-line-no">234</span><span id="line-234">                break;</span>
-<span class="source-line-no">235</span><span id="line-235">            }</span>
-<span class="source-line-no">236</span><span id="line-236">        }</span>
-<span class="source-line-no">237</span><span id="line-237">        // Process remaining</span>
-<span class="source-line-no">238</span><span id="line-238">        if (!batch.isEmpty()) {</span>
-<span class="source-line-no">239</span><span id="line-239">            processBatch(batch);</span>
-<span class="source-line-no">240</span><span id="line-240">        }</span>
-<span class="source-line-no">241</span><span id="line-241">    }</span>
-<span class="source-line-no">242</span><span id="line-242"></span>
-<span class="source-line-no">243</span><span id="line-243">    private void processBatch(List&lt;LogTask&gt; batch) {</span>
-<span class="source-line-no">244</span><span id="line-244">        try {</span>
-<span class="source-line-no">245</span><span id="line-245">            connection.setAutoCommit(false);</span>
-<span class="source-line-no">246</span><span id="line-246">            for (LogTask task : batch) {</span>
-<span class="source-line-no">247</span><span id="line-247">                task.execute(connection);</span>
+<span class="source-line-no">209</span><span id="line-209">            // Node results table</span>
+<span class="source-line-no">210</span><span id="line-210">            stmt.execute("""</span>
+<span class="source-line-no">211</span><span id="line-211">                CREATE TABLE IF NOT EXISTS node_results (</span>
+<span class="source-line-no">212</span><span id="line-212">                    id IDENTITY PRIMARY KEY,</span>
+<span class="source-line-no">213</span><span id="line-213">                    session_id BIGINT,</span>
+<span class="source-line-no">214</span><span id="line-214">                    node_id VARCHAR(255) NOT NULL,</span>
+<span class="source-line-no">215</span><span id="line-215">                    status VARCHAR(20) NOT NULL,</span>
+<span class="source-line-no">216</span><span id="line-216">                    reason VARCHAR(1000),</span>
+<span class="source-line-no">217</span><span id="line-217">                    FOREIGN KEY (session_id) REFERENCES sessions(id),</span>
+<span class="source-line-no">218</span><span id="line-218">                    UNIQUE (session_id, node_id)</span>
+<span class="source-line-no">219</span><span id="line-219">                )</span>
+<span class="source-line-no">220</span><span id="line-220">                """);</span>
+<span class="source-line-no">221</span><span id="line-221"></span>
+<span class="source-line-no">222</span><span id="line-222">            // Indexes</span>
+<span class="source-line-no">223</span><span id="line-223">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_session ON logs(session_id)");</span>
+<span class="source-line-no">224</span><span id="line-224">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_node ON logs(node_id)");</span>
+<span class="source-line-no">225</span><span id="line-225">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)");</span>
+<span class="source-line-no">226</span><span id="line-226">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)");</span>
+<span class="source-line-no">227</span><span id="line-227">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_workflow ON sessions(workflow_name)");</span>
+<span class="source-line-no">228</span><span id="line-228">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_overlay ON sessions(overlay_name)");</span>
+<span class="source-line-no">229</span><span id="line-229">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_inventory ON sessions(inventory_name)");</span>
+<span class="source-line-no">230</span><span id="line-230">            stmt.execute("CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)");</span>
+<span class="source-line-no">231</span><span id="line-231">        }</span>
+<span class="source-line-no">232</span><span id="line-232">    }</span>
+<span class="source-line-no">233</span><span id="line-233"></span>
+<span class="source-line-no">234</span><span id="line-234">    private void writerLoop() {</span>
+<span class="source-line-no">235</span><span id="line-235">        List&lt;LogTask&gt; batch = new ArrayList&lt;&gt;(BATCH_SIZE);</span>
+<span class="source-line-no">236</span><span id="line-236">        while (running.get() || !writeQueue.isEmpty()) {</span>
+<span class="source-line-no">237</span><span id="line-237">            try {</span>
+<span class="source-line-no">238</span><span id="line-238">                LogTask task = writeQueue.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS);</span>
+<span class="source-line-no">239</span><span id="line-239">                if (task != null) {</span>
+<span class="source-line-no">240</span><span id="line-240">                    batch.add(task);</span>
+<span class="source-line-no">241</span><span id="line-241">                    writeQueue.drainTo(batch, BATCH_SIZE - 1);</span>
+<span class="source-line-no">242</span><span id="line-242">                    processBatch(batch);</span>
+<span class="source-line-no">243</span><span id="line-243">                    batch.clear();</span>
+<span class="source-line-no">244</span><span id="line-244">                }</span>
+<span class="source-line-no">245</span><span id="line-245">            } catch (InterruptedException e) {</span>
+<span class="source-line-no">246</span><span id="line-246">                Thread.currentThread().interrupt();</span>
+<span class="source-line-no">247</span><span id="line-247">                break;</span>
 <span class="source-line-no">248</span><span id="line-248">            }</span>
-<span class="source-line-no">249</span><span id="line-249">            connection.commit();</span>
-<span class="source-line-no">250</span><span id="line-250">            connection.setAutoCommit(true);</span>
-<span class="source-line-no">251</span><span id="line-251">        } catch (SQLException e) {</span>
-<span class="source-line-no">252</span><span id="line-252">            try {</span>
-<span class="source-line-no">253</span><span id="line-253">                connection.rollback();</span>
-<span class="source-line-no">254</span><span id="line-254">                connection.setAutoCommit(true);</span>
-<span class="source-line-no">255</span><span id="line-255">            } catch (SQLException ex) {</span>
-<span class="source-line-no">256</span><span id="line-256">                // Ignore rollback errors</span>
-<span class="source-line-no">257</span><span id="line-257">            }</span>
-<span class="source-line-no">258</span><span id="line-258">            e.printStackTrace();</span>
-<span class="source-line-no">259</span><span id="line-259">        }</span>
-<span class="source-line-no">260</span><span id="line-260">    }</span>
-<span class="source-line-no">261</span><span id="line-261"></span>
-<span class="source-line-no">262</span><span id="line-262">    @Override</span>
-<span class="source-line-no">263</span><span id="line-263">    public long startSession(String workflowName, int nodeCount) {</span>
-<span class="source-line-no">264</span><span id="line-264">        return startSession(workflowName, null, null, nodeCount);</span>
-<span class="source-line-no">265</span><span id="line-265">    }</span>
-<span class="source-line-no">266</span><span id="line-266"></span>
-<span class="source-line-no">267</span><span id="line-267">    @Override</span>
-<span class="source-line-no">268</span><span id="line-268">    public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount) {</span>
-<span class="source-line-no">269</span><span id="line-269">        return startSession(workflowName, overlayName, inventoryName, nodeCount,</span>
-<span class="source-line-no">270</span><span id="line-270">                            null, null, null, null, null, null);</span>
-<span class="source-line-no">271</span><span id="line-271">    }</span>
-<span class="source-line-no">272</span><span id="line-272"></span>
-<span class="source-line-no">273</span><span id="line-273">    @Override</span>
-<span class="source-line-no">274</span><span id="line-274">    public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount,</span>
-<span class="source-line-no">275</span><span id="line-275">                             String cwd, String gitCommit, String gitBranch,</span>
-<span class="source-line-no">276</span><span id="line-276">                             String commandLine, String actorIacVersion, String actorIacCommit) {</span>
-<span class="source-line-no">277</span><span id="line-277">        try (PreparedStatement ps = connection.prepareStatement(</span>
-<span class="source-line-no">278</span><span id="line-278">                "INSERT INTO sessions (workflow_name, overlay_name, inventory_name, node_count, " +</span>
-<span class="source-line-no">279</span><span id="line-279">                "cwd, git_commit, git_branch, command_line, actoriac_version, actoriac_commit) " +</span>
-<span class="source-line-no">280</span><span id="line-280">                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",</span>
-<span class="source-line-no">281</span><span id="line-281">                Statement.RETURN_GENERATED_KEYS)) {</span>
-<span class="source-line-no">282</span><span id="line-282">            ps.setString(1, workflowName);</span>
-<span class="source-line-no">283</span><span id="line-283">            ps.setString(2, overlayName);</span>
-<span class="source-line-no">284</span><span id="line-284">            ps.setString(3, inventoryName);</span>
-<span class="source-line-no">285</span><span id="line-285">            ps.setInt(4, nodeCount);</span>
-<span class="source-line-no">286</span><span id="line-286">            ps.setString(5, cwd);</span>
-<span class="source-line-no">287</span><span id="line-287">            ps.setString(6, gitCommit);</span>
-<span class="source-line-no">288</span><span id="line-288">            ps.setString(7, gitBranch);</span>
-<span class="source-line-no">289</span><span id="line-289">            ps.setString(8, commandLine);</span>
-<span class="source-line-no">290</span><span id="line-290">            ps.setString(9, actorIacVersion);</span>
-<span class="source-line-no">291</span><span id="line-291">            ps.setString(10, actorIacCommit);</span>
-<span class="source-line-no">292</span><span id="line-292">            ps.executeUpdate();</span>
-<span class="source-line-no">293</span><span id="line-293">            try (ResultSet rs = ps.getGeneratedKeys()) {</span>
-<span class="source-line-no">294</span><span id="line-294">                if (rs.next()) {</span>
-<span class="source-line-no">295</span><span id="line-295">                    return rs.getLong(1);</span>
-<span class="source-line-no">296</span><span id="line-296">                }</span>
-<span class="source-line-no">297</span><span id="line-297">            }</span>
-<span class="source-line-no">298</span><span id="line-298">        } catch (SQLException e) {</span>
-<span class="source-line-no">299</span><span id="line-299">            throw new RuntimeException("Failed to start session", e);</span>
-<span class="source-line-no">300</span><span id="line-300">        }</span>
-<span class="source-line-no">301</span><span id="line-301">        return -1;</span>
-<span class="source-line-no">302</span><span id="line-302">    }</span>
-<span class="source-line-no">303</span><span id="line-303"></span>
-<span class="source-line-no">304</span><span id="line-304">    @Override</span>
-<span class="source-line-no">305</span><span id="line-305">    public void log(long sessionId, String nodeId, LogLevel level, String message) {</span>
-<span class="source-line-no">306</span><span id="line-306">        log(sessionId, nodeId, null, level, message);</span>
-<span class="source-line-no">307</span><span id="line-307">    }</span>
-<span class="source-line-no">308</span><span id="line-308"></span>
-<span class="source-line-no">309</span><span id="line-309">    @Override</span>
-<span class="source-line-no">310</span><span id="line-310">    public void log(long sessionId, String nodeId, String label, LogLevel level, String message) {</span>
-<span class="source-line-no">311</span><span id="line-311">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, null, level, message, null, null));</span>
-<span class="source-line-no">312</span><span id="line-312">        writeToTextLog(nodeId, label, level, message);</span>
-<span class="source-line-no">313</span><span id="line-313">    }</span>
-<span class="source-line-no">314</span><span id="line-314"></span>
-<span class="source-line-no">315</span><span id="line-315">    @Override</span>
-<span class="source-line-no">316</span><span id="line-316">    public void logAction(long sessionId, String nodeId, String label,</span>
-<span class="source-line-no">317</span><span id="line-317">                          String actionName, int exitCode, long durationMs, String output) {</span>
-<span class="source-line-no">318</span><span id="line-318">        LogLevel level = parseLogLevelFromLabel(label, exitCode);</span>
-<span class="source-line-no">319</span><span id="line-319">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, actionName, level, output, exitCode, durationMs));</span>
-<span class="source-line-no">320</span><span id="line-320">        writeToTextLog(nodeId, label, level, output);</span>
-<span class="source-line-no">321</span><span id="line-321">    }</span>
-<span class="source-line-no">322</span><span id="line-322"></span>
-<span class="source-line-no">323</span><span id="line-323">    /**</span>
-<span class="source-line-no">324</span><span id="line-324">     * Parses log level from the label parameter.</span>
-<span class="source-line-no">325</span><span id="line-325">     *</span>
-<span class="source-line-no">326</span><span id="line-326">     * &lt;p&gt;Maps java.util.logging levels to LogLevel:&lt;/p&gt;</span>
-<span class="source-line-no">327</span><span id="line-327">     * &lt;ul&gt;</span>
-<span class="source-line-no">328</span><span id="line-328">     *   &lt;li&gt;SEVERE → ERROR&lt;/li&gt;</span>
-<span class="source-line-no">329</span><span id="line-329">     *   &lt;li&gt;WARNING → WARN&lt;/li&gt;</span>
-<span class="source-line-no">330</span><span id="line-330">     *   &lt;li&gt;INFO → INFO&lt;/li&gt;</span>
-<span class="source-line-no">331</span><span id="line-331">     *   &lt;li&gt;CONFIG, FINE, FINER, FINEST → DEBUG&lt;/li&gt;</span>
-<span class="source-line-no">332</span><span id="line-332">     * &lt;/ul&gt;</span>
-<span class="source-line-no">333</span><span id="line-333">     */</span>
-<span class="source-line-no">334</span><span id="line-334">    private LogLevel parseLogLevelFromLabel(String label, int exitCode) {</span>
-<span class="source-line-no">335</span><span id="line-335">        if (label != null &amp;&amp; label.startsWith("log-")) {</span>
-<span class="source-line-no">336</span><span id="line-336">            String levelName = label.substring(4).toUpperCase();</span>
-<span class="source-line-no">337</span><span id="line-337">            return switch (levelName) {</span>
-<span class="source-line-no">338</span><span id="line-338">                case "SEVERE" -&gt; LogLevel.ERROR;</span>
-<span class="source-line-no">339</span><span id="line-339">                case "WARNING" -&gt; LogLevel.WARN;</span>
-<span class="source-line-no">340</span><span id="line-340">                case "INFO" -&gt; LogLevel.INFO;</span>
-<span class="source-line-no">341</span><span id="line-341">                case "CONFIG", "FINE", "FINER", "FINEST" -&gt; LogLevel.DEBUG;</span>
-<span class="source-line-no">342</span><span id="line-342">                default -&gt; exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;</span>
-<span class="source-line-no">343</span><span id="line-343">            };</span>
-<span class="source-line-no">344</span><span id="line-344">        }</span>
-<span class="source-line-no">345</span><span id="line-345">        return exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;</span>
-<span class="source-line-no">346</span><span id="line-346">    }</span>
-<span class="source-line-no">347</span><span id="line-347"></span>
-<span class="source-line-no">348</span><span id="line-348">    /**</span>
-<span class="source-line-no">349</span><span id="line-349">     * Writes a log entry to the text log file if enabled.</span>
-<span class="source-line-no">350</span><span id="line-350">     *</span>
-<span class="source-line-no">351</span><span id="line-351">     * @param nodeId the node identifier</span>
-<span class="source-line-no">352</span><span id="line-352">     * @param label the workflow label (may be null)</span>
-<span class="source-line-no">353</span><span id="line-353">     * @param level the log level</span>
-<span class="source-line-no">354</span><span id="line-354">     * @param message the log message</span>
-<span class="source-line-no">355</span><span id="line-355">     */</span>
-<span class="source-line-no">356</span><span id="line-356">    private void writeToTextLog(String nodeId, String label, LogLevel level, String message) {</span>
-<span class="source-line-no">357</span><span id="line-357">        if (textLogWriter == null) {</span>
-<span class="source-line-no">358</span><span id="line-358">            return;</span>
-<span class="source-line-no">359</span><span id="line-359">        }</span>
-<span class="source-line-no">360</span><span id="line-360">        String timestamp = LocalDateTime.now().atZone(SYSTEM_ZONE).format(ISO_FORMATTER);</span>
-<span class="source-line-no">361</span><span id="line-361">        String labelPart = label != null ? " [" + label + "]" : "";</span>
-<span class="source-line-no">362</span><span id="line-362">        textLogWriter.printf("%s %s %s%s %s%n", timestamp, level, nodeId, labelPart, message);</span>
-<span class="source-line-no">363</span><span id="line-363">    }</span>
-<span class="source-line-no">364</span><span id="line-364"></span>
-<span class="source-line-no">365</span><span id="line-365">    @Override</span>
-<span class="source-line-no">366</span><span id="line-366">    public void markNodeSuccess(long sessionId, String nodeId) {</span>
-<span class="source-line-no">367</span><span id="line-367">        writeQueue.offer(new LogTask.UpdateNodeResult(sessionId, nodeId, "SUCCESS", null));</span>
-<span class="source-line-no">368</span><span id="line-368">    }</span>
-<span class="source-line-no">369</span><span id="line-369"></span>
-<span class="source-line-no">370</span><span id="line-370">    @Override</span>
-<span class="source-line-no">371</span><span id="line-371">    public void markNodeFailed(long sessionId, String nodeId, String reason) {</span>
-<span class="source-line-no">372</span><span id="line-372">        writeQueue.offer(new LogTask.UpdateNodeResult(sessionId, nodeId, "FAILED", reason));</span>
-<span class="source-line-no">373</span><span id="line-373">    }</span>
-<span class="source-line-no">374</span><span id="line-374"></span>
-<span class="source-line-no">375</span><span id="line-375">    @Override</span>
-<span class="source-line-no">376</span><span id="line-376">    public void endSession(long sessionId, SessionStatus status) {</span>
-<span class="source-line-no">377</span><span id="line-377">        // Flush pending writes</span>
-<span class="source-line-no">378</span><span id="line-378">        flushWrites();</span>
-<span class="source-line-no">379</span><span id="line-379"></span>
-<span class="source-line-no">380</span><span id="line-380">        try (PreparedStatement ps = connection.prepareStatement(</span>
-<span class="source-line-no">381</span><span id="line-381">                "UPDATE sessions SET ended_at = CURRENT_TIMESTAMP, status = ? WHERE id = ?")) {</span>
-<span class="source-line-no">382</span><span id="line-382">            ps.setString(1, status.name());</span>
-<span class="source-line-no">383</span><span id="line-383">            ps.setLong(2, sessionId);</span>
-<span class="source-line-no">384</span><span id="line-384">            ps.executeUpdate();</span>
-<span class="source-line-no">385</span><span id="line-385">        } catch (SQLException e) {</span>
-<span class="source-line-no">386</span><span id="line-386">            throw new RuntimeException("Failed to end session", e);</span>
-<span class="source-line-no">387</span><span id="line-387">        }</span>
-<span class="source-line-no">388</span><span id="line-388">    }</span>
-<span class="source-line-no">389</span><span id="line-389"></span>
-<span class="source-line-no">390</span><span id="line-390">    private void flushWrites() {</span>
-<span class="source-line-no">391</span><span id="line-391">        // Wait for queue to drain</span>
-<span class="source-line-no">392</span><span id="line-392">        while (!writeQueue.isEmpty()) {</span>
-<span class="source-line-no">393</span><span id="line-393">            try {</span>
-<span class="source-line-no">394</span><span id="line-394">                Thread.sleep(10);</span>
-<span class="source-line-no">395</span><span id="line-395">            } catch (InterruptedException e) {</span>
-<span class="source-line-no">396</span><span id="line-396">                Thread.currentThread().interrupt();</span>
-<span class="source-line-no">397</span><span id="line-397">                break;</span>
-<span class="source-line-no">398</span><span id="line-398">            }</span>
-<span class="source-line-no">399</span><span id="line-399">        }</span>
-<span class="source-line-no">400</span><span id="line-400">    }</span>
-<span class="source-line-no">401</span><span id="line-401"></span>
-<span class="source-line-no">402</span><span id="line-402">    @Override</span>
-<span class="source-line-no">403</span><span id="line-403">    public List&lt;LogEntry&gt; getLogsByNode(long sessionId, String nodeId) {</span>
-<span class="source-line-no">404</span><span id="line-404">        return reader.getLogsByNode(sessionId, nodeId);</span>
-<span class="source-line-no">405</span><span id="line-405">    }</span>
-<span class="source-line-no">406</span><span id="line-406"></span>
-<span class="source-line-no">407</span><span id="line-407">    @Override</span>
-<span class="source-line-no">408</span><span id="line-408">    public List&lt;LogEntry&gt; getLogsByLevel(long sessionId, LogLevel minLevel) {</span>
-<span class="source-line-no">409</span><span id="line-409">        return reader.getLogsByLevel(sessionId, minLevel);</span>
-<span class="source-line-no">410</span><span id="line-410">    }</span>
-<span class="source-line-no">411</span><span id="line-411"></span>
-<span class="source-line-no">412</span><span id="line-412">    @Override</span>
-<span class="source-line-no">413</span><span id="line-413">    public SessionSummary getSummary(long sessionId) {</span>
-<span class="source-line-no">414</span><span id="line-414">        return reader.getSummary(sessionId);</span>
-<span class="source-line-no">415</span><span id="line-415">    }</span>
-<span class="source-line-no">416</span><span id="line-416"></span>
-<span class="source-line-no">417</span><span id="line-417">    @Override</span>
-<span class="source-line-no">418</span><span id="line-418">    public long getLatestSessionId() {</span>
-<span class="source-line-no">419</span><span id="line-419">        return reader.getLatestSessionId();</span>
-<span class="source-line-no">420</span><span id="line-420">    }</span>
-<span class="source-line-no">421</span><span id="line-421"></span>
-<span class="source-line-no">422</span><span id="line-422">    @Override</span>
-<span class="source-line-no">423</span><span id="line-423">    public List&lt;SessionSummary&gt; listSessions(int limit) {</span>
-<span class="source-line-no">424</span><span id="line-424">        return reader.listSessions(limit);</span>
-<span class="source-line-no">425</span><span id="line-425">    }</span>
-<span class="source-line-no">426</span><span id="line-426"></span>
-<span class="source-line-no">427</span><span id="line-427">    @Override</span>
-<span class="source-line-no">428</span><span id="line-428">    public void close() throws Exception {</span>
-<span class="source-line-no">429</span><span id="line-429">        running.set(false);</span>
-<span class="source-line-no">430</span><span id="line-430">        writerThread.interrupt();</span>
-<span class="source-line-no">431</span><span id="line-431">        try {</span>
-<span class="source-line-no">432</span><span id="line-432">            writerThread.join(5000);</span>
-<span class="source-line-no">433</span><span id="line-433">        } catch (InterruptedException e) {</span>
-<span class="source-line-no">434</span><span id="line-434">            Thread.currentThread().interrupt();</span>
-<span class="source-line-no">435</span><span id="line-435">        }</span>
-<span class="source-line-no">436</span><span id="line-436">        if (textLogWriter != null) {</span>
-<span class="source-line-no">437</span><span id="line-437">            textLogWriter.close();</span>
-<span class="source-line-no">438</span><span id="line-438">            textLogWriter = null;</span>
-<span class="source-line-no">439</span><span id="line-439">        }</span>
-<span class="source-line-no">440</span><span id="line-440">        connection.close();</span>
-<span class="source-line-no">441</span><span id="line-441">    }</span>
-<span class="source-line-no">442</span><span id="line-442"></span>
-<span class="source-line-no">443</span><span id="line-443">    // Internal task classes for async writing</span>
-<span class="source-line-no">444</span><span id="line-444">    private interface LogTask {</span>
-<span class="source-line-no">445</span><span id="line-445">        void execute(Connection conn) throws SQLException;</span>
-<span class="source-line-no">446</span><span id="line-446"></span>
-<span class="source-line-no">447</span><span id="line-447">        record InsertLog(long sessionId, String nodeId, String label, String actionName,</span>
-<span class="source-line-no">448</span><span id="line-448">                         LogLevel level, String message, Integer exitCode, Long durationMs) implements LogTask {</span>
-<span class="source-line-no">449</span><span id="line-449">            @Override</span>
-<span class="source-line-no">450</span><span id="line-450">            public void execute(Connection conn) throws SQLException {</span>
-<span class="source-line-no">451</span><span id="line-451">                try (PreparedStatement ps = conn.prepareStatement(</span>
-<span class="source-line-no">452</span><span id="line-452">                        "INSERT INTO logs (session_id, node_id, label, action_name, level, message, exit_code, duration_ms) " +</span>
-<span class="source-line-no">453</span><span id="line-453">                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {</span>
-<span class="source-line-no">454</span><span id="line-454">                    ps.setLong(1, sessionId);</span>
-<span class="source-line-no">455</span><span id="line-455">                    ps.setString(2, nodeId);</span>
-<span class="source-line-no">456</span><span id="line-456">                    ps.setString(3, label);</span>
-<span class="source-line-no">457</span><span id="line-457">                    ps.setString(4, actionName);</span>
-<span class="source-line-no">458</span><span id="line-458">                    ps.setString(5, level.name());</span>
-<span class="source-line-no">459</span><span id="line-459">                    ps.setString(6, message);</span>
-<span class="source-line-no">460</span><span id="line-460">                    if (exitCode != null) {</span>
-<span class="source-line-no">461</span><span id="line-461">                        ps.setInt(7, exitCode);</span>
-<span class="source-line-no">462</span><span id="line-462">                    } else {</span>
-<span class="source-line-no">463</span><span id="line-463">                        ps.setNull(7, Types.INTEGER);</span>
-<span class="source-line-no">464</span><span id="line-464">                    }</span>
-<span class="source-line-no">465</span><span id="line-465">                    if (durationMs != null) {</span>
-<span class="source-line-no">466</span><span id="line-466">                        ps.setLong(8, durationMs);</span>
-<span class="source-line-no">467</span><span id="line-467">                    } else {</span>
-<span class="source-line-no">468</span><span id="line-468">                        ps.setNull(8, Types.BIGINT);</span>
-<span class="source-line-no">469</span><span id="line-469">                    }</span>
-<span class="source-line-no">470</span><span id="line-470">                    ps.executeUpdate();</span>
-<span class="source-line-no">471</span><span id="line-471">                }</span>
-<span class="source-line-no">472</span><span id="line-472">            }</span>
-<span class="source-line-no">473</span><span id="line-473">        }</span>
-<span class="source-line-no">474</span><span id="line-474"></span>
-<span class="source-line-no">475</span><span id="line-475">        record UpdateNodeResult(long sessionId, String nodeId, String status, String reason) implements LogTask {</span>
-<span class="source-line-no">476</span><span id="line-476">            @Override</span>
-<span class="source-line-no">477</span><span id="line-477">            public void execute(Connection conn) throws SQLException {</span>
-<span class="source-line-no">478</span><span id="line-478">                try (PreparedStatement ps = conn.prepareStatement(</span>
-<span class="source-line-no">479</span><span id="line-479">                        "MERGE INTO node_results (session_id, node_id, status, reason) KEY (session_id, node_id) VALUES (?, ?, ?, ?)")) {</span>
-<span class="source-line-no">480</span><span id="line-480">                    ps.setLong(1, sessionId);</span>
-<span class="source-line-no">481</span><span id="line-481">                    ps.setString(2, nodeId);</span>
-<span class="source-line-no">482</span><span id="line-482">                    ps.setString(3, status);</span>
-<span class="source-line-no">483</span><span id="line-483">                    ps.setString(4, reason);</span>
-<span class="source-line-no">484</span><span id="line-484">                    ps.executeUpdate();</span>
-<span class="source-line-no">485</span><span id="line-485">                }</span>
-<span class="source-line-no">486</span><span id="line-486">            }</span>
-<span class="source-line-no">487</span><span id="line-487">        }</span>
-<span class="source-line-no">488</span><span id="line-488">    }</span>
-<span class="source-line-no">489</span><span id="line-489">}</span>
+<span class="source-line-no">249</span><span id="line-249">        }</span>
+<span class="source-line-no">250</span><span id="line-250">        // Process remaining</span>
+<span class="source-line-no">251</span><span id="line-251">        if (!batch.isEmpty()) {</span>
+<span class="source-line-no">252</span><span id="line-252">            processBatch(batch);</span>
+<span class="source-line-no">253</span><span id="line-253">        }</span>
+<span class="source-line-no">254</span><span id="line-254">    }</span>
+<span class="source-line-no">255</span><span id="line-255"></span>
+<span class="source-line-no">256</span><span id="line-256">    private void processBatch(List&lt;LogTask&gt; batch) {</span>
+<span class="source-line-no">257</span><span id="line-257">        try {</span>
+<span class="source-line-no">258</span><span id="line-258">            connection.setAutoCommit(false);</span>
+<span class="source-line-no">259</span><span id="line-259">            for (LogTask task : batch) {</span>
+<span class="source-line-no">260</span><span id="line-260">                task.execute(connection);</span>
+<span class="source-line-no">261</span><span id="line-261">            }</span>
+<span class="source-line-no">262</span><span id="line-262">            connection.commit();</span>
+<span class="source-line-no">263</span><span id="line-263">            connection.setAutoCommit(true);</span>
+<span class="source-line-no">264</span><span id="line-264">        } catch (SQLException e) {</span>
+<span class="source-line-no">265</span><span id="line-265">            try {</span>
+<span class="source-line-no">266</span><span id="line-266">                connection.rollback();</span>
+<span class="source-line-no">267</span><span id="line-267">                connection.setAutoCommit(true);</span>
+<span class="source-line-no">268</span><span id="line-268">            } catch (SQLException ex) {</span>
+<span class="source-line-no">269</span><span id="line-269">                // Ignore rollback errors</span>
+<span class="source-line-no">270</span><span id="line-270">            }</span>
+<span class="source-line-no">271</span><span id="line-271">            e.printStackTrace();</span>
+<span class="source-line-no">272</span><span id="line-272">        }</span>
+<span class="source-line-no">273</span><span id="line-273">    }</span>
+<span class="source-line-no">274</span><span id="line-274"></span>
+<span class="source-line-no">275</span><span id="line-275">    @Override</span>
+<span class="source-line-no">276</span><span id="line-276">    public long startSession(String workflowName, int nodeCount) {</span>
+<span class="source-line-no">277</span><span id="line-277">        return startSession(workflowName, null, null, nodeCount);</span>
+<span class="source-line-no">278</span><span id="line-278">    }</span>
+<span class="source-line-no">279</span><span id="line-279"></span>
+<span class="source-line-no">280</span><span id="line-280">    @Override</span>
+<span class="source-line-no">281</span><span id="line-281">    public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount) {</span>
+<span class="source-line-no">282</span><span id="line-282">        return startSession(workflowName, overlayName, inventoryName, nodeCount,</span>
+<span class="source-line-no">283</span><span id="line-283">                            null, null, null, null, null, null);</span>
+<span class="source-line-no">284</span><span id="line-284">    }</span>
+<span class="source-line-no">285</span><span id="line-285"></span>
+<span class="source-line-no">286</span><span id="line-286">    @Override</span>
+<span class="source-line-no">287</span><span id="line-287">    public long startSession(String workflowName, String overlayName, String inventoryName, int nodeCount,</span>
+<span class="source-line-no">288</span><span id="line-288">                             String cwd, String gitCommit, String gitBranch,</span>
+<span class="source-line-no">289</span><span id="line-289">                             String commandLine, String actorIacVersion, String actorIacCommit) {</span>
+<span class="source-line-no">290</span><span id="line-290">        try (PreparedStatement ps = connection.prepareStatement(</span>
+<span class="source-line-no">291</span><span id="line-291">                "INSERT INTO sessions (workflow_name, overlay_name, inventory_name, node_count, " +</span>
+<span class="source-line-no">292</span><span id="line-292">                "cwd, git_commit, git_branch, command_line, actoriac_version, actoriac_commit) " +</span>
+<span class="source-line-no">293</span><span id="line-293">                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",</span>
+<span class="source-line-no">294</span><span id="line-294">                Statement.RETURN_GENERATED_KEYS)) {</span>
+<span class="source-line-no">295</span><span id="line-295">            ps.setString(1, workflowName);</span>
+<span class="source-line-no">296</span><span id="line-296">            ps.setString(2, overlayName);</span>
+<span class="source-line-no">297</span><span id="line-297">            ps.setString(3, inventoryName);</span>
+<span class="source-line-no">298</span><span id="line-298">            ps.setInt(4, nodeCount);</span>
+<span class="source-line-no">299</span><span id="line-299">            ps.setString(5, cwd);</span>
+<span class="source-line-no">300</span><span id="line-300">            ps.setString(6, gitCommit);</span>
+<span class="source-line-no">301</span><span id="line-301">            ps.setString(7, gitBranch);</span>
+<span class="source-line-no">302</span><span id="line-302">            ps.setString(8, commandLine);</span>
+<span class="source-line-no">303</span><span id="line-303">            ps.setString(9, actorIacVersion);</span>
+<span class="source-line-no">304</span><span id="line-304">            ps.setString(10, actorIacCommit);</span>
+<span class="source-line-no">305</span><span id="line-305">            ps.executeUpdate();</span>
+<span class="source-line-no">306</span><span id="line-306">            try (ResultSet rs = ps.getGeneratedKeys()) {</span>
+<span class="source-line-no">307</span><span id="line-307">                if (rs.next()) {</span>
+<span class="source-line-no">308</span><span id="line-308">                    return rs.getLong(1);</span>
+<span class="source-line-no">309</span><span id="line-309">                }</span>
+<span class="source-line-no">310</span><span id="line-310">            }</span>
+<span class="source-line-no">311</span><span id="line-311">        } catch (SQLException e) {</span>
+<span class="source-line-no">312</span><span id="line-312">            throw new RuntimeException("Failed to start session", e);</span>
+<span class="source-line-no">313</span><span id="line-313">        }</span>
+<span class="source-line-no">314</span><span id="line-314">        return -1;</span>
+<span class="source-line-no">315</span><span id="line-315">    }</span>
+<span class="source-line-no">316</span><span id="line-316"></span>
+<span class="source-line-no">317</span><span id="line-317">    @Override</span>
+<span class="source-line-no">318</span><span id="line-318">    public void log(long sessionId, String nodeId, LogLevel level, String message) {</span>
+<span class="source-line-no">319</span><span id="line-319">        log(sessionId, nodeId, null, level, message);</span>
+<span class="source-line-no">320</span><span id="line-320">    }</span>
+<span class="source-line-no">321</span><span id="line-321"></span>
+<span class="source-line-no">322</span><span id="line-322">    @Override</span>
+<span class="source-line-no">323</span><span id="line-323">    public void log(long sessionId, String nodeId, String label, LogLevel level, String message) {</span>
+<span class="source-line-no">324</span><span id="line-324">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, null, level, message, null, null));</span>
+<span class="source-line-no">325</span><span id="line-325">        writeToTextLog(nodeId, label, level, message);</span>
+<span class="source-line-no">326</span><span id="line-326">    }</span>
+<span class="source-line-no">327</span><span id="line-327"></span>
+<span class="source-line-no">328</span><span id="line-328">    @Override</span>
+<span class="source-line-no">329</span><span id="line-329">    public void logAction(long sessionId, String nodeId, String label,</span>
+<span class="source-line-no">330</span><span id="line-330">                          String actionName, int exitCode, long durationMs, String output) {</span>
+<span class="source-line-no">331</span><span id="line-331">        LogLevel level = parseLogLevelFromLabel(label, exitCode);</span>
+<span class="source-line-no">332</span><span id="line-332">        writeQueue.offer(new LogTask.InsertLog(sessionId, nodeId, label, actionName, level, output, exitCode, durationMs));</span>
+<span class="source-line-no">333</span><span id="line-333">        writeToTextLog(nodeId, label, level, output);</span>
+<span class="source-line-no">334</span><span id="line-334">    }</span>
+<span class="source-line-no">335</span><span id="line-335"></span>
+<span class="source-line-no">336</span><span id="line-336">    /**</span>
+<span class="source-line-no">337</span><span id="line-337">     * Parses log level from the label parameter.</span>
+<span class="source-line-no">338</span><span id="line-338">     *</span>
+<span class="source-line-no">339</span><span id="line-339">     * &lt;p&gt;Maps java.util.logging levels to LogLevel:&lt;/p&gt;</span>
+<span class="source-line-no">340</span><span id="line-340">     * &lt;ul&gt;</span>
+<span class="source-line-no">341</span><span id="line-341">     *   &lt;li&gt;SEVERE → ERROR&lt;/li&gt;</span>
+<span class="source-line-no">342</span><span id="line-342">     *   &lt;li&gt;WARNING → WARN&lt;/li&gt;</span>
+<span class="source-line-no">343</span><span id="line-343">     *   &lt;li&gt;INFO → INFO&lt;/li&gt;</span>
+<span class="source-line-no">344</span><span id="line-344">     *   &lt;li&gt;CONFIG, FINE, FINER, FINEST → DEBUG&lt;/li&gt;</span>
+<span class="source-line-no">345</span><span id="line-345">     * &lt;/ul&gt;</span>
+<span class="source-line-no">346</span><span id="line-346">     */</span>
+<span class="source-line-no">347</span><span id="line-347">    private LogLevel parseLogLevelFromLabel(String label, int exitCode) {</span>
+<span class="source-line-no">348</span><span id="line-348">        if (label != null &amp;&amp; label.startsWith("log-")) {</span>
+<span class="source-line-no">349</span><span id="line-349">            String levelName = label.substring(4).toUpperCase();</span>
+<span class="source-line-no">350</span><span id="line-350">            return switch (levelName) {</span>
+<span class="source-line-no">351</span><span id="line-351">                case "SEVERE" -&gt; LogLevel.ERROR;</span>
+<span class="source-line-no">352</span><span id="line-352">                case "WARNING" -&gt; LogLevel.WARN;</span>
+<span class="source-line-no">353</span><span id="line-353">                case "INFO" -&gt; LogLevel.INFO;</span>
+<span class="source-line-no">354</span><span id="line-354">                case "CONFIG", "FINE", "FINER", "FINEST" -&gt; LogLevel.DEBUG;</span>
+<span class="source-line-no">355</span><span id="line-355">                default -&gt; exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;</span>
+<span class="source-line-no">356</span><span id="line-356">            };</span>
+<span class="source-line-no">357</span><span id="line-357">        }</span>
+<span class="source-line-no">358</span><span id="line-358">        return exitCode == 0 ? LogLevel.INFO : LogLevel.ERROR;</span>
+<span class="source-line-no">359</span><span id="line-359">    }</span>
+<span class="source-line-no">360</span><span id="line-360"></span>
+<span class="source-line-no">361</span><span id="line-361">    /**</span>
+<span class="source-line-no">362</span><span id="line-362">     * Writes a log entry to the text log file if enabled.</span>
+<span class="source-line-no">363</span><span id="line-363">     *</span>
+<span class="source-line-no">364</span><span id="line-364">     * @param nodeId the node identifier</span>
+<span class="source-line-no">365</span><span id="line-365">     * @param label the workflow label (may be null)</span>
+<span class="source-line-no">366</span><span id="line-366">     * @param level the log level</span>
+<span class="source-line-no">367</span><span id="line-367">     * @param message the log message</span>
+<span class="source-line-no">368</span><span id="line-368">     */</span>
+<span class="source-line-no">369</span><span id="line-369">    private void writeToTextLog(String nodeId, String label, LogLevel level, String message) {</span>
+<span class="source-line-no">370</span><span id="line-370">        if (textLogWriter == null) {</span>
+<span class="source-line-no">371</span><span id="line-371">            return;</span>
+<span class="source-line-no">372</span><span id="line-372">        }</span>
+<span class="source-line-no">373</span><span id="line-373">        String timestamp = LocalDateTime.now().atZone(SYSTEM_ZONE).format(ISO_FORMATTER);</span>
+<span class="source-line-no">374</span><span id="line-374">        String labelPart = label != null ? " [" + label + "]" : "";</span>
+<span class="source-line-no">375</span><span id="line-375">        textLogWriter.printf("%s %s %s%s %s%n", timestamp, level, nodeId, labelPart, message);</span>
+<span class="source-line-no">376</span><span id="line-376">    }</span>
+<span class="source-line-no">377</span><span id="line-377"></span>
+<span class="source-line-no">378</span><span id="line-378">    @Override</span>
+<span class="source-line-no">379</span><span id="line-379">    public void markNodeSuccess(long sessionId, String nodeId) {</span>
+<span class="source-line-no">380</span><span id="line-380">        writeQueue.offer(new LogTask.UpdateNodeResult(sessionId, nodeId, "SUCCESS", null));</span>
+<span class="source-line-no">381</span><span id="line-381">    }</span>
+<span class="source-line-no">382</span><span id="line-382"></span>
+<span class="source-line-no">383</span><span id="line-383">    @Override</span>
+<span class="source-line-no">384</span><span id="line-384">    public void markNodeFailed(long sessionId, String nodeId, String reason) {</span>
+<span class="source-line-no">385</span><span id="line-385">        writeQueue.offer(new LogTask.UpdateNodeResult(sessionId, nodeId, "FAILED", reason));</span>
+<span class="source-line-no">386</span><span id="line-386">    }</span>
+<span class="source-line-no">387</span><span id="line-387"></span>
+<span class="source-line-no">388</span><span id="line-388">    @Override</span>
+<span class="source-line-no">389</span><span id="line-389">    public void endSession(long sessionId, SessionStatus status) {</span>
+<span class="source-line-no">390</span><span id="line-390">        // Flush pending writes</span>
+<span class="source-line-no">391</span><span id="line-391">        flushWrites();</span>
+<span class="source-line-no">392</span><span id="line-392"></span>
+<span class="source-line-no">393</span><span id="line-393">        try (PreparedStatement ps = connection.prepareStatement(</span>
+<span class="source-line-no">394</span><span id="line-394">                "UPDATE sessions SET ended_at = CURRENT_TIMESTAMP, status = ? WHERE id = ?")) {</span>
+<span class="source-line-no">395</span><span id="line-395">            ps.setString(1, status.name());</span>
+<span class="source-line-no">396</span><span id="line-396">            ps.setLong(2, sessionId);</span>
+<span class="source-line-no">397</span><span id="line-397">            ps.executeUpdate();</span>
+<span class="source-line-no">398</span><span id="line-398">        } catch (SQLException e) {</span>
+<span class="source-line-no">399</span><span id="line-399">            throw new RuntimeException("Failed to end session", e);</span>
+<span class="source-line-no">400</span><span id="line-400">        }</span>
+<span class="source-line-no">401</span><span id="line-401">    }</span>
+<span class="source-line-no">402</span><span id="line-402"></span>
+<span class="source-line-no">403</span><span id="line-403">    private void flushWrites() {</span>
+<span class="source-line-no">404</span><span id="line-404">        // Wait for queue to drain</span>
+<span class="source-line-no">405</span><span id="line-405">        while (!writeQueue.isEmpty()) {</span>
+<span class="source-line-no">406</span><span id="line-406">            try {</span>
+<span class="source-line-no">407</span><span id="line-407">                Thread.sleep(10);</span>
+<span class="source-line-no">408</span><span id="line-408">            } catch (InterruptedException e) {</span>
+<span class="source-line-no">409</span><span id="line-409">                Thread.currentThread().interrupt();</span>
+<span class="source-line-no">410</span><span id="line-410">                break;</span>
+<span class="source-line-no">411</span><span id="line-411">            }</span>
+<span class="source-line-no">412</span><span id="line-412">        }</span>
+<span class="source-line-no">413</span><span id="line-413">    }</span>
+<span class="source-line-no">414</span><span id="line-414"></span>
+<span class="source-line-no">415</span><span id="line-415">    @Override</span>
+<span class="source-line-no">416</span><span id="line-416">    public List&lt;LogEntry&gt; getLogsByNode(long sessionId, String nodeId) {</span>
+<span class="source-line-no">417</span><span id="line-417">        return reader.getLogsByNode(sessionId, nodeId);</span>
+<span class="source-line-no">418</span><span id="line-418">    }</span>
+<span class="source-line-no">419</span><span id="line-419"></span>
+<span class="source-line-no">420</span><span id="line-420">    @Override</span>
+<span class="source-line-no">421</span><span id="line-421">    public List&lt;LogEntry&gt; getLogsByLevel(long sessionId, LogLevel minLevel) {</span>
+<span class="source-line-no">422</span><span id="line-422">        return reader.getLogsByLevel(sessionId, minLevel);</span>
+<span class="source-line-no">423</span><span id="line-423">    }</span>
+<span class="source-line-no">424</span><span id="line-424"></span>
+<span class="source-line-no">425</span><span id="line-425">    @Override</span>
+<span class="source-line-no">426</span><span id="line-426">    public SessionSummary getSummary(long sessionId) {</span>
+<span class="source-line-no">427</span><span id="line-427">        return reader.getSummary(sessionId);</span>
+<span class="source-line-no">428</span><span id="line-428">    }</span>
+<span class="source-line-no">429</span><span id="line-429"></span>
+<span class="source-line-no">430</span><span id="line-430">    @Override</span>
+<span class="source-line-no">431</span><span id="line-431">    public long getLatestSessionId() {</span>
+<span class="source-line-no">432</span><span id="line-432">        return reader.getLatestSessionId();</span>
+<span class="source-line-no">433</span><span id="line-433">    }</span>
+<span class="source-line-no">434</span><span id="line-434"></span>
+<span class="source-line-no">435</span><span id="line-435">    @Override</span>
+<span class="source-line-no">436</span><span id="line-436">    public List&lt;SessionSummary&gt; listSessions(int limit) {</span>
+<span class="source-line-no">437</span><span id="line-437">        return reader.listSessions(limit);</span>
+<span class="source-line-no">438</span><span id="line-438">    }</span>
+<span class="source-line-no">439</span><span id="line-439"></span>
+<span class="source-line-no">440</span><span id="line-440">    @Override</span>
+<span class="source-line-no">441</span><span id="line-441">    public void close() throws Exception {</span>
+<span class="source-line-no">442</span><span id="line-442">        running.set(false);</span>
+<span class="source-line-no">443</span><span id="line-443">        writerThread.interrupt();</span>
+<span class="source-line-no">444</span><span id="line-444">        try {</span>
+<span class="source-line-no">445</span><span id="line-445">            writerThread.join(5000);</span>
+<span class="source-line-no">446</span><span id="line-446">        } catch (InterruptedException e) {</span>
+<span class="source-line-no">447</span><span id="line-447">            Thread.currentThread().interrupt();</span>
+<span class="source-line-no">448</span><span id="line-448">        }</span>
+<span class="source-line-no">449</span><span id="line-449">        if (textLogWriter != null) {</span>
+<span class="source-line-no">450</span><span id="line-450">            textLogWriter.close();</span>
+<span class="source-line-no">451</span><span id="line-451">            textLogWriter = null;</span>
+<span class="source-line-no">452</span><span id="line-452">        }</span>
+<span class="source-line-no">453</span><span id="line-453">        connection.close();</span>
+<span class="source-line-no">454</span><span id="line-454">    }</span>
+<span class="source-line-no">455</span><span id="line-455"></span>
+<span class="source-line-no">456</span><span id="line-456">    // Internal task classes for async writing</span>
+<span class="source-line-no">457</span><span id="line-457">    private interface LogTask {</span>
+<span class="source-line-no">458</span><span id="line-458">        void execute(Connection conn) throws SQLException;</span>
+<span class="source-line-no">459</span><span id="line-459"></span>
+<span class="source-line-no">460</span><span id="line-460">        record InsertLog(long sessionId, String nodeId, String label, String actionName,</span>
+<span class="source-line-no">461</span><span id="line-461">                         LogLevel level, String message, Integer exitCode, Long durationMs) implements LogTask {</span>
+<span class="source-line-no">462</span><span id="line-462">            @Override</span>
+<span class="source-line-no">463</span><span id="line-463">            public void execute(Connection conn) throws SQLException {</span>
+<span class="source-line-no">464</span><span id="line-464">                try (PreparedStatement ps = conn.prepareStatement(</span>
+<span class="source-line-no">465</span><span id="line-465">                        "INSERT INTO logs (session_id, node_id, label, action_name, level, message, exit_code, duration_ms) " +</span>
+<span class="source-line-no">466</span><span id="line-466">                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {</span>
+<span class="source-line-no">467</span><span id="line-467">                    ps.setLong(1, sessionId);</span>
+<span class="source-line-no">468</span><span id="line-468">                    ps.setString(2, nodeId);</span>
+<span class="source-line-no">469</span><span id="line-469">                    ps.setString(3, label);</span>
+<span class="source-line-no">470</span><span id="line-470">                    ps.setString(4, actionName);</span>
+<span class="source-line-no">471</span><span id="line-471">                    ps.setString(5, level.name());</span>
+<span class="source-line-no">472</span><span id="line-472">                    ps.setString(6, message);</span>
+<span class="source-line-no">473</span><span id="line-473">                    if (exitCode != null) {</span>
+<span class="source-line-no">474</span><span id="line-474">                        ps.setInt(7, exitCode);</span>
+<span class="source-line-no">475</span><span id="line-475">                    } else {</span>
+<span class="source-line-no">476</span><span id="line-476">                        ps.setNull(7, Types.INTEGER);</span>
+<span class="source-line-no">477</span><span id="line-477">                    }</span>
+<span class="source-line-no">478</span><span id="line-478">                    if (durationMs != null) {</span>
+<span class="source-line-no">479</span><span id="line-479">                        ps.setLong(8, durationMs);</span>
+<span class="source-line-no">480</span><span id="line-480">                    } else {</span>
+<span class="source-line-no">481</span><span id="line-481">                        ps.setNull(8, Types.BIGINT);</span>
+<span class="source-line-no">482</span><span id="line-482">                    }</span>
+<span class="source-line-no">483</span><span id="line-483">                    ps.executeUpdate();</span>
+<span class="source-line-no">484</span><span id="line-484">                }</span>
+<span class="source-line-no">485</span><span id="line-485">            }</span>
+<span class="source-line-no">486</span><span id="line-486">        }</span>
+<span class="source-line-no">487</span><span id="line-487"></span>
+<span class="source-line-no">488</span><span id="line-488">        record UpdateNodeResult(long sessionId, String nodeId, String status, String reason) implements LogTask {</span>
+<span class="source-line-no">489</span><span id="line-489">            @Override</span>
+<span class="source-line-no">490</span><span id="line-490">            public void execute(Connection conn) throws SQLException {</span>
+<span class="source-line-no">491</span><span id="line-491">                try (PreparedStatement ps = conn.prepareStatement(</span>
+<span class="source-line-no">492</span><span id="line-492">                        "MERGE INTO node_results (session_id, node_id, status, reason) KEY (session_id, node_id) VALUES (?, ?, ?, ?)")) {</span>
+<span class="source-line-no">493</span><span id="line-493">                    ps.setLong(1, sessionId);</span>
+<span class="source-line-no">494</span><span id="line-494">                    ps.setString(2, nodeId);</span>
+<span class="source-line-no">495</span><span id="line-495">                    ps.setString(3, status);</span>
+<span class="source-line-no">496</span><span id="line-496">                    ps.setString(4, reason);</span>
+<span class="source-line-no">497</span><span id="line-497">                    ps.executeUpdate();</span>
+<span class="source-line-no">498</span><span id="line-498">                }</span>
+<span class="source-line-no">499</span><span id="line-499">            }</span>
+<span class="source-line-no">500</span><span id="line-500">        }</span>
+<span class="source-line-no">501</span><span id="line-501">    }</span>
+<span class="source-line-no">502</span><span id="line-502">}</span>
 
 
 

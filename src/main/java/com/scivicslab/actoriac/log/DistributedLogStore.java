@@ -17,6 +17,7 @@
 
 package com.scivicslab.actoriac.log;
 
+import java.sql.Connection;
 import java.util.List;
 
 /**
@@ -25,9 +26,56 @@ import java.util.List;
  * <p>This interface defines operations for storing and querying logs
  * from distributed workflow execution across multiple nodes.</p>
  *
+ * <p>The interface provides singleton access for components that need
+ * database connection (e.g., WorkflowReporter). The singleton is set
+ * by RunCLI at workflow startup and cleared after execution.</p>
+ *
  * @author devteam@scivicslab.com
  */
 public interface DistributedLogStore extends AutoCloseable {
+
+    // ========================================================================
+    // Singleton management
+    // ========================================================================
+
+    /** Singleton instance holder */
+    class InstanceHolder {
+        private static DistributedLogStore instance;
+    }
+
+    /**
+     * Sets the singleton instance.
+     *
+     * <p>Called by RunCLI when starting workflow execution.</p>
+     *
+     * @param store the DistributedLogStore instance to use globally
+     */
+    static void setInstance(DistributedLogStore store) {
+        InstanceHolder.instance = store;
+    }
+
+    /**
+     * Gets the singleton instance.
+     *
+     * @return the global DistributedLogStore instance, or null if not set
+     */
+    static DistributedLogStore getInstance() {
+        return InstanceHolder.instance;
+    }
+
+    // ========================================================================
+    // Connection access
+    // ========================================================================
+
+    /**
+     * Gets the database connection for read-only operations.
+     *
+     * <p>Components should NOT close this connection. The connection is owned
+     * by RunCLI and will be closed when the workflow execution ends.</p>
+     *
+     * @return the JDBC connection
+     */
+    Connection getConnection();
 
     /**
      * Starts a new workflow execution session.

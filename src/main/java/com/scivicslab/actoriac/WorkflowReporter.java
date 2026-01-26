@@ -17,6 +17,7 @@
 
 package com.scivicslab.actoriac;
 
+import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.core.CallableByActionName;
 import com.scivicslab.pojoactor.workflow.ActorSystemAware;
@@ -107,6 +108,18 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
     public void setActorSystem(IIActorSystem system) {
         logger.entering(CLASS_NAME, "setActorSystem", system);
         this.system = system;
+
+        // Auto-initialize database connection from DistributedLogStore singleton
+        if (this.connection == null) {
+            DistributedLogStore logStore = DistributedLogStore.getInstance();
+            if (logStore != null) {
+                this.connection = logStore.getConnection();
+                logger.info("WorkflowReporter: Auto-initialized database connection from DistributedLogStore");
+            } else {
+                logger.warning("WorkflowReporter: DistributedLogStore singleton not available");
+            }
+        }
+
         logger.exiting(CLASS_NAME, "setActorSystem");
     }
 
@@ -322,10 +335,6 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
                 sb.append(transitionInfo);
             }
 
-            // Get final status
-            String finalStatus = getFinalStatus(sessionId);
-            sb.append("\n").append(finalStatus);
-
             String result = sb.toString();
             reportToMultiplexer(result);
             return new ActionResult(true, result);
@@ -355,7 +364,6 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
                     sb.append("Session #").append(sessionId);
                     if (workflow != null) sb.append(" | Workflow: ").append(workflow);
                     if (overlay != null) sb.append(" | Overlay: ").append(overlay);
-                    sb.append(" | Status: ").append(status);
                     if (started != null) sb.append("\nStarted: ").append(started);
                     if (ended != null) sb.append(" | Ended: ").append(ended);
                     return sb.toString();
