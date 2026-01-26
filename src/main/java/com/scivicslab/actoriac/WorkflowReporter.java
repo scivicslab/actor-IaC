@@ -89,6 +89,9 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
     private Connection connection;
     private IIActorSystem system;
 
+    /** Pre-collected lines to be added at the beginning of the report. */
+    private final List<String> preLines = new ArrayList<>();
+
     /**
      * Sets the database connection for log queries.
      *
@@ -107,20 +110,57 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
 
     @Override
     public ActionResult callByActionName(String actionName, String args) {
-        logger.entering(CLASS_NAME, "callByActionName", new Object[]{actionName, args});
+        logger.info("WorkflowReporter.callByActionName: actionName=" + actionName + ", args=" + args);
         try {
             ActionResult result = switch (actionName) {
                 case "report" -> generateReport(args);
                 case "transition-summary" -> transitionSummary(args);
-                default -> new ActionResult(false, "Unknown action: " + actionName);
+                case "addLine" -> addLine(args);
+                default -> {
+                    logger.warning("WorkflowReporter: Unknown action: " + actionName);
+                    yield new ActionResult(false, "Unknown action: " + actionName);
+                }
             };
-            logger.exiting(CLASS_NAME, "callByActionName", result);
+            logger.info("WorkflowReporter.callByActionName: result=" + result.isSuccess());
             return result;
         } catch (Exception e) {
             ActionResult errorResult = new ActionResult(false, "Error: " + e.getMessage());
             logger.logp(Level.WARNING, CLASS_NAME, "callByActionName", "Exception occurred", e);
-            logger.exiting(CLASS_NAME, "callByActionName", errorResult);
             return errorResult;
+        }
+    }
+
+    /**
+     * Add a line to the report.
+     *
+     * <p>Lines added via this method will appear at the beginning of the
+     * "Check Results" section in the report. This is useful for adding
+     * workflow description or other contextual information.</p>
+     *
+     * <p>The argument is passed as a JSON array from the workflow engine,
+     * so this method extracts the first element.</p>
+     *
+     * @param args the JSON array containing the line to add
+     * @return ActionResult indicating success
+     */
+    private ActionResult addLine(String args) {
+        logger.info("WorkflowReporter.addLine called with args: " + args);
+        try {
+            // Parse the JSON array to extract the actual line
+            org.json.JSONArray jsonArray = new org.json.JSONArray(args);
+            if (jsonArray.length() > 0) {
+                String line = jsonArray.getString(0);
+                preLines.add(line);
+                logger.info("WorkflowReporter.addLine: added line: " + line);
+            }
+            return new ActionResult(true, "Line added");
+        } catch (Exception e) {
+            logger.warning("WorkflowReporter.addLine: exception: " + e.getMessage());
+            // Fallback: treat args as plain string
+            if (args != null && !args.isEmpty() && !args.equals("[]")) {
+                preLines.add(args);
+            }
+            return new ActionResult(true, "Line added (fallback)");
         }
     }
 
@@ -147,6 +187,14 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
             String sessionInfo = getSessionInfo(sessionId);
             if (sessionInfo != null) {
                 sb.append(sessionInfo).append("\n");
+            }
+
+            // Add pre-collected lines first
+            if (!preLines.isEmpty()) {
+                sb.append("\n");
+                for (String line : preLines) {
+                    sb.append(line).append("\n");
+                }
             }
 
             // Get messages with % prefix
