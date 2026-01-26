@@ -30,414 +30,523 @@
 <span class="source-line-no">017</span><span id="line-17"></span>
 <span class="source-line-no">018</span><span id="line-18">package com.scivicslab.actoriac;</span>
 <span class="source-line-no">019</span><span id="line-19"></span>
-<span class="source-line-no">020</span><span id="line-20">import com.scivicslab.actoriac.log.DistributedLogStore;</span>
-<span class="source-line-no">021</span><span id="line-21">import com.scivicslab.pojoactor.core.ActionResult;</span>
-<span class="source-line-no">022</span><span id="line-22">import com.scivicslab.pojoactor.core.CallableByActionName;</span>
-<span class="source-line-no">023</span><span id="line-23">import com.scivicslab.pojoactor.workflow.ActorSystemAware;</span>
-<span class="source-line-no">024</span><span id="line-24">import com.scivicslab.pojoactor.workflow.IIActorRef;</span>
-<span class="source-line-no">025</span><span id="line-25">import com.scivicslab.pojoactor.workflow.IIActorSystem;</span>
-<span class="source-line-no">026</span><span id="line-26"></span>
-<span class="source-line-no">027</span><span id="line-27">import org.json.JSONObject;</span>
+<span class="source-line-no">020</span><span id="line-20">import com.scivicslab.pojoactor.core.ActionResult;</span>
+<span class="source-line-no">021</span><span id="line-21">import com.scivicslab.pojoactor.core.CallableByActionName;</span>
+<span class="source-line-no">022</span><span id="line-22">import com.scivicslab.pojoactor.workflow.ActorSystemAware;</span>
+<span class="source-line-no">023</span><span id="line-23">import com.scivicslab.pojoactor.workflow.IIActorRef;</span>
+<span class="source-line-no">024</span><span id="line-24">import com.scivicslab.pojoactor.workflow.IIActorSystem;</span>
+<span class="source-line-no">025</span><span id="line-25"></span>
+<span class="source-line-no">026</span><span id="line-26">import org.json.JSONObject;</span>
+<span class="source-line-no">027</span><span id="line-27">import org.yaml.snakeyaml.Yaml;</span>
 <span class="source-line-no">028</span><span id="line-28"></span>
-<span class="source-line-no">029</span><span id="line-29">import java.sql.*;</span>
-<span class="source-line-no">030</span><span id="line-30">import java.util.*;</span>
-<span class="source-line-no">031</span><span id="line-31">import java.util.logging.Level;</span>
-<span class="source-line-no">032</span><span id="line-32">import java.util.logging.Logger;</span>
-<span class="source-line-no">033</span><span id="line-33"></span>
-<span class="source-line-no">034</span><span id="line-34">/**</span>
-<span class="source-line-no">035</span><span id="line-35"> * Workflow execution reporter for actor-IaC.</span>
-<span class="source-line-no">036</span><span id="line-36"> *</span>
-<span class="source-line-no">037</span><span id="line-37"> * &lt;p&gt;Aggregates workflow execution results and generates final reports.</span>
-<span class="source-line-no">038</span><span id="line-38"> * Messages starting with '%' prefix are collected and displayed in the</span>
-<span class="source-line-no">039</span><span id="line-39"> * final report, enabling simple check/status reporting from workflows.&lt;/p&gt;</span>
-<span class="source-line-no">040</span><span id="line-40"> *</span>
-<span class="source-line-no">041</span><span id="line-41"> * &lt;h2&gt;Usage in workflows:&lt;/h2&gt;</span>
-<span class="source-line-no">042</span><span id="line-42"> * &lt;pre&gt;</span>
-<span class="source-line-no">043</span><span id="line-43"> * - actor: this</span>
-<span class="source-line-no">044</span><span id="line-44"> *   method: executeCommand</span>
-<span class="source-line-no">045</span><span id="line-45"> *   arguments:</span>
-<span class="source-line-no">046</span><span id="line-46"> *     - |</span>
-<span class="source-line-no">047</span><span id="line-47"> *       if command -v node &gt; /dev/null; then</span>
-<span class="source-line-no">048</span><span id="line-48"> *         echo "%[OK] Node.js: $(node --version)"</span>
-<span class="source-line-no">049</span><span id="line-49"> *       else</span>
-<span class="source-line-no">050</span><span id="line-50"> *         echo "%[ERROR] Node.js: not found"</span>
-<span class="source-line-no">051</span><span id="line-51"> *       fi</span>
-<span class="source-line-no">052</span><span id="line-52"> * &lt;/pre&gt;</span>
-<span class="source-line-no">053</span><span id="line-53"> *</span>
-<span class="source-line-no">054</span><span id="line-54"> * &lt;h2&gt;Actions:&lt;/h2&gt;</span>
-<span class="source-line-no">055</span><span id="line-55"> * &lt;ul&gt;</span>
-<span class="source-line-no">056</span><span id="line-56"> *   &lt;li&gt;{@code report} - Generate workflow execution report. Args: sessionId (optional)&lt;/li&gt;</span>
-<span class="source-line-no">057</span><span id="line-57"> *   &lt;li&gt;{@code transition-summary} - Show transition success/failure summary. Args: sessionId&lt;/li&gt;</span>
-<span class="source-line-no">058</span><span id="line-58"> * &lt;/ul&gt;</span>
-<span class="source-line-no">059</span><span id="line-59"> *</span>
-<span class="source-line-no">060</span><span id="line-60"> * &lt;h2&gt;Report Output Example:&lt;/h2&gt;</span>
-<span class="source-line-no">061</span><span id="line-61"> * &lt;pre&gt;</span>
-<span class="source-line-no">062</span><span id="line-62"> * === Workflow Execution Report ===</span>
-<span class="source-line-no">063</span><span id="line-63"> * Session #42 | Workflow: DocumentDeployWorkflow | Status: COMPLETED</span>
-<span class="source-line-no">064</span><span id="line-64"> *</span>
-<span class="source-line-no">065</span><span id="line-65"> * --- Check Results ---</span>
-<span class="source-line-no">066</span><span id="line-66"> * [OK] Node.js: v18.0.0</span>
-<span class="source-line-no">067</span><span id="line-67"> * [OK] yarn: 1.22.19</span>
-<span class="source-line-no">068</span><span id="line-68"> * [ERROR] Maven: not found</span>
-<span class="source-line-no">069</span><span id="line-69"> *</span>
-<span class="source-line-no">070</span><span id="line-70"> * --- Transitions ---</span>
-<span class="source-line-no">071</span><span id="line-71"> * [✓] check-doclist</span>
-<span class="source-line-no">072</span><span id="line-72"> * [✓] detect-changes</span>
-<span class="source-line-no">073</span><span id="line-73"> * [✗] build-docs: yarn not found</span>
-<span class="source-line-no">074</span><span id="line-74"> *</span>
-<span class="source-line-no">075</span><span id="line-75"> * === Result: FAILED ===</span>
-<span class="source-line-no">076</span><span id="line-76"> * &lt;/pre&gt;</span>
-<span class="source-line-no">077</span><span id="line-77"> *</span>
-<span class="source-line-no">078</span><span id="line-78"> * @author devteam@scivics-lab.com</span>
-<span class="source-line-no">079</span><span id="line-79"> * @since 2.12.2</span>
-<span class="source-line-no">080</span><span id="line-80"> */</span>
-<span class="source-line-no">081</span><span id="line-81">public class WorkflowReporter implements CallableByActionName, ActorSystemAware {</span>
-<span class="source-line-no">082</span><span id="line-82"></span>
-<span class="source-line-no">083</span><span id="line-83">    private static final String CLASS_NAME = WorkflowReporter.class.getName();</span>
-<span class="source-line-no">084</span><span id="line-84">    private static final Logger logger = Logger.getLogger(CLASS_NAME);</span>
-<span class="source-line-no">085</span><span id="line-85"></span>
-<span class="source-line-no">086</span><span id="line-86">    /** Prefix for messages to be included in the final report. */</span>
-<span class="source-line-no">087</span><span id="line-87">    private static final String REPORT_PREFIX = "%";</span>
-<span class="source-line-no">088</span><span id="line-88"></span>
-<span class="source-line-no">089</span><span id="line-89">    private Connection connection;</span>
-<span class="source-line-no">090</span><span id="line-90">    private IIActorSystem system;</span>
-<span class="source-line-no">091</span><span id="line-91"></span>
-<span class="source-line-no">092</span><span id="line-92">    /** Pre-collected lines to be added at the beginning of the report. */</span>
-<span class="source-line-no">093</span><span id="line-93">    private final List&lt;String&gt; preLines = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">094</span><span id="line-94"></span>
-<span class="source-line-no">095</span><span id="line-95">    /**</span>
-<span class="source-line-no">096</span><span id="line-96">     * Sets the database connection for log queries.</span>
-<span class="source-line-no">097</span><span id="line-97">     *</span>
-<span class="source-line-no">098</span><span id="line-98">     * @param connection the JDBC connection to the H2 log database</span>
-<span class="source-line-no">099</span><span id="line-99">     */</span>
-<span class="source-line-no">100</span><span id="line-100">    public void setConnection(Connection connection) {</span>
-<span class="source-line-no">101</span><span id="line-101">        this.connection = connection;</span>
-<span class="source-line-no">102</span><span id="line-102">    }</span>
-<span class="source-line-no">103</span><span id="line-103"></span>
-<span class="source-line-no">104</span><span id="line-104">    @Override</span>
-<span class="source-line-no">105</span><span id="line-105">    public void setActorSystem(IIActorSystem system) {</span>
-<span class="source-line-no">106</span><span id="line-106">        logger.entering(CLASS_NAME, "setActorSystem", system);</span>
-<span class="source-line-no">107</span><span id="line-107">        this.system = system;</span>
-<span class="source-line-no">108</span><span id="line-108">        logger.exiting(CLASS_NAME, "setActorSystem");</span>
-<span class="source-line-no">109</span><span id="line-109">    }</span>
-<span class="source-line-no">110</span><span id="line-110"></span>
-<span class="source-line-no">111</span><span id="line-111">    @Override</span>
-<span class="source-line-no">112</span><span id="line-112">    public ActionResult callByActionName(String actionName, String args) {</span>
-<span class="source-line-no">113</span><span id="line-113">        logger.info("WorkflowReporter.callByActionName: actionName=" + actionName + ", args=" + args);</span>
-<span class="source-line-no">114</span><span id="line-114">        try {</span>
-<span class="source-line-no">115</span><span id="line-115">            ActionResult result = switch (actionName) {</span>
-<span class="source-line-no">116</span><span id="line-116">                case "report" -&gt; generateReport(args);</span>
-<span class="source-line-no">117</span><span id="line-117">                case "transition-summary" -&gt; transitionSummary(args);</span>
-<span class="source-line-no">118</span><span id="line-118">                case "addLine" -&gt; addLine(args);</span>
-<span class="source-line-no">119</span><span id="line-119">                default -&gt; {</span>
-<span class="source-line-no">120</span><span id="line-120">                    logger.warning("WorkflowReporter: Unknown action: " + actionName);</span>
-<span class="source-line-no">121</span><span id="line-121">                    yield new ActionResult(false, "Unknown action: " + actionName);</span>
-<span class="source-line-no">122</span><span id="line-122">                }</span>
-<span class="source-line-no">123</span><span id="line-123">            };</span>
-<span class="source-line-no">124</span><span id="line-124">            logger.info("WorkflowReporter.callByActionName: result=" + result.isSuccess());</span>
-<span class="source-line-no">125</span><span id="line-125">            return result;</span>
-<span class="source-line-no">126</span><span id="line-126">        } catch (Exception e) {</span>
-<span class="source-line-no">127</span><span id="line-127">            ActionResult errorResult = new ActionResult(false, "Error: " + e.getMessage());</span>
-<span class="source-line-no">128</span><span id="line-128">            logger.logp(Level.WARNING, CLASS_NAME, "callByActionName", "Exception occurred", e);</span>
-<span class="source-line-no">129</span><span id="line-129">            return errorResult;</span>
-<span class="source-line-no">130</span><span id="line-130">        }</span>
-<span class="source-line-no">131</span><span id="line-131">    }</span>
-<span class="source-line-no">132</span><span id="line-132"></span>
-<span class="source-line-no">133</span><span id="line-133">    /**</span>
-<span class="source-line-no">134</span><span id="line-134">     * Add a line to the report.</span>
-<span class="source-line-no">135</span><span id="line-135">     *</span>
-<span class="source-line-no">136</span><span id="line-136">     * &lt;p&gt;Lines added via this method will appear at the beginning of the</span>
-<span class="source-line-no">137</span><span id="line-137">     * "Check Results" section in the report. This is useful for adding</span>
-<span class="source-line-no">138</span><span id="line-138">     * workflow description or other contextual information.&lt;/p&gt;</span>
-<span class="source-line-no">139</span><span id="line-139">     *</span>
-<span class="source-line-no">140</span><span id="line-140">     * &lt;p&gt;The argument is passed as a JSON array from the workflow engine,</span>
-<span class="source-line-no">141</span><span id="line-141">     * so this method extracts the first element.&lt;/p&gt;</span>
+<span class="source-line-no">029</span><span id="line-29">import java.io.*;</span>
+<span class="source-line-no">030</span><span id="line-30">import java.nio.file.*;</span>
+<span class="source-line-no">031</span><span id="line-31">import java.sql.*;</span>
+<span class="source-line-no">032</span><span id="line-32">import java.util.*;</span>
+<span class="source-line-no">033</span><span id="line-33">import java.util.logging.Level;</span>
+<span class="source-line-no">034</span><span id="line-34">import java.util.logging.Logger;</span>
+<span class="source-line-no">035</span><span id="line-35"></span>
+<span class="source-line-no">036</span><span id="line-36">/**</span>
+<span class="source-line-no">037</span><span id="line-37"> * Workflow execution reporter for actor-IaC.</span>
+<span class="source-line-no">038</span><span id="line-38"> *</span>
+<span class="source-line-no">039</span><span id="line-39"> * &lt;p&gt;Aggregates workflow execution results and generates final reports.</span>
+<span class="source-line-no">040</span><span id="line-40"> * Messages starting with '%' prefix are collected and displayed in the</span>
+<span class="source-line-no">041</span><span id="line-41"> * final report, enabling simple check/status reporting from workflows.&lt;/p&gt;</span>
+<span class="source-line-no">042</span><span id="line-42"> *</span>
+<span class="source-line-no">043</span><span id="line-43"> * &lt;h2&gt;Usage in workflows:&lt;/h2&gt;</span>
+<span class="source-line-no">044</span><span id="line-44"> * &lt;pre&gt;</span>
+<span class="source-line-no">045</span><span id="line-45"> * - actor: this</span>
+<span class="source-line-no">046</span><span id="line-46"> *   method: executeCommand</span>
+<span class="source-line-no">047</span><span id="line-47"> *   arguments:</span>
+<span class="source-line-no">048</span><span id="line-48"> *     - |</span>
+<span class="source-line-no">049</span><span id="line-49"> *       if command -v node &gt; /dev/null; then</span>
+<span class="source-line-no">050</span><span id="line-50"> *         echo "%[OK] Node.js: $(node --version)"</span>
+<span class="source-line-no">051</span><span id="line-51"> *       else</span>
+<span class="source-line-no">052</span><span id="line-52"> *         echo "%[ERROR] Node.js: not found"</span>
+<span class="source-line-no">053</span><span id="line-53"> *       fi</span>
+<span class="source-line-no">054</span><span id="line-54"> * &lt;/pre&gt;</span>
+<span class="source-line-no">055</span><span id="line-55"> *</span>
+<span class="source-line-no">056</span><span id="line-56"> * &lt;h2&gt;Actions:&lt;/h2&gt;</span>
+<span class="source-line-no">057</span><span id="line-57"> * &lt;ul&gt;</span>
+<span class="source-line-no">058</span><span id="line-58"> *   &lt;li&gt;{@code report} - Generate workflow execution report. Args: sessionId (optional)&lt;/li&gt;</span>
+<span class="source-line-no">059</span><span id="line-59"> *   &lt;li&gt;{@code transition-summary} - Show transition success/failure summary. Args: sessionId&lt;/li&gt;</span>
+<span class="source-line-no">060</span><span id="line-60"> * &lt;/ul&gt;</span>
+<span class="source-line-no">061</span><span id="line-61"> *</span>
+<span class="source-line-no">062</span><span id="line-62"> * &lt;h2&gt;Report Output Example:&lt;/h2&gt;</span>
+<span class="source-line-no">063</span><span id="line-63"> * &lt;pre&gt;</span>
+<span class="source-line-no">064</span><span id="line-64"> * === Workflow Execution Report ===</span>
+<span class="source-line-no">065</span><span id="line-65"> * Session #42 | Workflow: DocumentDeployWorkflow | Status: COMPLETED</span>
+<span class="source-line-no">066</span><span id="line-66"> *</span>
+<span class="source-line-no">067</span><span id="line-67"> * --- Check Results ---</span>
+<span class="source-line-no">068</span><span id="line-68"> * [OK] Node.js: v18.0.0</span>
+<span class="source-line-no">069</span><span id="line-69"> * [OK] yarn: 1.22.19</span>
+<span class="source-line-no">070</span><span id="line-70"> * [ERROR] Maven: not found</span>
+<span class="source-line-no">071</span><span id="line-71"> *</span>
+<span class="source-line-no">072</span><span id="line-72"> * --- Transitions ---</span>
+<span class="source-line-no">073</span><span id="line-73"> * [✓] check-doclist</span>
+<span class="source-line-no">074</span><span id="line-74"> * [✓] detect-changes</span>
+<span class="source-line-no">075</span><span id="line-75"> * [✗] build-docs: yarn not found</span>
+<span class="source-line-no">076</span><span id="line-76"> *</span>
+<span class="source-line-no">077</span><span id="line-77"> * === Result: FAILED ===</span>
+<span class="source-line-no">078</span><span id="line-78"> * &lt;/pre&gt;</span>
+<span class="source-line-no">079</span><span id="line-79"> *</span>
+<span class="source-line-no">080</span><span id="line-80"> * @author devteam@scivics-lab.com</span>
+<span class="source-line-no">081</span><span id="line-81"> * @since 2.12.2</span>
+<span class="source-line-no">082</span><span id="line-82"> */</span>
+<span class="source-line-no">083</span><span id="line-83">public class WorkflowReporter implements CallableByActionName, ActorSystemAware {</span>
+<span class="source-line-no">084</span><span id="line-84"></span>
+<span class="source-line-no">085</span><span id="line-85">    private static final String CLASS_NAME = WorkflowReporter.class.getName();</span>
+<span class="source-line-no">086</span><span id="line-86">    private static final Logger logger = Logger.getLogger(CLASS_NAME);</span>
+<span class="source-line-no">087</span><span id="line-87"></span>
+<span class="source-line-no">088</span><span id="line-88">    /** Prefix for messages to be included in the final report. */</span>
+<span class="source-line-no">089</span><span id="line-89">    private static final String REPORT_PREFIX = "%";</span>
+<span class="source-line-no">090</span><span id="line-90"></span>
+<span class="source-line-no">091</span><span id="line-91">    private Connection connection;</span>
+<span class="source-line-no">092</span><span id="line-92">    private IIActorSystem system;</span>
+<span class="source-line-no">093</span><span id="line-93"></span>
+<span class="source-line-no">094</span><span id="line-94">    /** Pre-collected lines to be added at the beginning of the report. */</span>
+<span class="source-line-no">095</span><span id="line-95">    private final List&lt;String&gt; preLines = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">096</span><span id="line-96"></span>
+<span class="source-line-no">097</span><span id="line-97">    /**</span>
+<span class="source-line-no">098</span><span id="line-98">     * Sets the database connection for log queries.</span>
+<span class="source-line-no">099</span><span id="line-99">     *</span>
+<span class="source-line-no">100</span><span id="line-100">     * @param connection the JDBC connection to the H2 log database</span>
+<span class="source-line-no">101</span><span id="line-101">     */</span>
+<span class="source-line-no">102</span><span id="line-102">    public void setConnection(Connection connection) {</span>
+<span class="source-line-no">103</span><span id="line-103">        this.connection = connection;</span>
+<span class="source-line-no">104</span><span id="line-104">    }</span>
+<span class="source-line-no">105</span><span id="line-105"></span>
+<span class="source-line-no">106</span><span id="line-106">    @Override</span>
+<span class="source-line-no">107</span><span id="line-107">    public void setActorSystem(IIActorSystem system) {</span>
+<span class="source-line-no">108</span><span id="line-108">        logger.entering(CLASS_NAME, "setActorSystem", system);</span>
+<span class="source-line-no">109</span><span id="line-109">        this.system = system;</span>
+<span class="source-line-no">110</span><span id="line-110">        logger.exiting(CLASS_NAME, "setActorSystem");</span>
+<span class="source-line-no">111</span><span id="line-111">    }</span>
+<span class="source-line-no">112</span><span id="line-112"></span>
+<span class="source-line-no">113</span><span id="line-113">    @Override</span>
+<span class="source-line-no">114</span><span id="line-114">    public ActionResult callByActionName(String actionName, String args) {</span>
+<span class="source-line-no">115</span><span id="line-115">        logger.info("WorkflowReporter.callByActionName: actionName=" + actionName + ", args=" + args);</span>
+<span class="source-line-no">116</span><span id="line-116">        try {</span>
+<span class="source-line-no">117</span><span id="line-117">            ActionResult result = switch (actionName) {</span>
+<span class="source-line-no">118</span><span id="line-118">                case "report" -&gt; generateReport(args);</span>
+<span class="source-line-no">119</span><span id="line-119">                case "transition-summary" -&gt; transitionSummary(args);</span>
+<span class="source-line-no">120</span><span id="line-120">                case "addLine" -&gt; addLine(args);</span>
+<span class="source-line-no">121</span><span id="line-121">                case "addWorkflowInfo" -&gt; addWorkflowInfo(args);</span>
+<span class="source-line-no">122</span><span id="line-122">                default -&gt; {</span>
+<span class="source-line-no">123</span><span id="line-123">                    logger.warning("WorkflowReporter: Unknown action: " + actionName);</span>
+<span class="source-line-no">124</span><span id="line-124">                    yield new ActionResult(false, "Unknown action: " + actionName);</span>
+<span class="source-line-no">125</span><span id="line-125">                }</span>
+<span class="source-line-no">126</span><span id="line-126">            };</span>
+<span class="source-line-no">127</span><span id="line-127">            logger.info("WorkflowReporter.callByActionName: result=" + result.isSuccess());</span>
+<span class="source-line-no">128</span><span id="line-128">            return result;</span>
+<span class="source-line-no">129</span><span id="line-129">        } catch (Exception e) {</span>
+<span class="source-line-no">130</span><span id="line-130">            ActionResult errorResult = new ActionResult(false, "Error: " + e.getMessage());</span>
+<span class="source-line-no">131</span><span id="line-131">            logger.logp(Level.WARNING, CLASS_NAME, "callByActionName", "Exception occurred", e);</span>
+<span class="source-line-no">132</span><span id="line-132">            return errorResult;</span>
+<span class="source-line-no">133</span><span id="line-133">        }</span>
+<span class="source-line-no">134</span><span id="line-134">    }</span>
+<span class="source-line-no">135</span><span id="line-135"></span>
+<span class="source-line-no">136</span><span id="line-136">    /**</span>
+<span class="source-line-no">137</span><span id="line-137">     * Add a line to the report.</span>
+<span class="source-line-no">138</span><span id="line-138">     *</span>
+<span class="source-line-no">139</span><span id="line-139">     * &lt;p&gt;Lines added via this method will appear at the beginning of the</span>
+<span class="source-line-no">140</span><span id="line-140">     * "Check Results" section in the report. This is useful for adding</span>
+<span class="source-line-no">141</span><span id="line-141">     * workflow description or other contextual information.&lt;/p&gt;</span>
 <span class="source-line-no">142</span><span id="line-142">     *</span>
-<span class="source-line-no">143</span><span id="line-143">     * @param args the JSON array containing the line to add</span>
-<span class="source-line-no">144</span><span id="line-144">     * @return ActionResult indicating success</span>
-<span class="source-line-no">145</span><span id="line-145">     */</span>
-<span class="source-line-no">146</span><span id="line-146">    private ActionResult addLine(String args) {</span>
-<span class="source-line-no">147</span><span id="line-147">        logger.info("WorkflowReporter.addLine called with args: " + args);</span>
-<span class="source-line-no">148</span><span id="line-148">        try {</span>
-<span class="source-line-no">149</span><span id="line-149">            // Parse the JSON array to extract the actual line</span>
-<span class="source-line-no">150</span><span id="line-150">            org.json.JSONArray jsonArray = new org.json.JSONArray(args);</span>
-<span class="source-line-no">151</span><span id="line-151">            if (jsonArray.length() &gt; 0) {</span>
-<span class="source-line-no">152</span><span id="line-152">                String line = jsonArray.getString(0);</span>
-<span class="source-line-no">153</span><span id="line-153">                preLines.add(line);</span>
-<span class="source-line-no">154</span><span id="line-154">                logger.info("WorkflowReporter.addLine: added line: " + line);</span>
-<span class="source-line-no">155</span><span id="line-155">            }</span>
-<span class="source-line-no">156</span><span id="line-156">            return new ActionResult(true, "Line added");</span>
-<span class="source-line-no">157</span><span id="line-157">        } catch (Exception e) {</span>
-<span class="source-line-no">158</span><span id="line-158">            logger.warning("WorkflowReporter.addLine: exception: " + e.getMessage());</span>
-<span class="source-line-no">159</span><span id="line-159">            // Fallback: treat args as plain string</span>
-<span class="source-line-no">160</span><span id="line-160">            if (args != null &amp;&amp; !args.isEmpty() &amp;&amp; !args.equals("[]")) {</span>
-<span class="source-line-no">161</span><span id="line-161">                preLines.add(args);</span>
-<span class="source-line-no">162</span><span id="line-162">            }</span>
-<span class="source-line-no">163</span><span id="line-163">            return new ActionResult(true, "Line added (fallback)");</span>
-<span class="source-line-no">164</span><span id="line-164">        }</span>
-<span class="source-line-no">165</span><span id="line-165">    }</span>
-<span class="source-line-no">166</span><span id="line-166"></span>
-<span class="source-line-no">167</span><span id="line-167">    /**</span>
-<span class="source-line-no">168</span><span id="line-168">     * Generate workflow execution report.</span>
-<span class="source-line-no">169</span><span id="line-169">     *</span>
-<span class="source-line-no">170</span><span id="line-170">     * &lt;p&gt;Collects messages starting with '%' prefix and generates a summary report.&lt;/p&gt;</span>
-<span class="source-line-no">171</span><span id="line-171">     *</span>
-<span class="source-line-no">172</span><span id="line-172">     * @param sessionIdStr session ID to report on, or empty for auto-retrieval</span>
-<span class="source-line-no">173</span><span id="line-173">     */</span>
-<span class="source-line-no">174</span><span id="line-174">    private ActionResult generateReport(String sessionIdStr) {</span>
-<span class="source-line-no">175</span><span id="line-175">        logger.entering(CLASS_NAME, "generateReport", sessionIdStr);</span>
-<span class="source-line-no">176</span><span id="line-176">        if (connection == null) {</span>
-<span class="source-line-no">177</span><span id="line-177">            return new ActionResult(false, "Not connected. Database connection not set.");</span>
-<span class="source-line-no">178</span><span id="line-178">        }</span>
-<span class="source-line-no">179</span><span id="line-179"></span>
-<span class="source-line-no">180</span><span id="line-180">        try {</span>
-<span class="source-line-no">181</span><span id="line-181">            long sessionId = resolveSessionId(sessionIdStr);</span>
+<span class="source-line-no">143</span><span id="line-143">     * &lt;p&gt;The argument is passed as a JSON array from the workflow engine,</span>
+<span class="source-line-no">144</span><span id="line-144">     * so this method extracts the first element.&lt;/p&gt;</span>
+<span class="source-line-no">145</span><span id="line-145">     *</span>
+<span class="source-line-no">146</span><span id="line-146">     * @param args the JSON array containing the line to add</span>
+<span class="source-line-no">147</span><span id="line-147">     * @return ActionResult indicating success</span>
+<span class="source-line-no">148</span><span id="line-148">     */</span>
+<span class="source-line-no">149</span><span id="line-149">    private ActionResult addLine(String args) {</span>
+<span class="source-line-no">150</span><span id="line-150">        logger.info("WorkflowReporter.addLine called with args: " + args);</span>
+<span class="source-line-no">151</span><span id="line-151">        try {</span>
+<span class="source-line-no">152</span><span id="line-152">            // Parse the JSON array to extract the actual line</span>
+<span class="source-line-no">153</span><span id="line-153">            org.json.JSONArray jsonArray = new org.json.JSONArray(args);</span>
+<span class="source-line-no">154</span><span id="line-154">            if (jsonArray.length() &gt; 0) {</span>
+<span class="source-line-no">155</span><span id="line-155">                String line = jsonArray.getString(0);</span>
+<span class="source-line-no">156</span><span id="line-156">                preLines.add(line);</span>
+<span class="source-line-no">157</span><span id="line-157">                logger.info("WorkflowReporter.addLine: added line: " + line);</span>
+<span class="source-line-no">158</span><span id="line-158">            }</span>
+<span class="source-line-no">159</span><span id="line-159">            return new ActionResult(true, "Line added");</span>
+<span class="source-line-no">160</span><span id="line-160">        } catch (Exception e) {</span>
+<span class="source-line-no">161</span><span id="line-161">            logger.warning("WorkflowReporter.addLine: exception: " + e.getMessage());</span>
+<span class="source-line-no">162</span><span id="line-162">            // Fallback: treat args as plain string</span>
+<span class="source-line-no">163</span><span id="line-163">            if (args != null &amp;&amp; !args.isEmpty() &amp;&amp; !args.equals("[]")) {</span>
+<span class="source-line-no">164</span><span id="line-164">                preLines.add(args);</span>
+<span class="source-line-no">165</span><span id="line-165">            }</span>
+<span class="source-line-no">166</span><span id="line-166">            return new ActionResult(true, "Line added (fallback)");</span>
+<span class="source-line-no">167</span><span id="line-167">        }</span>
+<span class="source-line-no">168</span><span id="line-168">    }</span>
+<span class="source-line-no">169</span><span id="line-169"></span>
+<span class="source-line-no">170</span><span id="line-170">    /**</span>
+<span class="source-line-no">171</span><span id="line-171">     * Add workflow metadata (file, name, description) to the report.</span>
+<span class="source-line-no">172</span><span id="line-172">     *</span>
+<span class="source-line-no">173</span><span id="line-173">     * &lt;p&gt;This action reads the workflow YAML file and extracts the name and</span>
+<span class="source-line-no">174</span><span id="line-174">     * description fields, adding them to the report header. The workflow</span>
+<span class="source-line-no">175</span><span id="line-175">     * file path is obtained from nodeGroup.&lt;/p&gt;</span>
+<span class="source-line-no">176</span><span id="line-176">     *</span>
+<span class="source-line-no">177</span><span id="line-177">     * @param args unused (workflow path is obtained from nodeGroup)</span>
+<span class="source-line-no">178</span><span id="line-178">     * @return ActionResult indicating success or failure</span>
+<span class="source-line-no">179</span><span id="line-179">     */</span>
+<span class="source-line-no">180</span><span id="line-180">    private ActionResult addWorkflowInfo(String args) {</span>
+<span class="source-line-no">181</span><span id="line-181">        logger.info("WorkflowReporter.addWorkflowInfo called");</span>
 <span class="source-line-no">182</span><span id="line-182"></span>
-<span class="source-line-no">183</span><span id="line-183">            StringBuilder sb = new StringBuilder();</span>
-<span class="source-line-no">184</span><span id="line-184">            sb.append("=== Workflow Execution Report ===\n");</span>
-<span class="source-line-no">185</span><span id="line-185"></span>
-<span class="source-line-no">186</span><span id="line-186">            // Get session info</span>
-<span class="source-line-no">187</span><span id="line-187">            String sessionInfo = getSessionInfo(sessionId);</span>
-<span class="source-line-no">188</span><span id="line-188">            if (sessionInfo != null) {</span>
-<span class="source-line-no">189</span><span id="line-189">                sb.append(sessionInfo).append("\n");</span>
-<span class="source-line-no">190</span><span id="line-190">            }</span>
+<span class="source-line-no">183</span><span id="line-183">        try {</span>
+<span class="source-line-no">184</span><span id="line-184">            // Get workflow path from nodeGroup</span>
+<span class="source-line-no">185</span><span id="line-185">            String workflowPath = getWorkflowPathFromNodeGroup();</span>
+<span class="source-line-no">186</span><span id="line-186">            if (workflowPath == null) {</span>
+<span class="source-line-no">187</span><span id="line-187">                logger.warning("WorkflowReporter.addWorkflowInfo: could not get workflow path from nodeGroup");</span>
+<span class="source-line-no">188</span><span id="line-188">                return new ActionResult(false, "Could not retrieve workflow path from nodeGroup");</span>
+<span class="source-line-no">189</span><span id="line-189">            }</span>
+<span class="source-line-no">190</span><span id="line-190">            logger.info("WorkflowReporter.addWorkflowInfo: workflowPath=" + workflowPath);</span>
 <span class="source-line-no">191</span><span id="line-191"></span>
-<span class="source-line-no">192</span><span id="line-192">            // Add pre-collected lines first</span>
-<span class="source-line-no">193</span><span id="line-193">            if (!preLines.isEmpty()) {</span>
-<span class="source-line-no">194</span><span id="line-194">                sb.append("\n");</span>
-<span class="source-line-no">195</span><span id="line-195">                for (String line : preLines) {</span>
-<span class="source-line-no">196</span><span id="line-196">                    sb.append(line).append("\n");</span>
-<span class="source-line-no">197</span><span id="line-197">                }</span>
-<span class="source-line-no">198</span><span id="line-198">            }</span>
-<span class="source-line-no">199</span><span id="line-199"></span>
-<span class="source-line-no">200</span><span id="line-200">            // Get messages with % prefix</span>
-<span class="source-line-no">201</span><span id="line-201">            List&lt;String&gt; reportMessages = getReportMessages(sessionId);</span>
-<span class="source-line-no">202</span><span id="line-202">            if (!reportMessages.isEmpty()) {</span>
-<span class="source-line-no">203</span><span id="line-203">                sb.append("\n--- Check Results ---\n");</span>
-<span class="source-line-no">204</span><span id="line-204">                for (String msg : reportMessages) {</span>
-<span class="source-line-no">205</span><span id="line-205">                    sb.append(msg).append("\n");</span>
-<span class="source-line-no">206</span><span id="line-206">                }</span>
-<span class="source-line-no">207</span><span id="line-207">            }</span>
-<span class="source-line-no">208</span><span id="line-208"></span>
-<span class="source-line-no">209</span><span id="line-209">            // Get transition summary</span>
-<span class="source-line-no">210</span><span id="line-210">            String transitionInfo = buildTransitionSummary(sessionId);</span>
-<span class="source-line-no">211</span><span id="line-211">            if (transitionInfo != null) {</span>
-<span class="source-line-no">212</span><span id="line-212">                sb.append("\n--- Transitions ---\n");</span>
-<span class="source-line-no">213</span><span id="line-213">                sb.append(transitionInfo);</span>
+<span class="source-line-no">192</span><span id="line-192">            // Read and parse the YAML file</span>
+<span class="source-line-no">193</span><span id="line-193">            Path path = Paths.get(workflowPath);</span>
+<span class="source-line-no">194</span><span id="line-194">            if (!Files.exists(path)) {</span>
+<span class="source-line-no">195</span><span id="line-195">                // Try relative to current working directory</span>
+<span class="source-line-no">196</span><span id="line-196">                path = Paths.get(System.getProperty("user.dir"), workflowPath);</span>
+<span class="source-line-no">197</span><span id="line-197">            }</span>
+<span class="source-line-no">198</span><span id="line-198">            if (!Files.exists(path)) {</span>
+<span class="source-line-no">199</span><span id="line-199">                // Workflow info without reading file - use only database info</span>
+<span class="source-line-no">200</span><span id="line-200">                preLines.add("[Workflow Info]");</span>
+<span class="source-line-no">201</span><span id="line-201">                preLines.add("  File: " + workflowPath);</span>
+<span class="source-line-no">202</span><span id="line-202">                logger.info("WorkflowReporter.addWorkflowInfo: file not found, using DB info only");</span>
+<span class="source-line-no">203</span><span id="line-203">                return new ActionResult(true, "Workflow info added (file not found, DB info only)");</span>
+<span class="source-line-no">204</span><span id="line-204">            }</span>
+<span class="source-line-no">205</span><span id="line-205"></span>
+<span class="source-line-no">206</span><span id="line-206">            Map&lt;String, Object&gt; yaml;</span>
+<span class="source-line-no">207</span><span id="line-207">            try (InputStream is = Files.newInputStream(path)) {</span>
+<span class="source-line-no">208</span><span id="line-208">                Yaml yamlParser = new Yaml();</span>
+<span class="source-line-no">209</span><span id="line-209">                yaml = yamlParser.load(is);</span>
+<span class="source-line-no">210</span><span id="line-210">            }</span>
+<span class="source-line-no">211</span><span id="line-211"></span>
+<span class="source-line-no">212</span><span id="line-212">            if (yaml == null) {</span>
+<span class="source-line-no">213</span><span id="line-213">                return new ActionResult(false, "Failed to parse workflow YAML");</span>
 <span class="source-line-no">214</span><span id="line-214">            }</span>
 <span class="source-line-no">215</span><span id="line-215"></span>
-<span class="source-line-no">216</span><span id="line-216">            // Get final status</span>
-<span class="source-line-no">217</span><span id="line-217">            String finalStatus = getFinalStatus(sessionId);</span>
-<span class="source-line-no">218</span><span id="line-218">            sb.append("\n").append(finalStatus);</span>
-<span class="source-line-no">219</span><span id="line-219"></span>
-<span class="source-line-no">220</span><span id="line-220">            String result = sb.toString();</span>
-<span class="source-line-no">221</span><span id="line-221">            reportToMultiplexer(result);</span>
-<span class="source-line-no">222</span><span id="line-222">            return new ActionResult(true, result);</span>
-<span class="source-line-no">223</span><span id="line-223"></span>
-<span class="source-line-no">224</span><span id="line-224">        } catch (Exception e) {</span>
-<span class="source-line-no">225</span><span id="line-225">            return new ActionResult(false, "Report generation failed: " + e.getMessage());</span>
-<span class="source-line-no">226</span><span id="line-226">        }</span>
-<span class="source-line-no">227</span><span id="line-227">    }</span>
-<span class="source-line-no">228</span><span id="line-228"></span>
-<span class="source-line-no">229</span><span id="line-229">    /**</span>
-<span class="source-line-no">230</span><span id="line-230">     * Get session information.</span>
-<span class="source-line-no">231</span><span id="line-231">     */</span>
-<span class="source-line-no">232</span><span id="line-232">    private String getSessionInfo(long sessionId) throws SQLException {</span>
-<span class="source-line-no">233</span><span id="line-233">        String sql = "SELECT workflow_name, overlay_name, status, started_at, ended_at " +</span>
-<span class="source-line-no">234</span><span id="line-234">                     "FROM sessions WHERE id = ?";</span>
-<span class="source-line-no">235</span><span id="line-235">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
-<span class="source-line-no">236</span><span id="line-236">            ps.setLong(1, sessionId);</span>
-<span class="source-line-no">237</span><span id="line-237">            try (ResultSet rs = ps.executeQuery()) {</span>
-<span class="source-line-no">238</span><span id="line-238">                if (rs.next()) {</span>
-<span class="source-line-no">239</span><span id="line-239">                    String workflow = rs.getString("workflow_name");</span>
-<span class="source-line-no">240</span><span id="line-240">                    String overlay = rs.getString("overlay_name");</span>
-<span class="source-line-no">241</span><span id="line-241">                    String status = rs.getString("status");</span>
-<span class="source-line-no">242</span><span id="line-242">                    Timestamp started = rs.getTimestamp("started_at");</span>
-<span class="source-line-no">243</span><span id="line-243">                    Timestamp ended = rs.getTimestamp("ended_at");</span>
+<span class="source-line-no">216</span><span id="line-216">            // Extract name and description</span>
+<span class="source-line-no">217</span><span id="line-217">            String name = (String) yaml.get("name");</span>
+<span class="source-line-no">218</span><span id="line-218">            Object descObj = yaml.get("description");</span>
+<span class="source-line-no">219</span><span id="line-219">            String description = descObj != null ? descObj.toString().trim() : null;</span>
+<span class="source-line-no">220</span><span id="line-220"></span>
+<span class="source-line-no">221</span><span id="line-221">            // Add to preLines</span>
+<span class="source-line-no">222</span><span id="line-222">            preLines.add("[Workflow Info]");</span>
+<span class="source-line-no">223</span><span id="line-223">            preLines.add("  File: " + workflowPath);</span>
+<span class="source-line-no">224</span><span id="line-224">            if (name != null) {</span>
+<span class="source-line-no">225</span><span id="line-225">                preLines.add("  Name: " + name);</span>
+<span class="source-line-no">226</span><span id="line-226">            }</span>
+<span class="source-line-no">227</span><span id="line-227">            if (description != null) {</span>
+<span class="source-line-no">228</span><span id="line-228">                preLines.add("");</span>
+<span class="source-line-no">229</span><span id="line-229">                preLines.add("[Description]");</span>
+<span class="source-line-no">230</span><span id="line-230">                // Indent each line of description</span>
+<span class="source-line-no">231</span><span id="line-231">                for (String line : description.split("\n")) {</span>
+<span class="source-line-no">232</span><span id="line-232">                    preLines.add("  " + line.trim());</span>
+<span class="source-line-no">233</span><span id="line-233">                }</span>
+<span class="source-line-no">234</span><span id="line-234">            }</span>
+<span class="source-line-no">235</span><span id="line-235"></span>
+<span class="source-line-no">236</span><span id="line-236">            logger.info("WorkflowReporter.addWorkflowInfo: added workflow info for " + workflowPath);</span>
+<span class="source-line-no">237</span><span id="line-237">            return new ActionResult(true, "Workflow info added");</span>
+<span class="source-line-no">238</span><span id="line-238"></span>
+<span class="source-line-no">239</span><span id="line-239">        } catch (Exception e) {</span>
+<span class="source-line-no">240</span><span id="line-240">            logger.warning("WorkflowReporter.addWorkflowInfo: exception: " + e.getMessage());</span>
+<span class="source-line-no">241</span><span id="line-241">            return new ActionResult(false, "Failed to add workflow info: " + e.getMessage());</span>
+<span class="source-line-no">242</span><span id="line-242">        }</span>
+<span class="source-line-no">243</span><span id="line-243">    }</span>
 <span class="source-line-no">244</span><span id="line-244"></span>
-<span class="source-line-no">245</span><span id="line-245">                    StringBuilder sb = new StringBuilder();</span>
-<span class="source-line-no">246</span><span id="line-246">                    sb.append("Session #").append(sessionId);</span>
-<span class="source-line-no">247</span><span id="line-247">                    if (workflow != null) sb.append(" | Workflow: ").append(workflow);</span>
-<span class="source-line-no">248</span><span id="line-248">                    if (overlay != null) sb.append(" | Overlay: ").append(overlay);</span>
-<span class="source-line-no">249</span><span id="line-249">                    sb.append(" | Status: ").append(status);</span>
-<span class="source-line-no">250</span><span id="line-250">                    if (started != null) sb.append("\nStarted: ").append(started);</span>
-<span class="source-line-no">251</span><span id="line-251">                    if (ended != null) sb.append(" | Ended: ").append(ended);</span>
-<span class="source-line-no">252</span><span id="line-252">                    return sb.toString();</span>
-<span class="source-line-no">253</span><span id="line-253">                }</span>
-<span class="source-line-no">254</span><span id="line-254">            }</span>
-<span class="source-line-no">255</span><span id="line-255">        }</span>
-<span class="source-line-no">256</span><span id="line-256">        return null;</span>
-<span class="source-line-no">257</span><span id="line-257">    }</span>
-<span class="source-line-no">258</span><span id="line-258"></span>
-<span class="source-line-no">259</span><span id="line-259">    /**</span>
-<span class="source-line-no">260</span><span id="line-260">     * Get messages with % prefix from logs.</span>
-<span class="source-line-no">261</span><span id="line-261">     */</span>
-<span class="source-line-no">262</span><span id="line-262">    private List&lt;String&gt; getReportMessages(long sessionId) throws SQLException {</span>
-<span class="source-line-no">263</span><span id="line-263">        List&lt;String&gt; messages = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">264</span><span id="line-264"></span>
-<span class="source-line-no">265</span><span id="line-265">        String sql = "SELECT message FROM logs WHERE session_id = ? ORDER BY timestamp";</span>
-<span class="source-line-no">266</span><span id="line-266">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
-<span class="source-line-no">267</span><span id="line-267">            ps.setLong(1, sessionId);</span>
-<span class="source-line-no">268</span><span id="line-268">            try (ResultSet rs = ps.executeQuery()) {</span>
-<span class="source-line-no">269</span><span id="line-269">                while (rs.next()) {</span>
-<span class="source-line-no">270</span><span id="line-270">                    String message = rs.getString("message");</span>
-<span class="source-line-no">271</span><span id="line-271">                    if (message != null) {</span>
-<span class="source-line-no">272</span><span id="line-272">                        // Extract lines starting with %</span>
-<span class="source-line-no">273</span><span id="line-273">                        for (String line : message.split("\n")) {</span>
-<span class="source-line-no">274</span><span id="line-274">                            String trimmed = line.trim();</span>
-<span class="source-line-no">275</span><span id="line-275">                            // Handle prefixes like [node-xxx] %message</span>
-<span class="source-line-no">276</span><span id="line-276">                            String cleaned = trimmed.replaceFirst("^\\[node-[^\\]]+\\]\\s*", "");</span>
-<span class="source-line-no">277</span><span id="line-277">                            if (cleaned.startsWith(REPORT_PREFIX)) {</span>
-<span class="source-line-no">278</span><span id="line-278">                                messages.add(cleaned.substring(1).trim());</span>
-<span class="source-line-no">279</span><span id="line-279">                            }</span>
-<span class="source-line-no">280</span><span id="line-280">                        }</span>
-<span class="source-line-no">281</span><span id="line-281">                    }</span>
-<span class="source-line-no">282</span><span id="line-282">                }</span>
-<span class="source-line-no">283</span><span id="line-283">            }</span>
-<span class="source-line-no">284</span><span id="line-284">        }</span>
-<span class="source-line-no">285</span><span id="line-285">        return messages;</span>
-<span class="source-line-no">286</span><span id="line-286">    }</span>
-<span class="source-line-no">287</span><span id="line-287"></span>
-<span class="source-line-no">288</span><span id="line-288">    /**</span>
-<span class="source-line-no">289</span><span id="line-289">     * Build transition summary.</span>
-<span class="source-line-no">290</span><span id="line-290">     */</span>
-<span class="source-line-no">291</span><span id="line-291">    private String buildTransitionSummary(long sessionId) throws SQLException {</span>
-<span class="source-line-no">292</span><span id="line-292">        String sql = "SELECT label, level, message FROM logs " +</span>
-<span class="source-line-no">293</span><span id="line-293">                     "WHERE session_id = ? AND message LIKE 'Transition %' " +</span>
-<span class="source-line-no">294</span><span id="line-294">                     "ORDER BY timestamp";</span>
-<span class="source-line-no">295</span><span id="line-295"></span>
-<span class="source-line-no">296</span><span id="line-296">        StringBuilder sb = new StringBuilder();</span>
-<span class="source-line-no">297</span><span id="line-297">        int success = 0;</span>
-<span class="source-line-no">298</span><span id="line-298">        int failed = 0;</span>
-<span class="source-line-no">299</span><span id="line-299"></span>
-<span class="source-line-no">300</span><span id="line-300">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
-<span class="source-line-no">301</span><span id="line-301">            ps.setLong(1, sessionId);</span>
-<span class="source-line-no">302</span><span id="line-302">            try (ResultSet rs = ps.executeQuery()) {</span>
-<span class="source-line-no">303</span><span id="line-303">                while (rs.next()) {</span>
-<span class="source-line-no">304</span><span id="line-304">                    String label = rs.getString("label");</span>
-<span class="source-line-no">305</span><span id="line-305">                    String level = rs.getString("level");</span>
-<span class="source-line-no">306</span><span id="line-306">                    String message = rs.getString("message");</span>
-<span class="source-line-no">307</span><span id="line-307"></span>
-<span class="source-line-no">308</span><span id="line-308">                    boolean isSuccess = message.contains("SUCCESS");</span>
-<span class="source-line-no">309</span><span id="line-309">                    if (isSuccess) {</span>
-<span class="source-line-no">310</span><span id="line-310">                        success++;</span>
-<span class="source-line-no">311</span><span id="line-311">                        sb.append("[✓] ").append(label != null ? label : "unknown").append("\n");</span>
-<span class="source-line-no">312</span><span id="line-312">                    } else {</span>
-<span class="source-line-no">313</span><span id="line-313">                        failed++;</span>
-<span class="source-line-no">314</span><span id="line-314">                        sb.append("[✗] ").append(label != null ? label : "unknown");</span>
-<span class="source-line-no">315</span><span id="line-315">                        // Extract failure reason</span>
-<span class="source-line-no">316</span><span id="line-316">                        int dashIdx = message.indexOf(" - ");</span>
-<span class="source-line-no">317</span><span id="line-317">                        if (dashIdx &gt; 0) {</span>
-<span class="source-line-no">318</span><span id="line-318">                            sb.append(": ").append(message.substring(dashIdx + 3));</span>
-<span class="source-line-no">319</span><span id="line-319">                        }</span>
-<span class="source-line-no">320</span><span id="line-320">                        sb.append("\n");</span>
-<span class="source-line-no">321</span><span id="line-321">                    }</span>
-<span class="source-line-no">322</span><span id="line-322">                }</span>
+<span class="source-line-no">245</span><span id="line-245">    /**</span>
+<span class="source-line-no">246</span><span id="line-246">     * Retrieves workflow file path from session in database.</span>
+<span class="source-line-no">247</span><span id="line-247">     */</span>
+<span class="source-line-no">248</span><span id="line-248">    private String getWorkflowPathFromSession(long sessionId) throws SQLException {</span>
+<span class="source-line-no">249</span><span id="line-249">        String sql = "SELECT workflow_name FROM sessions WHERE id = ?";</span>
+<span class="source-line-no">250</span><span id="line-250">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
+<span class="source-line-no">251</span><span id="line-251">            ps.setLong(1, sessionId);</span>
+<span class="source-line-no">252</span><span id="line-252">            try (ResultSet rs = ps.executeQuery()) {</span>
+<span class="source-line-no">253</span><span id="line-253">                if (rs.next()) {</span>
+<span class="source-line-no">254</span><span id="line-254">                    return rs.getString("workflow_name");</span>
+<span class="source-line-no">255</span><span id="line-255">                }</span>
+<span class="source-line-no">256</span><span id="line-256">            }</span>
+<span class="source-line-no">257</span><span id="line-257">        }</span>
+<span class="source-line-no">258</span><span id="line-258">        return null;</span>
+<span class="source-line-no">259</span><span id="line-259">    }</span>
+<span class="source-line-no">260</span><span id="line-260"></span>
+<span class="source-line-no">261</span><span id="line-261">    /**</span>
+<span class="source-line-no">262</span><span id="line-262">     * Retrieves workflow file path from nodeGroup actor.</span>
+<span class="source-line-no">263</span><span id="line-263">     */</span>
+<span class="source-line-no">264</span><span id="line-264">    private String getWorkflowPathFromNodeGroup() {</span>
+<span class="source-line-no">265</span><span id="line-265">        if (system == null) {</span>
+<span class="source-line-no">266</span><span id="line-266">            return null;</span>
+<span class="source-line-no">267</span><span id="line-267">        }</span>
+<span class="source-line-no">268</span><span id="line-268">        IIActorRef&lt;?&gt; nodeGroup = system.getIIActor("nodeGroup");</span>
+<span class="source-line-no">269</span><span id="line-269">        if (nodeGroup == null) {</span>
+<span class="source-line-no">270</span><span id="line-270">            return null;</span>
+<span class="source-line-no">271</span><span id="line-271">        }</span>
+<span class="source-line-no">272</span><span id="line-272">        ActionResult result = nodeGroup.callByActionName("getWorkflowPath", "");</span>
+<span class="source-line-no">273</span><span id="line-273">        return result.isSuccess() ? result.getResult() : null;</span>
+<span class="source-line-no">274</span><span id="line-274">    }</span>
+<span class="source-line-no">275</span><span id="line-275"></span>
+<span class="source-line-no">276</span><span id="line-276">    /**</span>
+<span class="source-line-no">277</span><span id="line-277">     * Generate workflow execution report.</span>
+<span class="source-line-no">278</span><span id="line-278">     *</span>
+<span class="source-line-no">279</span><span id="line-279">     * &lt;p&gt;Collects messages starting with '%' prefix and generates a summary report.&lt;/p&gt;</span>
+<span class="source-line-no">280</span><span id="line-280">     *</span>
+<span class="source-line-no">281</span><span id="line-281">     * @param sessionIdStr session ID to report on, or empty for auto-retrieval</span>
+<span class="source-line-no">282</span><span id="line-282">     */</span>
+<span class="source-line-no">283</span><span id="line-283">    private ActionResult generateReport(String sessionIdStr) {</span>
+<span class="source-line-no">284</span><span id="line-284">        logger.entering(CLASS_NAME, "generateReport", sessionIdStr);</span>
+<span class="source-line-no">285</span><span id="line-285">        if (connection == null) {</span>
+<span class="source-line-no">286</span><span id="line-286">            return new ActionResult(false, "Not connected. Database connection not set.");</span>
+<span class="source-line-no">287</span><span id="line-287">        }</span>
+<span class="source-line-no">288</span><span id="line-288"></span>
+<span class="source-line-no">289</span><span id="line-289">        try {</span>
+<span class="source-line-no">290</span><span id="line-290">            long sessionId = resolveSessionId(sessionIdStr);</span>
+<span class="source-line-no">291</span><span id="line-291"></span>
+<span class="source-line-no">292</span><span id="line-292">            StringBuilder sb = new StringBuilder();</span>
+<span class="source-line-no">293</span><span id="line-293">            sb.append("=== Workflow Execution Report ===\n");</span>
+<span class="source-line-no">294</span><span id="line-294"></span>
+<span class="source-line-no">295</span><span id="line-295">            // Get session info</span>
+<span class="source-line-no">296</span><span id="line-296">            String sessionInfo = getSessionInfo(sessionId);</span>
+<span class="source-line-no">297</span><span id="line-297">            if (sessionInfo != null) {</span>
+<span class="source-line-no">298</span><span id="line-298">                sb.append(sessionInfo).append("\n");</span>
+<span class="source-line-no">299</span><span id="line-299">            }</span>
+<span class="source-line-no">300</span><span id="line-300"></span>
+<span class="source-line-no">301</span><span id="line-301">            // Add pre-collected lines first</span>
+<span class="source-line-no">302</span><span id="line-302">            if (!preLines.isEmpty()) {</span>
+<span class="source-line-no">303</span><span id="line-303">                sb.append("\n");</span>
+<span class="source-line-no">304</span><span id="line-304">                for (String line : preLines) {</span>
+<span class="source-line-no">305</span><span id="line-305">                    sb.append(line).append("\n");</span>
+<span class="source-line-no">306</span><span id="line-306">                }</span>
+<span class="source-line-no">307</span><span id="line-307">            }</span>
+<span class="source-line-no">308</span><span id="line-308"></span>
+<span class="source-line-no">309</span><span id="line-309">            // Get messages with % prefix</span>
+<span class="source-line-no">310</span><span id="line-310">            List&lt;String&gt; reportMessages = getReportMessages(sessionId);</span>
+<span class="source-line-no">311</span><span id="line-311">            if (!reportMessages.isEmpty()) {</span>
+<span class="source-line-no">312</span><span id="line-312">                sb.append("\n--- Check Results ---\n");</span>
+<span class="source-line-no">313</span><span id="line-313">                for (String msg : reportMessages) {</span>
+<span class="source-line-no">314</span><span id="line-314">                    sb.append(msg).append("\n");</span>
+<span class="source-line-no">315</span><span id="line-315">                }</span>
+<span class="source-line-no">316</span><span id="line-316">            }</span>
+<span class="source-line-no">317</span><span id="line-317"></span>
+<span class="source-line-no">318</span><span id="line-318">            // Get transition summary</span>
+<span class="source-line-no">319</span><span id="line-319">            String transitionInfo = buildTransitionSummary(sessionId);</span>
+<span class="source-line-no">320</span><span id="line-320">            if (transitionInfo != null) {</span>
+<span class="source-line-no">321</span><span id="line-321">                sb.append("\n--- Transitions ---\n");</span>
+<span class="source-line-no">322</span><span id="line-322">                sb.append(transitionInfo);</span>
 <span class="source-line-no">323</span><span id="line-323">            }</span>
-<span class="source-line-no">324</span><span id="line-324">        }</span>
-<span class="source-line-no">325</span><span id="line-325"></span>
-<span class="source-line-no">326</span><span id="line-326">        if (success == 0 &amp;&amp; failed == 0) {</span>
-<span class="source-line-no">327</span><span id="line-327">            return null;</span>
-<span class="source-line-no">328</span><span id="line-328">        }</span>
-<span class="source-line-no">329</span><span id="line-329"></span>
-<span class="source-line-no">330</span><span id="line-330">        sb.append("\nSummary: ").append(success).append(" succeeded, ").append(failed).append(" failed");</span>
-<span class="source-line-no">331</span><span id="line-331">        return sb.toString();</span>
-<span class="source-line-no">332</span><span id="line-332">    }</span>
-<span class="source-line-no">333</span><span id="line-333"></span>
-<span class="source-line-no">334</span><span id="line-334">    /**</span>
-<span class="source-line-no">335</span><span id="line-335">     * Get final session status.</span>
-<span class="source-line-no">336</span><span id="line-336">     */</span>
-<span class="source-line-no">337</span><span id="line-337">    private String getFinalStatus(long sessionId) throws SQLException {</span>
-<span class="source-line-no">338</span><span id="line-338">        String sql = "SELECT status FROM sessions WHERE id = ?";</span>
-<span class="source-line-no">339</span><span id="line-339">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
-<span class="source-line-no">340</span><span id="line-340">            ps.setLong(1, sessionId);</span>
-<span class="source-line-no">341</span><span id="line-341">            try (ResultSet rs = ps.executeQuery()) {</span>
-<span class="source-line-no">342</span><span id="line-342">                if (rs.next()) {</span>
-<span class="source-line-no">343</span><span id="line-343">                    String status = rs.getString("status");</span>
-<span class="source-line-no">344</span><span id="line-344">                    if ("COMPLETED".equals(status)) {</span>
-<span class="source-line-no">345</span><span id="line-345">                        return "=== Result: SUCCESS ===";</span>
-<span class="source-line-no">346</span><span id="line-346">                    } else if ("FAILED".equals(status)) {</span>
-<span class="source-line-no">347</span><span id="line-347">                        return "=== Result: FAILED ===";</span>
-<span class="source-line-no">348</span><span id="line-348">                    } else {</span>
-<span class="source-line-no">349</span><span id="line-349">                        return "=== Result: " + status + " ===";</span>
-<span class="source-line-no">350</span><span id="line-350">                    }</span>
-<span class="source-line-no">351</span><span id="line-351">                }</span>
-<span class="source-line-no">352</span><span id="line-352">            }</span>
-<span class="source-line-no">353</span><span id="line-353">        }</span>
-<span class="source-line-no">354</span><span id="line-354">        return "=== Result: UNKNOWN ===";</span>
-<span class="source-line-no">355</span><span id="line-355">    }</span>
-<span class="source-line-no">356</span><span id="line-356"></span>
-<span class="source-line-no">357</span><span id="line-357">    /**</span>
-<span class="source-line-no">358</span><span id="line-358">     * Show transition success/failure summary.</span>
-<span class="source-line-no">359</span><span id="line-359">     */</span>
-<span class="source-line-no">360</span><span id="line-360">    private ActionResult transitionSummary(String sessionIdStr) {</span>
-<span class="source-line-no">361</span><span id="line-361">        logger.entering(CLASS_NAME, "transitionSummary", sessionIdStr);</span>
-<span class="source-line-no">362</span><span id="line-362">        if (connection == null) {</span>
-<span class="source-line-no">363</span><span id="line-363">            return new ActionResult(false, "Not connected. Database connection not set.");</span>
+<span class="source-line-no">324</span><span id="line-324"></span>
+<span class="source-line-no">325</span><span id="line-325">            // Get final status</span>
+<span class="source-line-no">326</span><span id="line-326">            String finalStatus = getFinalStatus(sessionId);</span>
+<span class="source-line-no">327</span><span id="line-327">            sb.append("\n").append(finalStatus);</span>
+<span class="source-line-no">328</span><span id="line-328"></span>
+<span class="source-line-no">329</span><span id="line-329">            String result = sb.toString();</span>
+<span class="source-line-no">330</span><span id="line-330">            reportToMultiplexer(result);</span>
+<span class="source-line-no">331</span><span id="line-331">            return new ActionResult(true, result);</span>
+<span class="source-line-no">332</span><span id="line-332"></span>
+<span class="source-line-no">333</span><span id="line-333">        } catch (Exception e) {</span>
+<span class="source-line-no">334</span><span id="line-334">            return new ActionResult(false, "Report generation failed: " + e.getMessage());</span>
+<span class="source-line-no">335</span><span id="line-335">        }</span>
+<span class="source-line-no">336</span><span id="line-336">    }</span>
+<span class="source-line-no">337</span><span id="line-337"></span>
+<span class="source-line-no">338</span><span id="line-338">    /**</span>
+<span class="source-line-no">339</span><span id="line-339">     * Get session information.</span>
+<span class="source-line-no">340</span><span id="line-340">     */</span>
+<span class="source-line-no">341</span><span id="line-341">    private String getSessionInfo(long sessionId) throws SQLException {</span>
+<span class="source-line-no">342</span><span id="line-342">        String sql = "SELECT workflow_name, overlay_name, status, started_at, ended_at " +</span>
+<span class="source-line-no">343</span><span id="line-343">                     "FROM sessions WHERE id = ?";</span>
+<span class="source-line-no">344</span><span id="line-344">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
+<span class="source-line-no">345</span><span id="line-345">            ps.setLong(1, sessionId);</span>
+<span class="source-line-no">346</span><span id="line-346">            try (ResultSet rs = ps.executeQuery()) {</span>
+<span class="source-line-no">347</span><span id="line-347">                if (rs.next()) {</span>
+<span class="source-line-no">348</span><span id="line-348">                    String workflow = rs.getString("workflow_name");</span>
+<span class="source-line-no">349</span><span id="line-349">                    String overlay = rs.getString("overlay_name");</span>
+<span class="source-line-no">350</span><span id="line-350">                    String status = rs.getString("status");</span>
+<span class="source-line-no">351</span><span id="line-351">                    Timestamp started = rs.getTimestamp("started_at");</span>
+<span class="source-line-no">352</span><span id="line-352">                    Timestamp ended = rs.getTimestamp("ended_at");</span>
+<span class="source-line-no">353</span><span id="line-353"></span>
+<span class="source-line-no">354</span><span id="line-354">                    StringBuilder sb = new StringBuilder();</span>
+<span class="source-line-no">355</span><span id="line-355">                    sb.append("Session #").append(sessionId);</span>
+<span class="source-line-no">356</span><span id="line-356">                    if (workflow != null) sb.append(" | Workflow: ").append(workflow);</span>
+<span class="source-line-no">357</span><span id="line-357">                    if (overlay != null) sb.append(" | Overlay: ").append(overlay);</span>
+<span class="source-line-no">358</span><span id="line-358">                    sb.append(" | Status: ").append(status);</span>
+<span class="source-line-no">359</span><span id="line-359">                    if (started != null) sb.append("\nStarted: ").append(started);</span>
+<span class="source-line-no">360</span><span id="line-360">                    if (ended != null) sb.append(" | Ended: ").append(ended);</span>
+<span class="source-line-no">361</span><span id="line-361">                    return sb.toString();</span>
+<span class="source-line-no">362</span><span id="line-362">                }</span>
+<span class="source-line-no">363</span><span id="line-363">            }</span>
 <span class="source-line-no">364</span><span id="line-364">        }</span>
-<span class="source-line-no">365</span><span id="line-365"></span>
-<span class="source-line-no">366</span><span id="line-366">        try {</span>
-<span class="source-line-no">367</span><span id="line-367">            long sessionId = resolveSessionId(sessionIdStr);</span>
-<span class="source-line-no">368</span><span id="line-368">            String summary = buildTransitionSummary(sessionId);</span>
-<span class="source-line-no">369</span><span id="line-369">            if (summary == null) {</span>
-<span class="source-line-no">370</span><span id="line-370">                summary = "No transition data found for session " + sessionId;</span>
-<span class="source-line-no">371</span><span id="line-371">            }</span>
-<span class="source-line-no">372</span><span id="line-372">            reportToMultiplexer(summary);</span>
-<span class="source-line-no">373</span><span id="line-373">            return new ActionResult(true, summary);</span>
-<span class="source-line-no">374</span><span id="line-374">        } catch (Exception e) {</span>
-<span class="source-line-no">375</span><span id="line-375">            return new ActionResult(false, "Query failed: " + e.getMessage());</span>
-<span class="source-line-no">376</span><span id="line-376">        }</span>
-<span class="source-line-no">377</span><span id="line-377">    }</span>
-<span class="source-line-no">378</span><span id="line-378"></span>
-<span class="source-line-no">379</span><span id="line-379">    /**</span>
-<span class="source-line-no">380</span><span id="line-380">     * Resolve session ID from argument or auto-retrieve from nodeGroup.</span>
-<span class="source-line-no">381</span><span id="line-381">     */</span>
-<span class="source-line-no">382</span><span id="line-382">    private long resolveSessionId(String sessionIdStr) throws NumberFormatException {</span>
-<span class="source-line-no">383</span><span id="line-383">        if (sessionIdStr == null || sessionIdStr.trim().isEmpty() || sessionIdStr.equals("[]")) {</span>
-<span class="source-line-no">384</span><span id="line-384">            String autoSessionId = getSessionIdFromNodeGroup();</span>
-<span class="source-line-no">385</span><span id="line-385">            if (autoSessionId == null) {</span>
-<span class="source-line-no">386</span><span id="line-386">                throw new NumberFormatException("Session ID not specified and could not retrieve from nodeGroup");</span>
-<span class="source-line-no">387</span><span id="line-387">            }</span>
-<span class="source-line-no">388</span><span id="line-388">            return Long.parseLong(autoSessionId);</span>
-<span class="source-line-no">389</span><span id="line-389">        }</span>
-<span class="source-line-no">390</span><span id="line-390">        return Long.parseLong(sessionIdStr.trim());</span>
-<span class="source-line-no">391</span><span id="line-391">    }</span>
-<span class="source-line-no">392</span><span id="line-392"></span>
-<span class="source-line-no">393</span><span id="line-393">    /**</span>
-<span class="source-line-no">394</span><span id="line-394">     * Retrieves session ID from nodeGroup actor.</span>
-<span class="source-line-no">395</span><span id="line-395">     */</span>
-<span class="source-line-no">396</span><span id="line-396">    private String getSessionIdFromNodeGroup() {</span>
-<span class="source-line-no">397</span><span id="line-397">        if (system == null) {</span>
-<span class="source-line-no">398</span><span id="line-398">            return null;</span>
-<span class="source-line-no">399</span><span id="line-399">        }</span>
-<span class="source-line-no">400</span><span id="line-400">        IIActorRef&lt;?&gt; nodeGroup = system.getIIActor("nodeGroup");</span>
-<span class="source-line-no">401</span><span id="line-401">        if (nodeGroup == null) {</span>
-<span class="source-line-no">402</span><span id="line-402">            return null;</span>
-<span class="source-line-no">403</span><span id="line-403">        }</span>
-<span class="source-line-no">404</span><span id="line-404">        ActionResult result = nodeGroup.callByActionName("getSessionId", "");</span>
-<span class="source-line-no">405</span><span id="line-405">        return result.isSuccess() ? result.getResult() : null;</span>
-<span class="source-line-no">406</span><span id="line-406">    }</span>
-<span class="source-line-no">407</span><span id="line-407"></span>
-<span class="source-line-no">408</span><span id="line-408">    /**</span>
-<span class="source-line-no">409</span><span id="line-409">     * Report result to outputMultiplexer.</span>
-<span class="source-line-no">410</span><span id="line-410">     */</span>
-<span class="source-line-no">411</span><span id="line-411">    private void reportToMultiplexer(String data) {</span>
-<span class="source-line-no">412</span><span id="line-412">        if (system == null) {</span>
-<span class="source-line-no">413</span><span id="line-413">            return;</span>
-<span class="source-line-no">414</span><span id="line-414">        }</span>
-<span class="source-line-no">415</span><span id="line-415"></span>
-<span class="source-line-no">416</span><span id="line-416">        IIActorRef&lt;?&gt; multiplexer = system.getIIActor("outputMultiplexer");</span>
-<span class="source-line-no">417</span><span id="line-417">        if (multiplexer == null) {</span>
-<span class="source-line-no">418</span><span id="line-418">            return;</span>
-<span class="source-line-no">419</span><span id="line-419">        }</span>
-<span class="source-line-no">420</span><span id="line-420"></span>
-<span class="source-line-no">421</span><span id="line-421">        JSONObject arg = new JSONObject();</span>
-<span class="source-line-no">422</span><span id="line-422">        arg.put("source", "workflow-reporter");</span>
-<span class="source-line-no">423</span><span id="line-423">        arg.put("type", "plugin-result");</span>
-<span class="source-line-no">424</span><span id="line-424">        arg.put("data", data);</span>
-<span class="source-line-no">425</span><span id="line-425">        multiplexer.callByActionName("add", arg.toString());</span>
-<span class="source-line-no">426</span><span id="line-426">    }</span>
-<span class="source-line-no">427</span><span id="line-427">}</span>
+<span class="source-line-no">365</span><span id="line-365">        return null;</span>
+<span class="source-line-no">366</span><span id="line-366">    }</span>
+<span class="source-line-no">367</span><span id="line-367"></span>
+<span class="source-line-no">368</span><span id="line-368">    /**</span>
+<span class="source-line-no">369</span><span id="line-369">     * Get messages with % prefix from logs.</span>
+<span class="source-line-no">370</span><span id="line-370">     */</span>
+<span class="source-line-no">371</span><span id="line-371">    private List&lt;String&gt; getReportMessages(long sessionId) throws SQLException {</span>
+<span class="source-line-no">372</span><span id="line-372">        List&lt;String&gt; messages = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">373</span><span id="line-373"></span>
+<span class="source-line-no">374</span><span id="line-374">        String sql = "SELECT message FROM logs WHERE session_id = ? ORDER BY timestamp";</span>
+<span class="source-line-no">375</span><span id="line-375">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
+<span class="source-line-no">376</span><span id="line-376">            ps.setLong(1, sessionId);</span>
+<span class="source-line-no">377</span><span id="line-377">            try (ResultSet rs = ps.executeQuery()) {</span>
+<span class="source-line-no">378</span><span id="line-378">                while (rs.next()) {</span>
+<span class="source-line-no">379</span><span id="line-379">                    String message = rs.getString("message");</span>
+<span class="source-line-no">380</span><span id="line-380">                    if (message != null) {</span>
+<span class="source-line-no">381</span><span id="line-381">                        // Extract lines starting with %</span>
+<span class="source-line-no">382</span><span id="line-382">                        for (String line : message.split("\n")) {</span>
+<span class="source-line-no">383</span><span id="line-383">                            String trimmed = line.trim();</span>
+<span class="source-line-no">384</span><span id="line-384">                            // Handle prefixes like [node-xxx] %message</span>
+<span class="source-line-no">385</span><span id="line-385">                            String cleaned = trimmed.replaceFirst("^\\[node-[^\\]]+\\]\\s*", "");</span>
+<span class="source-line-no">386</span><span id="line-386">                            if (cleaned.startsWith(REPORT_PREFIX)) {</span>
+<span class="source-line-no">387</span><span id="line-387">                                messages.add(cleaned.substring(1).trim());</span>
+<span class="source-line-no">388</span><span id="line-388">                            }</span>
+<span class="source-line-no">389</span><span id="line-389">                        }</span>
+<span class="source-line-no">390</span><span id="line-390">                    }</span>
+<span class="source-line-no">391</span><span id="line-391">                }</span>
+<span class="source-line-no">392</span><span id="line-392">            }</span>
+<span class="source-line-no">393</span><span id="line-393">        }</span>
+<span class="source-line-no">394</span><span id="line-394">        return messages;</span>
+<span class="source-line-no">395</span><span id="line-395">    }</span>
+<span class="source-line-no">396</span><span id="line-396"></span>
+<span class="source-line-no">397</span><span id="line-397">    /**</span>
+<span class="source-line-no">398</span><span id="line-398">     * Build transition summary.</span>
+<span class="source-line-no">399</span><span id="line-399">     */</span>
+<span class="source-line-no">400</span><span id="line-400">    private String buildTransitionSummary(long sessionId) throws SQLException {</span>
+<span class="source-line-no">401</span><span id="line-401">        String sql = "SELECT label, level, message FROM logs " +</span>
+<span class="source-line-no">402</span><span id="line-402">                     "WHERE session_id = ? AND message LIKE 'Transition %' " +</span>
+<span class="source-line-no">403</span><span id="line-403">                     "ORDER BY timestamp";</span>
+<span class="source-line-no">404</span><span id="line-404"></span>
+<span class="source-line-no">405</span><span id="line-405">        StringBuilder sb = new StringBuilder();</span>
+<span class="source-line-no">406</span><span id="line-406">        int success = 0;</span>
+<span class="source-line-no">407</span><span id="line-407">        int failed = 0;</span>
+<span class="source-line-no">408</span><span id="line-408"></span>
+<span class="source-line-no">409</span><span id="line-409">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
+<span class="source-line-no">410</span><span id="line-410">            ps.setLong(1, sessionId);</span>
+<span class="source-line-no">411</span><span id="line-411">            try (ResultSet rs = ps.executeQuery()) {</span>
+<span class="source-line-no">412</span><span id="line-412">                while (rs.next()) {</span>
+<span class="source-line-no">413</span><span id="line-413">                    String label = rs.getString("label");</span>
+<span class="source-line-no">414</span><span id="line-414">                    String level = rs.getString("level");</span>
+<span class="source-line-no">415</span><span id="line-415">                    String message = rs.getString("message");</span>
+<span class="source-line-no">416</span><span id="line-416"></span>
+<span class="source-line-no">417</span><span id="line-417">                    boolean isSuccess = message.contains("SUCCESS");</span>
+<span class="source-line-no">418</span><span id="line-418">                    if (isSuccess) {</span>
+<span class="source-line-no">419</span><span id="line-419">                        success++;</span>
+<span class="source-line-no">420</span><span id="line-420">                        sb.append("[✓] ").append(label != null ? label : "unknown").append("\n");</span>
+<span class="source-line-no">421</span><span id="line-421">                    } else {</span>
+<span class="source-line-no">422</span><span id="line-422">                        failed++;</span>
+<span class="source-line-no">423</span><span id="line-423">                        sb.append("[✗] ").append(label != null ? label : "unknown");</span>
+<span class="source-line-no">424</span><span id="line-424">                        // Extract failure reason</span>
+<span class="source-line-no">425</span><span id="line-425">                        int dashIdx = message.indexOf(" - ");</span>
+<span class="source-line-no">426</span><span id="line-426">                        if (dashIdx &gt; 0) {</span>
+<span class="source-line-no">427</span><span id="line-427">                            sb.append(": ").append(message.substring(dashIdx + 3));</span>
+<span class="source-line-no">428</span><span id="line-428">                        }</span>
+<span class="source-line-no">429</span><span id="line-429">                        sb.append("\n");</span>
+<span class="source-line-no">430</span><span id="line-430">                    }</span>
+<span class="source-line-no">431</span><span id="line-431">                }</span>
+<span class="source-line-no">432</span><span id="line-432">            }</span>
+<span class="source-line-no">433</span><span id="line-433">        }</span>
+<span class="source-line-no">434</span><span id="line-434"></span>
+<span class="source-line-no">435</span><span id="line-435">        if (success == 0 &amp;&amp; failed == 0) {</span>
+<span class="source-line-no">436</span><span id="line-436">            return null;</span>
+<span class="source-line-no">437</span><span id="line-437">        }</span>
+<span class="source-line-no">438</span><span id="line-438"></span>
+<span class="source-line-no">439</span><span id="line-439">        sb.append("\nSummary: ").append(success).append(" succeeded, ").append(failed).append(" failed");</span>
+<span class="source-line-no">440</span><span id="line-440">        return sb.toString();</span>
+<span class="source-line-no">441</span><span id="line-441">    }</span>
+<span class="source-line-no">442</span><span id="line-442"></span>
+<span class="source-line-no">443</span><span id="line-443">    /**</span>
+<span class="source-line-no">444</span><span id="line-444">     * Get final session status.</span>
+<span class="source-line-no">445</span><span id="line-445">     */</span>
+<span class="source-line-no">446</span><span id="line-446">    private String getFinalStatus(long sessionId) throws SQLException {</span>
+<span class="source-line-no">447</span><span id="line-447">        String sql = "SELECT status FROM sessions WHERE id = ?";</span>
+<span class="source-line-no">448</span><span id="line-448">        try (PreparedStatement ps = connection.prepareStatement(sql)) {</span>
+<span class="source-line-no">449</span><span id="line-449">            ps.setLong(1, sessionId);</span>
+<span class="source-line-no">450</span><span id="line-450">            try (ResultSet rs = ps.executeQuery()) {</span>
+<span class="source-line-no">451</span><span id="line-451">                if (rs.next()) {</span>
+<span class="source-line-no">452</span><span id="line-452">                    String status = rs.getString("status");</span>
+<span class="source-line-no">453</span><span id="line-453">                    if ("COMPLETED".equals(status)) {</span>
+<span class="source-line-no">454</span><span id="line-454">                        return "=== Result: SUCCESS ===";</span>
+<span class="source-line-no">455</span><span id="line-455">                    } else if ("FAILED".equals(status)) {</span>
+<span class="source-line-no">456</span><span id="line-456">                        return "=== Result: FAILED ===";</span>
+<span class="source-line-no">457</span><span id="line-457">                    } else {</span>
+<span class="source-line-no">458</span><span id="line-458">                        return "=== Result: " + status + " ===";</span>
+<span class="source-line-no">459</span><span id="line-459">                    }</span>
+<span class="source-line-no">460</span><span id="line-460">                }</span>
+<span class="source-line-no">461</span><span id="line-461">            }</span>
+<span class="source-line-no">462</span><span id="line-462">        }</span>
+<span class="source-line-no">463</span><span id="line-463">        return "=== Result: UNKNOWN ===";</span>
+<span class="source-line-no">464</span><span id="line-464">    }</span>
+<span class="source-line-no">465</span><span id="line-465"></span>
+<span class="source-line-no">466</span><span id="line-466">    /**</span>
+<span class="source-line-no">467</span><span id="line-467">     * Show transition success/failure summary.</span>
+<span class="source-line-no">468</span><span id="line-468">     */</span>
+<span class="source-line-no">469</span><span id="line-469">    private ActionResult transitionSummary(String sessionIdStr) {</span>
+<span class="source-line-no">470</span><span id="line-470">        logger.entering(CLASS_NAME, "transitionSummary", sessionIdStr);</span>
+<span class="source-line-no">471</span><span id="line-471">        if (connection == null) {</span>
+<span class="source-line-no">472</span><span id="line-472">            return new ActionResult(false, "Not connected. Database connection not set.");</span>
+<span class="source-line-no">473</span><span id="line-473">        }</span>
+<span class="source-line-no">474</span><span id="line-474"></span>
+<span class="source-line-no">475</span><span id="line-475">        try {</span>
+<span class="source-line-no">476</span><span id="line-476">            long sessionId = resolveSessionId(sessionIdStr);</span>
+<span class="source-line-no">477</span><span id="line-477">            String summary = buildTransitionSummary(sessionId);</span>
+<span class="source-line-no">478</span><span id="line-478">            if (summary == null) {</span>
+<span class="source-line-no">479</span><span id="line-479">                summary = "No transition data found for session " + sessionId;</span>
+<span class="source-line-no">480</span><span id="line-480">            }</span>
+<span class="source-line-no">481</span><span id="line-481">            reportToMultiplexer(summary);</span>
+<span class="source-line-no">482</span><span id="line-482">            return new ActionResult(true, summary);</span>
+<span class="source-line-no">483</span><span id="line-483">        } catch (Exception e) {</span>
+<span class="source-line-no">484</span><span id="line-484">            return new ActionResult(false, "Query failed: " + e.getMessage());</span>
+<span class="source-line-no">485</span><span id="line-485">        }</span>
+<span class="source-line-no">486</span><span id="line-486">    }</span>
+<span class="source-line-no">487</span><span id="line-487"></span>
+<span class="source-line-no">488</span><span id="line-488">    /**</span>
+<span class="source-line-no">489</span><span id="line-489">     * Resolve session ID from argument or auto-retrieve from nodeGroup.</span>
+<span class="source-line-no">490</span><span id="line-490">     */</span>
+<span class="source-line-no">491</span><span id="line-491">    private long resolveSessionId(String sessionIdStr) throws NumberFormatException {</span>
+<span class="source-line-no">492</span><span id="line-492">        if (sessionIdStr == null || sessionIdStr.trim().isEmpty() || sessionIdStr.equals("[]")) {</span>
+<span class="source-line-no">493</span><span id="line-493">            String autoSessionId = getSessionIdFromNodeGroup();</span>
+<span class="source-line-no">494</span><span id="line-494">            if (autoSessionId == null) {</span>
+<span class="source-line-no">495</span><span id="line-495">                throw new NumberFormatException("Session ID not specified and could not retrieve from nodeGroup");</span>
+<span class="source-line-no">496</span><span id="line-496">            }</span>
+<span class="source-line-no">497</span><span id="line-497">            return Long.parseLong(autoSessionId);</span>
+<span class="source-line-no">498</span><span id="line-498">        }</span>
+<span class="source-line-no">499</span><span id="line-499">        return Long.parseLong(sessionIdStr.trim());</span>
+<span class="source-line-no">500</span><span id="line-500">    }</span>
+<span class="source-line-no">501</span><span id="line-501"></span>
+<span class="source-line-no">502</span><span id="line-502">    /**</span>
+<span class="source-line-no">503</span><span id="line-503">     * Retrieves session ID from nodeGroup actor.</span>
+<span class="source-line-no">504</span><span id="line-504">     */</span>
+<span class="source-line-no">505</span><span id="line-505">    private String getSessionIdFromNodeGroup() {</span>
+<span class="source-line-no">506</span><span id="line-506">        if (system == null) {</span>
+<span class="source-line-no">507</span><span id="line-507">            return null;</span>
+<span class="source-line-no">508</span><span id="line-508">        }</span>
+<span class="source-line-no">509</span><span id="line-509">        IIActorRef&lt;?&gt; nodeGroup = system.getIIActor("nodeGroup");</span>
+<span class="source-line-no">510</span><span id="line-510">        if (nodeGroup == null) {</span>
+<span class="source-line-no">511</span><span id="line-511">            return null;</span>
+<span class="source-line-no">512</span><span id="line-512">        }</span>
+<span class="source-line-no">513</span><span id="line-513">        ActionResult result = nodeGroup.callByActionName("getSessionId", "");</span>
+<span class="source-line-no">514</span><span id="line-514">        return result.isSuccess() ? result.getResult() : null;</span>
+<span class="source-line-no">515</span><span id="line-515">    }</span>
+<span class="source-line-no">516</span><span id="line-516"></span>
+<span class="source-line-no">517</span><span id="line-517">    /**</span>
+<span class="source-line-no">518</span><span id="line-518">     * Report result to outputMultiplexer.</span>
+<span class="source-line-no">519</span><span id="line-519">     */</span>
+<span class="source-line-no">520</span><span id="line-520">    private void reportToMultiplexer(String data) {</span>
+<span class="source-line-no">521</span><span id="line-521">        if (system == null) {</span>
+<span class="source-line-no">522</span><span id="line-522">            return;</span>
+<span class="source-line-no">523</span><span id="line-523">        }</span>
+<span class="source-line-no">524</span><span id="line-524"></span>
+<span class="source-line-no">525</span><span id="line-525">        IIActorRef&lt;?&gt; multiplexer = system.getIIActor("outputMultiplexer");</span>
+<span class="source-line-no">526</span><span id="line-526">        if (multiplexer == null) {</span>
+<span class="source-line-no">527</span><span id="line-527">            return;</span>
+<span class="source-line-no">528</span><span id="line-528">        }</span>
+<span class="source-line-no">529</span><span id="line-529"></span>
+<span class="source-line-no">530</span><span id="line-530">        JSONObject arg = new JSONObject();</span>
+<span class="source-line-no">531</span><span id="line-531">        arg.put("source", "workflow-reporter");</span>
+<span class="source-line-no">532</span><span id="line-532">        arg.put("type", "plugin-result");</span>
+<span class="source-line-no">533</span><span id="line-533">        arg.put("data", data);</span>
+<span class="source-line-no">534</span><span id="line-534">        multiplexer.callByActionName("add", arg.toString());</span>
+<span class="source-line-no">535</span><span id="line-535">    }</span>
+<span class="source-line-no">536</span><span id="line-536">}</span>
 
 
 

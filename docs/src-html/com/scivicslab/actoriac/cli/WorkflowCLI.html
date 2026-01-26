@@ -58,342 +58,337 @@
 <span class="source-line-no">045</span><span id="line-45"> *   &lt;li&gt;{@code list} - List available workflows&lt;/li&gt;</span>
 <span class="source-line-no">046</span><span id="line-46"> *   &lt;li&gt;{@code describe} - Describe workflow structure&lt;/li&gt;</span>
 <span class="source-line-no">047</span><span id="line-47"> *   &lt;li&gt;{@code logs} - Query execution logs&lt;/li&gt;</span>
-<span class="source-line-no">048</span><span id="line-48"> *   &lt;li&gt;{@code log-server} - Start H2 log server&lt;/li&gt;</span>
-<span class="source-line-no">049</span><span id="line-49"> *   &lt;li&gt;{@code db-clear} - Clear (delete) the log database&lt;/li&gt;</span>
-<span class="source-line-no">050</span><span id="line-50"> * &lt;/ul&gt;</span>
-<span class="source-line-no">051</span><span id="line-51"> *</span>
-<span class="source-line-no">052</span><span id="line-52"> * &lt;h2&gt;Usage Examples&lt;/h2&gt;</span>
-<span class="source-line-no">053</span><span id="line-53"> * &lt;pre&gt;</span>
-<span class="source-line-no">054</span><span id="line-54"> * actor-iac run -d ./workflows -w deploy</span>
-<span class="source-line-no">055</span><span id="line-55"> * actor-iac list -d ./workflows</span>
-<span class="source-line-no">056</span><span id="line-56"> * actor-iac logs --db ./logs --list</span>
-<span class="source-line-no">057</span><span id="line-57"> * actor-iac log-server --db ./logs</span>
-<span class="source-line-no">058</span><span id="line-58"> * &lt;/pre&gt;</span>
-<span class="source-line-no">059</span><span id="line-59"> *</span>
-<span class="source-line-no">060</span><span id="line-60"> * @author devteam@scivics-lab.com</span>
-<span class="source-line-no">061</span><span id="line-61"> * @since 2.7.0</span>
-<span class="source-line-no">062</span><span id="line-62"> */</span>
-<span class="source-line-no">063</span><span id="line-63">@Command(</span>
-<span class="source-line-no">064</span><span id="line-64">    name = "actor-iac",</span>
-<span class="source-line-no">065</span><span id="line-65">    mixinStandardHelpOptions = true,</span>
-<span class="source-line-no">066</span><span id="line-66">    version = "actor-IaC 2.12.1",</span>
-<span class="source-line-no">067</span><span id="line-67">    description = "Infrastructure as Code workflow automation tool.",</span>
-<span class="source-line-no">068</span><span id="line-68">    subcommands = {</span>
-<span class="source-line-no">069</span><span id="line-69">        RunCLI.class,</span>
-<span class="source-line-no">070</span><span id="line-70">        ListWorkflowsCLI.class,</span>
-<span class="source-line-no">071</span><span id="line-71">        DescribeCLI.class,</span>
-<span class="source-line-no">072</span><span id="line-72">        LogsCLI.class,</span>
-<span class="source-line-no">073</span><span id="line-73">        LogServerCLI.class,</span>
-<span class="source-line-no">074</span><span id="line-74">        MergeLogsCLI.class,</span>
-<span class="source-line-no">075</span><span id="line-75">        DbClearCLI.class</span>
-<span class="source-line-no">076</span><span id="line-76">    }</span>
-<span class="source-line-no">077</span><span id="line-77">)</span>
-<span class="source-line-no">078</span><span id="line-78">public class WorkflowCLI implements Callable&lt;Integer&gt; {</span>
-<span class="source-line-no">079</span><span id="line-79"></span>
-<span class="source-line-no">080</span><span id="line-80">    /**</span>
-<span class="source-line-no">081</span><span id="line-81">     * Main entry point.</span>
-<span class="source-line-no">082</span><span id="line-82">     *</span>
-<span class="source-line-no">083</span><span id="line-83">     * @param args command line arguments</span>
-<span class="source-line-no">084</span><span id="line-84">     */</span>
-<span class="source-line-no">085</span><span id="line-85">    public static void main(String[] args) {</span>
-<span class="source-line-no">086</span><span id="line-86">        // Load logging configuration from resources</span>
-<span class="source-line-no">087</span><span id="line-87">        try (InputStream is = WorkflowCLI.class.getResourceAsStream("/logging.properties")) {</span>
-<span class="source-line-no">088</span><span id="line-88">            if (is != null) {</span>
-<span class="source-line-no">089</span><span id="line-89">                LogManager.getLogManager().readConfiguration(is);</span>
-<span class="source-line-no">090</span><span id="line-90">            }</span>
-<span class="source-line-no">091</span><span id="line-91">        } catch (IOException e) {</span>
-<span class="source-line-no">092</span><span id="line-92">            System.err.println("Warning: Failed to load logging.properties: " + e.getMessage());</span>
-<span class="source-line-no">093</span><span id="line-93">        }</span>
-<span class="source-line-no">094</span><span id="line-94"></span>
-<span class="source-line-no">095</span><span id="line-95">        int exitCode = new CommandLine(new WorkflowCLI()).execute(args);</span>
-<span class="source-line-no">096</span><span id="line-96">        System.exit(exitCode);</span>
-<span class="source-line-no">097</span><span id="line-97">    }</span>
-<span class="source-line-no">098</span><span id="line-98"></span>
-<span class="source-line-no">099</span><span id="line-99">    /**</span>
-<span class="source-line-no">100</span><span id="line-100">     * Called when no subcommand is specified.</span>
-<span class="source-line-no">101</span><span id="line-101">     * Shows help message.</span>
-<span class="source-line-no">102</span><span id="line-102">     */</span>
-<span class="source-line-no">103</span><span id="line-103">    @Override</span>
-<span class="source-line-no">104</span><span id="line-104">    public Integer call() {</span>
-<span class="source-line-no">105</span><span id="line-105">        System.out.println("actor-IaC - Infrastructure as Code workflow automation tool");</span>
-<span class="source-line-no">106</span><span id="line-106">        System.out.println();</span>
-<span class="source-line-no">107</span><span id="line-107">        System.out.println("Usage: actor-iac &lt;command&gt; [options]");</span>
-<span class="source-line-no">108</span><span id="line-108">        System.out.println();</span>
-<span class="source-line-no">109</span><span id="line-109">        System.out.println("Commands:");</span>
-<span class="source-line-no">110</span><span id="line-110">        System.out.println("  run          Execute a workflow");</span>
-<span class="source-line-no">111</span><span id="line-111">        System.out.println("  list         List available workflows");</span>
-<span class="source-line-no">112</span><span id="line-112">        System.out.println("  describe     Describe workflow structure");</span>
-<span class="source-line-no">113</span><span id="line-113">        System.out.println("  log-search   Search execution logs");</span>
-<span class="source-line-no">114</span><span id="line-114">        System.out.println("  log-serve    Start H2 log server for centralized logging");</span>
-<span class="source-line-no">115</span><span id="line-115">        System.out.println("  log-merge    Merge scattered log databases into one");</span>
-<span class="source-line-no">116</span><span id="line-116">        System.out.println();</span>
-<span class="source-line-no">117</span><span id="line-117">        System.out.println("Examples:");</span>
-<span class="source-line-no">118</span><span id="line-118">        System.out.println("  actor-iac run -w sysinfo/main-collect-sysinfo.yaml -i inventory.ini");</span>
-<span class="source-line-no">119</span><span id="line-119">        System.out.println("  actor-iac run -d ./sysinfo -w main-collect-sysinfo.yaml -i inventory.ini");</span>
-<span class="source-line-no">120</span><span id="line-120">        System.out.println("  actor-iac list -w sysinfo");</span>
-<span class="source-line-no">121</span><span id="line-121">        System.out.println("  actor-iac describe -w sysinfo/main-collect-sysinfo.yaml");</span>
-<span class="source-line-no">122</span><span id="line-122">        System.out.println("  actor-iac log-search --db ./logs --list");</span>
-<span class="source-line-no">123</span><span id="line-123">        System.out.println("  actor-iac log-serve --db ./logs/shared");</span>
-<span class="source-line-no">124</span><span id="line-124">        System.out.println();</span>
-<span class="source-line-no">125</span><span id="line-125">        System.out.println("Use 'actor-iac &lt;command&gt; --help' for more information about a command.");</span>
-<span class="source-line-no">126</span><span id="line-126">        return 0;</span>
-<span class="source-line-no">127</span><span id="line-127">    }</span>
-<span class="source-line-no">128</span><span id="line-128">}</span>
-<span class="source-line-no">129</span><span id="line-129"></span>
-<span class="source-line-no">130</span><span id="line-130">/**</span>
-<span class="source-line-no">131</span><span id="line-131"> * Subcommand to list workflows discovered under a directory.</span>
-<span class="source-line-no">132</span><span id="line-132"> */</span>
-<span class="source-line-no">133</span><span id="line-133">@Command(</span>
-<span class="source-line-no">134</span><span id="line-134">    name = "list",</span>
-<span class="source-line-no">135</span><span id="line-135">    mixinStandardHelpOptions = true,</span>
-<span class="source-line-no">136</span><span id="line-136">    version = "actor-IaC list 2.12.1",</span>
-<span class="source-line-no">137</span><span id="line-137">    description = "List workflows in the specified directory."</span>
-<span class="source-line-no">138</span><span id="line-138">)</span>
-<span class="source-line-no">139</span><span id="line-139">class ListWorkflowsCLI implements Callable&lt;Integer&gt; {</span>
-<span class="source-line-no">140</span><span id="line-140"></span>
-<span class="source-line-no">141</span><span id="line-141">    @Option(</span>
-<span class="source-line-no">142</span><span id="line-142">        names = {"-d", "--dir"},</span>
-<span class="source-line-no">143</span><span id="line-143">        description = "Base directory. Defaults to current directory.",</span>
-<span class="source-line-no">144</span><span id="line-144">        defaultValue = "."</span>
-<span class="source-line-no">145</span><span id="line-145">    )</span>
-<span class="source-line-no">146</span><span id="line-146">    private File baseDir;</span>
-<span class="source-line-no">147</span><span id="line-147"></span>
-<span class="source-line-no">148</span><span id="line-148">    @Option(</span>
-<span class="source-line-no">149</span><span id="line-149">        names = {"-w", "--workflow"},</span>
-<span class="source-line-no">150</span><span id="line-150">        required = true,</span>
-<span class="source-line-no">151</span><span id="line-151">        description = "Workflow directory path (relative to -d)"</span>
-<span class="source-line-no">152</span><span id="line-152">    )</span>
-<span class="source-line-no">153</span><span id="line-153">    private String workflowPath;</span>
-<span class="source-line-no">154</span><span id="line-154"></span>
-<span class="source-line-no">155</span><span id="line-155">    @Option(</span>
-<span class="source-line-no">156</span><span id="line-156">        names = {"-o", "--output"},</span>
-<span class="source-line-no">157</span><span id="line-157">        description = "Output format: table, json, yaml (default: table)",</span>
-<span class="source-line-no">158</span><span id="line-158">        defaultValue = "table"</span>
-<span class="source-line-no">159</span><span id="line-159">    )</span>
-<span class="source-line-no">160</span><span id="line-160">    private String outputFormat;</span>
-<span class="source-line-no">161</span><span id="line-161"></span>
-<span class="source-line-no">162</span><span id="line-162">    @Override</span>
-<span class="source-line-no">163</span><span id="line-163">    public Integer call() {</span>
-<span class="source-line-no">164</span><span id="line-164">        File workflowDir = new File(baseDir, workflowPath);</span>
-<span class="source-line-no">165</span><span id="line-165">        if (!workflowDir.isDirectory()) {</span>
-<span class="source-line-no">166</span><span id="line-166">            System.err.println("Not a directory: " + workflowDir);</span>
-<span class="source-line-no">167</span><span id="line-167">            return 1;</span>
-<span class="source-line-no">168</span><span id="line-168">        }</span>
-<span class="source-line-no">169</span><span id="line-169"></span>
-<span class="source-line-no">170</span><span id="line-170">        List&lt;WorkflowInfo&gt; workflows = scanWorkflowsForDisplay(workflowDir, workflowPath);</span>
-<span class="source-line-no">171</span><span id="line-171">        if (workflows.isEmpty()) {</span>
-<span class="source-line-no">172</span><span id="line-172">            if ("json".equalsIgnoreCase(outputFormat)) {</span>
-<span class="source-line-no">173</span><span id="line-173">                System.out.println("[]");</span>
-<span class="source-line-no">174</span><span id="line-174">            } else if ("yaml".equalsIgnoreCase(outputFormat)) {</span>
-<span class="source-line-no">175</span><span id="line-175">                System.out.println("workflows: []");</span>
-<span class="source-line-no">176</span><span id="line-176">            } else {</span>
-<span class="source-line-no">177</span><span id="line-177">                System.out.println("No workflow files found in " + workflowDir.getPath());</span>
-<span class="source-line-no">178</span><span id="line-178">            }</span>
-<span class="source-line-no">179</span><span id="line-179">            return 0;</span>
-<span class="source-line-no">180</span><span id="line-180">        }</span>
-<span class="source-line-no">181</span><span id="line-181"></span>
-<span class="source-line-no">182</span><span id="line-182">        switch (outputFormat.toLowerCase()) {</span>
-<span class="source-line-no">183</span><span id="line-183">            case "json" -&gt; printJson(workflows);</span>
-<span class="source-line-no">184</span><span id="line-184">            case "yaml" -&gt; printYaml(workflows);</span>
-<span class="source-line-no">185</span><span id="line-185">            default -&gt; printTable(workflows, workflowDir.getPath());</span>
-<span class="source-line-no">186</span><span id="line-186">        }</span>
-<span class="source-line-no">187</span><span id="line-187">        return 0;</span>
-<span class="source-line-no">188</span><span id="line-188">    }</span>
-<span class="source-line-no">189</span><span id="line-189"></span>
-<span class="source-line-no">190</span><span id="line-190">    private void printTable(List&lt;WorkflowInfo&gt; workflows, String dirPath) {</span>
-<span class="source-line-no">191</span><span id="line-191">        System.out.println("Workflows in " + dirPath + ":");</span>
-<span class="source-line-no">192</span><span id="line-192">        System.out.println();</span>
-<span class="source-line-no">193</span><span id="line-193">        for (WorkflowInfo wf : workflows) {</span>
-<span class="source-line-no">194</span><span id="line-194">            System.out.println(wf.path());</span>
-<span class="source-line-no">195</span><span id="line-195">            if (wf.name() != null) {</span>
-<span class="source-line-no">196</span><span id="line-196">                System.out.println("  name: " + wf.name());</span>
-<span class="source-line-no">197</span><span id="line-197">            }</span>
-<span class="source-line-no">198</span><span id="line-198">            if (wf.description() != null) {</span>
-<span class="source-line-no">199</span><span id="line-199">                System.out.println("  description: " + wf.description());</span>
-<span class="source-line-no">200</span><span id="line-200">            }</span>
-<span class="source-line-no">201</span><span id="line-201">            if (wf.note() != null) {</span>
-<span class="source-line-no">202</span><span id="line-202">                System.out.println("  note: " + wf.note());</span>
-<span class="source-line-no">203</span><span id="line-203">            }</span>
-<span class="source-line-no">204</span><span id="line-204">            System.out.println();</span>
-<span class="source-line-no">205</span><span id="line-205">        }</span>
-<span class="source-line-no">206</span><span id="line-206">    }</span>
-<span class="source-line-no">207</span><span id="line-207"></span>
-<span class="source-line-no">208</span><span id="line-208">    private void printJson(List&lt;WorkflowInfo&gt; workflows) {</span>
-<span class="source-line-no">209</span><span id="line-209">        org.json.JSONArray arr = new org.json.JSONArray();</span>
-<span class="source-line-no">210</span><span id="line-210">        for (WorkflowInfo wf : workflows) {</span>
-<span class="source-line-no">211</span><span id="line-211">            org.json.JSONObject obj = new org.json.JSONObject();</span>
-<span class="source-line-no">212</span><span id="line-212">            obj.put("path", wf.path());</span>
-<span class="source-line-no">213</span><span id="line-213">            if (wf.name() != null) obj.put("name", wf.name());</span>
-<span class="source-line-no">214</span><span id="line-214">            if (wf.description() != null) obj.put("description", wf.description());</span>
-<span class="source-line-no">215</span><span id="line-215">            if (wf.note() != null) obj.put("note", wf.note());</span>
-<span class="source-line-no">216</span><span id="line-216">            arr.put(obj);</span>
-<span class="source-line-no">217</span><span id="line-217">        }</span>
-<span class="source-line-no">218</span><span id="line-218">        System.out.println(arr.toString(2));</span>
-<span class="source-line-no">219</span><span id="line-219">    }</span>
-<span class="source-line-no">220</span><span id="line-220"></span>
-<span class="source-line-no">221</span><span id="line-221">    private void printYaml(List&lt;WorkflowInfo&gt; workflows) {</span>
-<span class="source-line-no">222</span><span id="line-222">        System.out.println("workflows:");</span>
-<span class="source-line-no">223</span><span id="line-223">        for (WorkflowInfo wf : workflows) {</span>
-<span class="source-line-no">224</span><span id="line-224">            System.out.println("  - path: " + wf.path());</span>
-<span class="source-line-no">225</span><span id="line-225">            if (wf.name() != null) {</span>
-<span class="source-line-no">226</span><span id="line-226">                System.out.println("    name: " + wf.name());</span>
-<span class="source-line-no">227</span><span id="line-227">            }</span>
-<span class="source-line-no">228</span><span id="line-228">            if (wf.description() != null) {</span>
-<span class="source-line-no">229</span><span id="line-229">                // Handle multi-line descriptions</span>
-<span class="source-line-no">230</span><span id="line-230">                if (wf.description().contains("\n")) {</span>
-<span class="source-line-no">231</span><span id="line-231">                    System.out.println("    description: |");</span>
-<span class="source-line-no">232</span><span id="line-232">                    for (String line : wf.description().split("\n")) {</span>
-<span class="source-line-no">233</span><span id="line-233">                        System.out.println("      " + line);</span>
-<span class="source-line-no">234</span><span id="line-234">                    }</span>
-<span class="source-line-no">235</span><span id="line-235">                } else {</span>
-<span class="source-line-no">236</span><span id="line-236">                    System.out.println("    description: " + wf.description());</span>
-<span class="source-line-no">237</span><span id="line-237">                }</span>
-<span class="source-line-no">238</span><span id="line-238">            }</span>
-<span class="source-line-no">239</span><span id="line-239">            if (wf.note() != null) {</span>
-<span class="source-line-no">240</span><span id="line-240">                System.out.println("    note: " + wf.note());</span>
-<span class="source-line-no">241</span><span id="line-241">            }</span>
-<span class="source-line-no">242</span><span id="line-242">        }</span>
-<span class="source-line-no">243</span><span id="line-243">    }</span>
+<span class="source-line-no">048</span><span id="line-48"> *   &lt;li&gt;{@code db-clear} - Clear (delete) the log database&lt;/li&gt;</span>
+<span class="source-line-no">049</span><span id="line-49"> * &lt;/ul&gt;</span>
+<span class="source-line-no">050</span><span id="line-50"> *</span>
+<span class="source-line-no">051</span><span id="line-51"> * &lt;h2&gt;Usage Examples&lt;/h2&gt;</span>
+<span class="source-line-no">052</span><span id="line-52"> * &lt;pre&gt;</span>
+<span class="source-line-no">053</span><span id="line-53"> * actor-iac run -d ./workflows -w deploy</span>
+<span class="source-line-no">054</span><span id="line-54"> * actor-iac list -d ./workflows</span>
+<span class="source-line-no">055</span><span id="line-55"> * actor-iac logs --db ./logs --list</span>
+<span class="source-line-no">056</span><span id="line-56"> * &lt;/pre&gt;</span>
+<span class="source-line-no">057</span><span id="line-57"> *</span>
+<span class="source-line-no">058</span><span id="line-58"> * @author devteam@scivics-lab.com</span>
+<span class="source-line-no">059</span><span id="line-59"> * @since 2.7.0</span>
+<span class="source-line-no">060</span><span id="line-60"> */</span>
+<span class="source-line-no">061</span><span id="line-61">@Command(</span>
+<span class="source-line-no">062</span><span id="line-62">    name = "actor-iac",</span>
+<span class="source-line-no">063</span><span id="line-63">    mixinStandardHelpOptions = true,</span>
+<span class="source-line-no">064</span><span id="line-64">    version = "actor-IaC 2.12.1",</span>
+<span class="source-line-no">065</span><span id="line-65">    description = "Infrastructure as Code workflow automation tool.",</span>
+<span class="source-line-no">066</span><span id="line-66">    subcommands = {</span>
+<span class="source-line-no">067</span><span id="line-67">        RunCLI.class,</span>
+<span class="source-line-no">068</span><span id="line-68">        ListWorkflowsCLI.class,</span>
+<span class="source-line-no">069</span><span id="line-69">        DescribeCLI.class,</span>
+<span class="source-line-no">070</span><span id="line-70">        LogsCLI.class,</span>
+<span class="source-line-no">071</span><span id="line-71">        MergeLogsCLI.class,</span>
+<span class="source-line-no">072</span><span id="line-72">        DbClearCLI.class</span>
+<span class="source-line-no">073</span><span id="line-73">    }</span>
+<span class="source-line-no">074</span><span id="line-74">)</span>
+<span class="source-line-no">075</span><span id="line-75">public class WorkflowCLI implements Callable&lt;Integer&gt; {</span>
+<span class="source-line-no">076</span><span id="line-76"></span>
+<span class="source-line-no">077</span><span id="line-77">    /**</span>
+<span class="source-line-no">078</span><span id="line-78">     * Main entry point.</span>
+<span class="source-line-no">079</span><span id="line-79">     *</span>
+<span class="source-line-no">080</span><span id="line-80">     * @param args command line arguments</span>
+<span class="source-line-no">081</span><span id="line-81">     */</span>
+<span class="source-line-no">082</span><span id="line-82">    public static void main(String[] args) {</span>
+<span class="source-line-no">083</span><span id="line-83">        // Load logging configuration from resources</span>
+<span class="source-line-no">084</span><span id="line-84">        try (InputStream is = WorkflowCLI.class.getResourceAsStream("/logging.properties")) {</span>
+<span class="source-line-no">085</span><span id="line-85">            if (is != null) {</span>
+<span class="source-line-no">086</span><span id="line-86">                LogManager.getLogManager().readConfiguration(is);</span>
+<span class="source-line-no">087</span><span id="line-87">            }</span>
+<span class="source-line-no">088</span><span id="line-88">        } catch (IOException e) {</span>
+<span class="source-line-no">089</span><span id="line-89">            System.err.println("Warning: Failed to load logging.properties: " + e.getMessage());</span>
+<span class="source-line-no">090</span><span id="line-90">        }</span>
+<span class="source-line-no">091</span><span id="line-91"></span>
+<span class="source-line-no">092</span><span id="line-92">        int exitCode = new CommandLine(new WorkflowCLI()).execute(args);</span>
+<span class="source-line-no">093</span><span id="line-93">        System.exit(exitCode);</span>
+<span class="source-line-no">094</span><span id="line-94">    }</span>
+<span class="source-line-no">095</span><span id="line-95"></span>
+<span class="source-line-no">096</span><span id="line-96">    /**</span>
+<span class="source-line-no">097</span><span id="line-97">     * Called when no subcommand is specified.</span>
+<span class="source-line-no">098</span><span id="line-98">     * Shows help message.</span>
+<span class="source-line-no">099</span><span id="line-99">     */</span>
+<span class="source-line-no">100</span><span id="line-100">    @Override</span>
+<span class="source-line-no">101</span><span id="line-101">    public Integer call() {</span>
+<span class="source-line-no">102</span><span id="line-102">        System.out.println("actor-IaC - Infrastructure as Code workflow automation tool");</span>
+<span class="source-line-no">103</span><span id="line-103">        System.out.println();</span>
+<span class="source-line-no">104</span><span id="line-104">        System.out.println("Usage: actor-iac &lt;command&gt; [options]");</span>
+<span class="source-line-no">105</span><span id="line-105">        System.out.println();</span>
+<span class="source-line-no">106</span><span id="line-106">        System.out.println("Commands:");</span>
+<span class="source-line-no">107</span><span id="line-107">        System.out.println("  run          Execute a workflow");</span>
+<span class="source-line-no">108</span><span id="line-108">        System.out.println("  list         List available workflows");</span>
+<span class="source-line-no">109</span><span id="line-109">        System.out.println("  describe     Describe workflow structure");</span>
+<span class="source-line-no">110</span><span id="line-110">        System.out.println("  log-search   Search execution logs");</span>
+<span class="source-line-no">111</span><span id="line-111">        System.out.println("  log-merge    Merge scattered log databases into one");</span>
+<span class="source-line-no">112</span><span id="line-112">        System.out.println();</span>
+<span class="source-line-no">113</span><span id="line-113">        System.out.println("Examples:");</span>
+<span class="source-line-no">114</span><span id="line-114">        System.out.println("  actor-iac run -w sysinfo/main-collect-sysinfo.yaml -i inventory.ini");</span>
+<span class="source-line-no">115</span><span id="line-115">        System.out.println("  actor-iac run -d ./sysinfo -w main-collect-sysinfo.yaml -i inventory.ini");</span>
+<span class="source-line-no">116</span><span id="line-116">        System.out.println("  actor-iac list -w sysinfo");</span>
+<span class="source-line-no">117</span><span id="line-117">        System.out.println("  actor-iac describe -w sysinfo/main-collect-sysinfo.yaml");</span>
+<span class="source-line-no">118</span><span id="line-118">        System.out.println("  actor-iac log-search --db ./logs --list");</span>
+<span class="source-line-no">119</span><span id="line-119">        System.out.println();</span>
+<span class="source-line-no">120</span><span id="line-120">        System.out.println("Use 'actor-iac &lt;command&gt; --help' for more information about a command.");</span>
+<span class="source-line-no">121</span><span id="line-121">        return 0;</span>
+<span class="source-line-no">122</span><span id="line-122">    }</span>
+<span class="source-line-no">123</span><span id="line-123">}</span>
+<span class="source-line-no">124</span><span id="line-124"></span>
+<span class="source-line-no">125</span><span id="line-125">/**</span>
+<span class="source-line-no">126</span><span id="line-126"> * Subcommand to list workflows discovered under a directory.</span>
+<span class="source-line-no">127</span><span id="line-127"> */</span>
+<span class="source-line-no">128</span><span id="line-128">@Command(</span>
+<span class="source-line-no">129</span><span id="line-129">    name = "list",</span>
+<span class="source-line-no">130</span><span id="line-130">    mixinStandardHelpOptions = true,</span>
+<span class="source-line-no">131</span><span id="line-131">    version = "actor-IaC list 2.12.1",</span>
+<span class="source-line-no">132</span><span id="line-132">    description = "List workflows in the specified directory."</span>
+<span class="source-line-no">133</span><span id="line-133">)</span>
+<span class="source-line-no">134</span><span id="line-134">class ListWorkflowsCLI implements Callable&lt;Integer&gt; {</span>
+<span class="source-line-no">135</span><span id="line-135"></span>
+<span class="source-line-no">136</span><span id="line-136">    @Option(</span>
+<span class="source-line-no">137</span><span id="line-137">        names = {"-d", "--dir"},</span>
+<span class="source-line-no">138</span><span id="line-138">        description = "Base directory. Defaults to current directory.",</span>
+<span class="source-line-no">139</span><span id="line-139">        defaultValue = "."</span>
+<span class="source-line-no">140</span><span id="line-140">    )</span>
+<span class="source-line-no">141</span><span id="line-141">    private File baseDir;</span>
+<span class="source-line-no">142</span><span id="line-142"></span>
+<span class="source-line-no">143</span><span id="line-143">    @Option(</span>
+<span class="source-line-no">144</span><span id="line-144">        names = {"-w", "--workflow"},</span>
+<span class="source-line-no">145</span><span id="line-145">        required = true,</span>
+<span class="source-line-no">146</span><span id="line-146">        description = "Workflow directory path (relative to -d)"</span>
+<span class="source-line-no">147</span><span id="line-147">    )</span>
+<span class="source-line-no">148</span><span id="line-148">    private String workflowPath;</span>
+<span class="source-line-no">149</span><span id="line-149"></span>
+<span class="source-line-no">150</span><span id="line-150">    @Option(</span>
+<span class="source-line-no">151</span><span id="line-151">        names = {"-o", "--output"},</span>
+<span class="source-line-no">152</span><span id="line-152">        description = "Output format: table, json, yaml (default: table)",</span>
+<span class="source-line-no">153</span><span id="line-153">        defaultValue = "table"</span>
+<span class="source-line-no">154</span><span id="line-154">    )</span>
+<span class="source-line-no">155</span><span id="line-155">    private String outputFormat;</span>
+<span class="source-line-no">156</span><span id="line-156"></span>
+<span class="source-line-no">157</span><span id="line-157">    @Override</span>
+<span class="source-line-no">158</span><span id="line-158">    public Integer call() {</span>
+<span class="source-line-no">159</span><span id="line-159">        File workflowDir = new File(baseDir, workflowPath);</span>
+<span class="source-line-no">160</span><span id="line-160">        if (!workflowDir.isDirectory()) {</span>
+<span class="source-line-no">161</span><span id="line-161">            System.err.println("Not a directory: " + workflowDir);</span>
+<span class="source-line-no">162</span><span id="line-162">            return 1;</span>
+<span class="source-line-no">163</span><span id="line-163">        }</span>
+<span class="source-line-no">164</span><span id="line-164"></span>
+<span class="source-line-no">165</span><span id="line-165">        List&lt;WorkflowInfo&gt; workflows = scanWorkflowsForDisplay(workflowDir, workflowPath);</span>
+<span class="source-line-no">166</span><span id="line-166">        if (workflows.isEmpty()) {</span>
+<span class="source-line-no">167</span><span id="line-167">            if ("json".equalsIgnoreCase(outputFormat)) {</span>
+<span class="source-line-no">168</span><span id="line-168">                System.out.println("[]");</span>
+<span class="source-line-no">169</span><span id="line-169">            } else if ("yaml".equalsIgnoreCase(outputFormat)) {</span>
+<span class="source-line-no">170</span><span id="line-170">                System.out.println("workflows: []");</span>
+<span class="source-line-no">171</span><span id="line-171">            } else {</span>
+<span class="source-line-no">172</span><span id="line-172">                System.out.println("No workflow files found in " + workflowDir.getPath());</span>
+<span class="source-line-no">173</span><span id="line-173">            }</span>
+<span class="source-line-no">174</span><span id="line-174">            return 0;</span>
+<span class="source-line-no">175</span><span id="line-175">        }</span>
+<span class="source-line-no">176</span><span id="line-176"></span>
+<span class="source-line-no">177</span><span id="line-177">        switch (outputFormat.toLowerCase()) {</span>
+<span class="source-line-no">178</span><span id="line-178">            case "json" -&gt; printJson(workflows);</span>
+<span class="source-line-no">179</span><span id="line-179">            case "yaml" -&gt; printYaml(workflows);</span>
+<span class="source-line-no">180</span><span id="line-180">            default -&gt; printTable(workflows, workflowDir.getPath());</span>
+<span class="source-line-no">181</span><span id="line-181">        }</span>
+<span class="source-line-no">182</span><span id="line-182">        return 0;</span>
+<span class="source-line-no">183</span><span id="line-183">    }</span>
+<span class="source-line-no">184</span><span id="line-184"></span>
+<span class="source-line-no">185</span><span id="line-185">    private void printTable(List&lt;WorkflowInfo&gt; workflows, String dirPath) {</span>
+<span class="source-line-no">186</span><span id="line-186">        System.out.println("Workflows in " + dirPath + ":");</span>
+<span class="source-line-no">187</span><span id="line-187">        System.out.println();</span>
+<span class="source-line-no">188</span><span id="line-188">        for (WorkflowInfo wf : workflows) {</span>
+<span class="source-line-no">189</span><span id="line-189">            System.out.println(wf.path());</span>
+<span class="source-line-no">190</span><span id="line-190">            if (wf.name() != null) {</span>
+<span class="source-line-no">191</span><span id="line-191">                System.out.println("  name: " + wf.name());</span>
+<span class="source-line-no">192</span><span id="line-192">            }</span>
+<span class="source-line-no">193</span><span id="line-193">            if (wf.description() != null) {</span>
+<span class="source-line-no">194</span><span id="line-194">                System.out.println("  description: " + wf.description());</span>
+<span class="source-line-no">195</span><span id="line-195">            }</span>
+<span class="source-line-no">196</span><span id="line-196">            if (wf.note() != null) {</span>
+<span class="source-line-no">197</span><span id="line-197">                System.out.println("  note: " + wf.note());</span>
+<span class="source-line-no">198</span><span id="line-198">            }</span>
+<span class="source-line-no">199</span><span id="line-199">            System.out.println();</span>
+<span class="source-line-no">200</span><span id="line-200">        }</span>
+<span class="source-line-no">201</span><span id="line-201">    }</span>
+<span class="source-line-no">202</span><span id="line-202"></span>
+<span class="source-line-no">203</span><span id="line-203">    private void printJson(List&lt;WorkflowInfo&gt; workflows) {</span>
+<span class="source-line-no">204</span><span id="line-204">        org.json.JSONArray arr = new org.json.JSONArray();</span>
+<span class="source-line-no">205</span><span id="line-205">        for (WorkflowInfo wf : workflows) {</span>
+<span class="source-line-no">206</span><span id="line-206">            org.json.JSONObject obj = new org.json.JSONObject();</span>
+<span class="source-line-no">207</span><span id="line-207">            obj.put("path", wf.path());</span>
+<span class="source-line-no">208</span><span id="line-208">            if (wf.name() != null) obj.put("name", wf.name());</span>
+<span class="source-line-no">209</span><span id="line-209">            if (wf.description() != null) obj.put("description", wf.description());</span>
+<span class="source-line-no">210</span><span id="line-210">            if (wf.note() != null) obj.put("note", wf.note());</span>
+<span class="source-line-no">211</span><span id="line-211">            arr.put(obj);</span>
+<span class="source-line-no">212</span><span id="line-212">        }</span>
+<span class="source-line-no">213</span><span id="line-213">        System.out.println(arr.toString(2));</span>
+<span class="source-line-no">214</span><span id="line-214">    }</span>
+<span class="source-line-no">215</span><span id="line-215"></span>
+<span class="source-line-no">216</span><span id="line-216">    private void printYaml(List&lt;WorkflowInfo&gt; workflows) {</span>
+<span class="source-line-no">217</span><span id="line-217">        System.out.println("workflows:");</span>
+<span class="source-line-no">218</span><span id="line-218">        for (WorkflowInfo wf : workflows) {</span>
+<span class="source-line-no">219</span><span id="line-219">            System.out.println("  - path: " + wf.path());</span>
+<span class="source-line-no">220</span><span id="line-220">            if (wf.name() != null) {</span>
+<span class="source-line-no">221</span><span id="line-221">                System.out.println("    name: " + wf.name());</span>
+<span class="source-line-no">222</span><span id="line-222">            }</span>
+<span class="source-line-no">223</span><span id="line-223">            if (wf.description() != null) {</span>
+<span class="source-line-no">224</span><span id="line-224">                // Handle multi-line descriptions</span>
+<span class="source-line-no">225</span><span id="line-225">                if (wf.description().contains("\n")) {</span>
+<span class="source-line-no">226</span><span id="line-226">                    System.out.println("    description: |");</span>
+<span class="source-line-no">227</span><span id="line-227">                    for (String line : wf.description().split("\n")) {</span>
+<span class="source-line-no">228</span><span id="line-228">                        System.out.println("      " + line);</span>
+<span class="source-line-no">229</span><span id="line-229">                    }</span>
+<span class="source-line-no">230</span><span id="line-230">                } else {</span>
+<span class="source-line-no">231</span><span id="line-231">                    System.out.println("    description: " + wf.description());</span>
+<span class="source-line-no">232</span><span id="line-232">                }</span>
+<span class="source-line-no">233</span><span id="line-233">            }</span>
+<span class="source-line-no">234</span><span id="line-234">            if (wf.note() != null) {</span>
+<span class="source-line-no">235</span><span id="line-235">                System.out.println("    note: " + wf.note());</span>
+<span class="source-line-no">236</span><span id="line-236">            }</span>
+<span class="source-line-no">237</span><span id="line-237">        }</span>
+<span class="source-line-no">238</span><span id="line-238">    }</span>
+<span class="source-line-no">239</span><span id="line-239"></span>
+<span class="source-line-no">240</span><span id="line-240">    private static List&lt;WorkflowInfo&gt; scanWorkflowsForDisplay(File directory, String workflowPath) {</span>
+<span class="source-line-no">241</span><span id="line-241">        if (directory == null) {</span>
+<span class="source-line-no">242</span><span id="line-242">            return List.of();</span>
+<span class="source-line-no">243</span><span id="line-243">        }</span>
 <span class="source-line-no">244</span><span id="line-244"></span>
-<span class="source-line-no">245</span><span id="line-245">    private static List&lt;WorkflowInfo&gt; scanWorkflowsForDisplay(File directory, String workflowPath) {</span>
-<span class="source-line-no">246</span><span id="line-246">        if (directory == null) {</span>
-<span class="source-line-no">247</span><span id="line-247">            return List.of();</span>
-<span class="source-line-no">248</span><span id="line-248">        }</span>
-<span class="source-line-no">249</span><span id="line-249"></span>
-<span class="source-line-no">250</span><span id="line-250">        // Non-recursive scan - only files in immediate directory</span>
-<span class="source-line-no">251</span><span id="line-251">        try (Stream&lt;Path&gt; paths = Files.list(directory.toPath())) {</span>
-<span class="source-line-no">252</span><span id="line-252">            return paths.filter(Files::isRegularFile)</span>
-<span class="source-line-no">253</span><span id="line-253">                 .filter(path -&gt; {</span>
-<span class="source-line-no">254</span><span id="line-254">                     String name = path.getFileName().toString().toLowerCase();</span>
-<span class="source-line-no">255</span><span id="line-255">                     return name.endsWith(".yaml") || name.endsWith(".yml")</span>
-<span class="source-line-no">256</span><span id="line-256">                         || name.endsWith(".json") || name.endsWith(".xml");</span>
-<span class="source-line-no">257</span><span id="line-257">                 })</span>
-<span class="source-line-no">258</span><span id="line-258">                 .map(path -&gt; {</span>
-<span class="source-line-no">259</span><span id="line-259">                     File file = path.toFile();</span>
-<span class="source-line-no">260</span><span id="line-260">                     String relPath = workflowPath.endsWith("/")</span>
-<span class="source-line-no">261</span><span id="line-261">                         ? workflowPath + file.getName()</span>
-<span class="source-line-no">262</span><span id="line-262">                         : workflowPath + "/" + file.getName();</span>
-<span class="source-line-no">263</span><span id="line-263">                     return extractWorkflowInfo(file, relPath);</span>
-<span class="source-line-no">264</span><span id="line-264">                 })</span>
-<span class="source-line-no">265</span><span id="line-265">                 .sorted(Comparator.comparing(WorkflowInfo::path, String.CASE_INSENSITIVE_ORDER))</span>
-<span class="source-line-no">266</span><span id="line-266">                 .collect(Collectors.toList());</span>
-<span class="source-line-no">267</span><span id="line-267">        } catch (IOException e) {</span>
-<span class="source-line-no">268</span><span id="line-268">            System.err.println("Failed to scan workflows: " + e.getMessage());</span>
-<span class="source-line-no">269</span><span id="line-269">            return List.of();</span>
-<span class="source-line-no">270</span><span id="line-270">        }</span>
-<span class="source-line-no">271</span><span id="line-271">    }</span>
-<span class="source-line-no">272</span><span id="line-272"></span>
-<span class="source-line-no">273</span><span id="line-273">    private static WorkflowInfo extractWorkflowInfo(File file, String path) {</span>
-<span class="source-line-no">274</span><span id="line-274">        String fileName = file.getName().toLowerCase();</span>
-<span class="source-line-no">275</span><span id="line-275">        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {</span>
-<span class="source-line-no">276</span><span id="line-276">            return extractWorkflowInfoFromYaml(file, path);</span>
-<span class="source-line-no">277</span><span id="line-277">        } else if (fileName.endsWith(".json")) {</span>
-<span class="source-line-no">278</span><span id="line-278">            return extractWorkflowInfoFromJson(file, path);</span>
-<span class="source-line-no">279</span><span id="line-279">        }</span>
-<span class="source-line-no">280</span><span id="line-280">        return new WorkflowInfo(path, null, null, null);</span>
-<span class="source-line-no">281</span><span id="line-281">    }</span>
+<span class="source-line-no">245</span><span id="line-245">        // Non-recursive scan - only files in immediate directory</span>
+<span class="source-line-no">246</span><span id="line-246">        try (Stream&lt;Path&gt; paths = Files.list(directory.toPath())) {</span>
+<span class="source-line-no">247</span><span id="line-247">            return paths.filter(Files::isRegularFile)</span>
+<span class="source-line-no">248</span><span id="line-248">                 .filter(path -&gt; {</span>
+<span class="source-line-no">249</span><span id="line-249">                     String name = path.getFileName().toString().toLowerCase();</span>
+<span class="source-line-no">250</span><span id="line-250">                     return name.endsWith(".yaml") || name.endsWith(".yml")</span>
+<span class="source-line-no">251</span><span id="line-251">                         || name.endsWith(".json") || name.endsWith(".xml");</span>
+<span class="source-line-no">252</span><span id="line-252">                 })</span>
+<span class="source-line-no">253</span><span id="line-253">                 .map(path -&gt; {</span>
+<span class="source-line-no">254</span><span id="line-254">                     File file = path.toFile();</span>
+<span class="source-line-no">255</span><span id="line-255">                     String relPath = workflowPath.endsWith("/")</span>
+<span class="source-line-no">256</span><span id="line-256">                         ? workflowPath + file.getName()</span>
+<span class="source-line-no">257</span><span id="line-257">                         : workflowPath + "/" + file.getName();</span>
+<span class="source-line-no">258</span><span id="line-258">                     return extractWorkflowInfo(file, relPath);</span>
+<span class="source-line-no">259</span><span id="line-259">                 })</span>
+<span class="source-line-no">260</span><span id="line-260">                 .sorted(Comparator.comparing(WorkflowInfo::path, String.CASE_INSENSITIVE_ORDER))</span>
+<span class="source-line-no">261</span><span id="line-261">                 .collect(Collectors.toList());</span>
+<span class="source-line-no">262</span><span id="line-262">        } catch (IOException e) {</span>
+<span class="source-line-no">263</span><span id="line-263">            System.err.println("Failed to scan workflows: " + e.getMessage());</span>
+<span class="source-line-no">264</span><span id="line-264">            return List.of();</span>
+<span class="source-line-no">265</span><span id="line-265">        }</span>
+<span class="source-line-no">266</span><span id="line-266">    }</span>
+<span class="source-line-no">267</span><span id="line-267"></span>
+<span class="source-line-no">268</span><span id="line-268">    private static WorkflowInfo extractWorkflowInfo(File file, String path) {</span>
+<span class="source-line-no">269</span><span id="line-269">        String fileName = file.getName().toLowerCase();</span>
+<span class="source-line-no">270</span><span id="line-270">        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {</span>
+<span class="source-line-no">271</span><span id="line-271">            return extractWorkflowInfoFromYaml(file, path);</span>
+<span class="source-line-no">272</span><span id="line-272">        } else if (fileName.endsWith(".json")) {</span>
+<span class="source-line-no">273</span><span id="line-273">            return extractWorkflowInfoFromJson(file, path);</span>
+<span class="source-line-no">274</span><span id="line-274">        }</span>
+<span class="source-line-no">275</span><span id="line-275">        return new WorkflowInfo(path, null, null, null);</span>
+<span class="source-line-no">276</span><span id="line-276">    }</span>
+<span class="source-line-no">277</span><span id="line-277"></span>
+<span class="source-line-no">278</span><span id="line-278">    private static WorkflowInfo extractWorkflowInfoFromYaml(File file, String path) {</span>
+<span class="source-line-no">279</span><span id="line-279">        String name = null;</span>
+<span class="source-line-no">280</span><span id="line-280">        String description = null;</span>
+<span class="source-line-no">281</span><span id="line-281">        String note = null;</span>
 <span class="source-line-no">282</span><span id="line-282"></span>
-<span class="source-line-no">283</span><span id="line-283">    private static WorkflowInfo extractWorkflowInfoFromYaml(File file, String path) {</span>
-<span class="source-line-no">284</span><span id="line-284">        String name = null;</span>
-<span class="source-line-no">285</span><span id="line-285">        String description = null;</span>
-<span class="source-line-no">286</span><span id="line-286">        String note = null;</span>
-<span class="source-line-no">287</span><span id="line-287"></span>
-<span class="source-line-no">288</span><span id="line-288">        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {</span>
-<span class="source-line-no">289</span><span id="line-289">            String line;</span>
-<span class="source-line-no">290</span><span id="line-290">            StringBuilder currentValue = new StringBuilder();</span>
-<span class="source-line-no">291</span><span id="line-291">            String currentField = null;</span>
-<span class="source-line-no">292</span><span id="line-292">            boolean inMultiLine = false;</span>
-<span class="source-line-no">293</span><span id="line-293"></span>
-<span class="source-line-no">294</span><span id="line-294">            while ((line = reader.readLine()) != null) {</span>
-<span class="source-line-no">295</span><span id="line-295">                // Stop at steps or vertices</span>
-<span class="source-line-no">296</span><span id="line-296">                if (line.trim().startsWith("steps:") || line.trim().startsWith("vertices:")) {</span>
-<span class="source-line-no">297</span><span id="line-297">                    break;</span>
-<span class="source-line-no">298</span><span id="line-298">                }</span>
-<span class="source-line-no">299</span><span id="line-299"></span>
-<span class="source-line-no">300</span><span id="line-300">                if (inMultiLine) {</span>
-<span class="source-line-no">301</span><span id="line-301">                    if (line.startsWith("  ") || line.startsWith("\t") || line.trim().isEmpty()) {</span>
-<span class="source-line-no">302</span><span id="line-302">                        if (!line.trim().isEmpty()) {</span>
-<span class="source-line-no">303</span><span id="line-303">                            currentValue.append(line.trim()).append(" ");</span>
-<span class="source-line-no">304</span><span id="line-304">                        }</span>
-<span class="source-line-no">305</span><span id="line-305">                        continue;</span>
-<span class="source-line-no">306</span><span id="line-306">                    } else {</span>
-<span class="source-line-no">307</span><span id="line-307">                        // End of multi-line</span>
-<span class="source-line-no">308</span><span id="line-308">                        String value = currentValue.toString().trim();</span>
-<span class="source-line-no">309</span><span id="line-309">                        if ("name".equals(currentField)) name = value;</span>
-<span class="source-line-no">310</span><span id="line-310">                        else if ("description".equals(currentField)) description = value;</span>
-<span class="source-line-no">311</span><span id="line-311">                        else if ("note".equals(currentField)) note = value;</span>
-<span class="source-line-no">312</span><span id="line-312">                        inMultiLine = false;</span>
-<span class="source-line-no">313</span><span id="line-313">                        currentValue = new StringBuilder();</span>
-<span class="source-line-no">314</span><span id="line-314">                        currentField = null;</span>
-<span class="source-line-no">315</span><span id="line-315">                    }</span>
-<span class="source-line-no">316</span><span id="line-316">                }</span>
-<span class="source-line-no">317</span><span id="line-317"></span>
-<span class="source-line-no">318</span><span id="line-318">                if (line.trim().startsWith("name:") &amp;&amp; name == null) {</span>
-<span class="source-line-no">319</span><span id="line-319">                    String value = line.substring(line.indexOf(':') + 1).trim();</span>
-<span class="source-line-no">320</span><span id="line-320">                    if (value.equals("|") || value.equals("&gt;")) {</span>
-<span class="source-line-no">321</span><span id="line-321">                        inMultiLine = true;</span>
-<span class="source-line-no">322</span><span id="line-322">                        currentField = "name";</span>
-<span class="source-line-no">323</span><span id="line-323">                    } else if (!value.isEmpty()) {</span>
-<span class="source-line-no">324</span><span id="line-324">                        name = stripQuotes(value);</span>
-<span class="source-line-no">325</span><span id="line-325">                    }</span>
-<span class="source-line-no">326</span><span id="line-326">                } else if (line.trim().startsWith("description:") &amp;&amp; description == null) {</span>
-<span class="source-line-no">327</span><span id="line-327">                    String value = line.substring(line.indexOf(':') + 1).trim();</span>
-<span class="source-line-no">328</span><span id="line-328">                    if (value.equals("|") || value.equals("&gt;")) {</span>
-<span class="source-line-no">329</span><span id="line-329">                        inMultiLine = true;</span>
-<span class="source-line-no">330</span><span id="line-330">                        currentField = "description";</span>
-<span class="source-line-no">331</span><span id="line-331">                    } else if (!value.isEmpty()) {</span>
-<span class="source-line-no">332</span><span id="line-332">                        description = stripQuotes(value);</span>
-<span class="source-line-no">333</span><span id="line-333">                    }</span>
-<span class="source-line-no">334</span><span id="line-334">                } else if (line.trim().startsWith("note:") &amp;&amp; note == null) {</span>
-<span class="source-line-no">335</span><span id="line-335">                    String value = line.substring(line.indexOf(':') + 1).trim();</span>
-<span class="source-line-no">336</span><span id="line-336">                    if (value.equals("|") || value.equals("&gt;")) {</span>
-<span class="source-line-no">337</span><span id="line-337">                        inMultiLine = true;</span>
-<span class="source-line-no">338</span><span id="line-338">                        currentField = "note";</span>
-<span class="source-line-no">339</span><span id="line-339">                    } else if (!value.isEmpty()) {</span>
-<span class="source-line-no">340</span><span id="line-340">                        note = stripQuotes(value);</span>
-<span class="source-line-no">341</span><span id="line-341">                    }</span>
-<span class="source-line-no">342</span><span id="line-342">                }</span>
-<span class="source-line-no">343</span><span id="line-343">            }</span>
-<span class="source-line-no">344</span><span id="line-344"></span>
-<span class="source-line-no">345</span><span id="line-345">            // Handle trailing multi-line</span>
-<span class="source-line-no">346</span><span id="line-346">            if (inMultiLine &amp;&amp; currentValue.length() &gt; 0) {</span>
-<span class="source-line-no">347</span><span id="line-347">                String value = currentValue.toString().trim();</span>
-<span class="source-line-no">348</span><span id="line-348">                if ("name".equals(currentField)) name = value;</span>
-<span class="source-line-no">349</span><span id="line-349">                else if ("description".equals(currentField)) description = value;</span>
-<span class="source-line-no">350</span><span id="line-350">                else if ("note".equals(currentField)) note = value;</span>
-<span class="source-line-no">351</span><span id="line-351">            }</span>
-<span class="source-line-no">352</span><span id="line-352">        } catch (IOException e) {</span>
-<span class="source-line-no">353</span><span id="line-353">            // Ignore</span>
-<span class="source-line-no">354</span><span id="line-354">        }</span>
-<span class="source-line-no">355</span><span id="line-355">        return new WorkflowInfo(path, name, description, note);</span>
-<span class="source-line-no">356</span><span id="line-356">    }</span>
-<span class="source-line-no">357</span><span id="line-357"></span>
-<span class="source-line-no">358</span><span id="line-358">    private static String stripQuotes(String value) {</span>
-<span class="source-line-no">359</span><span id="line-359">        if ((value.startsWith("\"") &amp;&amp; value.endsWith("\"")) ||</span>
-<span class="source-line-no">360</span><span id="line-360">            (value.startsWith("'") &amp;&amp; value.endsWith("'"))) {</span>
-<span class="source-line-no">361</span><span id="line-361">            return value.substring(1, value.length() - 1);</span>
-<span class="source-line-no">362</span><span id="line-362">        }</span>
-<span class="source-line-no">363</span><span id="line-363">        return value;</span>
-<span class="source-line-no">364</span><span id="line-364">    }</span>
-<span class="source-line-no">365</span><span id="line-365"></span>
-<span class="source-line-no">366</span><span id="line-366">    private static WorkflowInfo extractWorkflowInfoFromJson(File file, String path) {</span>
-<span class="source-line-no">367</span><span id="line-367">        try (java.io.FileReader reader = new java.io.FileReader(file)) {</span>
-<span class="source-line-no">368</span><span id="line-368">            org.json.JSONTokener tokener = new org.json.JSONTokener(reader);</span>
-<span class="source-line-no">369</span><span id="line-369">            org.json.JSONObject json = new org.json.JSONObject(tokener);</span>
-<span class="source-line-no">370</span><span id="line-370">            return new WorkflowInfo(</span>
-<span class="source-line-no">371</span><span id="line-371">                path,</span>
-<span class="source-line-no">372</span><span id="line-372">                json.optString("name", null),</span>
-<span class="source-line-no">373</span><span id="line-373">                json.optString("description", null),</span>
-<span class="source-line-no">374</span><span id="line-374">                json.optString("note", null)</span>
-<span class="source-line-no">375</span><span id="line-375">            );</span>
-<span class="source-line-no">376</span><span id="line-376">        } catch (Exception e) {</span>
-<span class="source-line-no">377</span><span id="line-377">            // Ignore</span>
-<span class="source-line-no">378</span><span id="line-378">        }</span>
-<span class="source-line-no">379</span><span id="line-379">        return new WorkflowInfo(path, null, null, null);</span>
-<span class="source-line-no">380</span><span id="line-380">    }</span>
-<span class="source-line-no">381</span><span id="line-381"></span>
-<span class="source-line-no">382</span><span id="line-382">    private static record WorkflowInfo(String path, String name, String description, String note) {}</span>
-<span class="source-line-no">383</span><span id="line-383">}</span>
+<span class="source-line-no">283</span><span id="line-283">        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {</span>
+<span class="source-line-no">284</span><span id="line-284">            String line;</span>
+<span class="source-line-no">285</span><span id="line-285">            StringBuilder currentValue = new StringBuilder();</span>
+<span class="source-line-no">286</span><span id="line-286">            String currentField = null;</span>
+<span class="source-line-no">287</span><span id="line-287">            boolean inMultiLine = false;</span>
+<span class="source-line-no">288</span><span id="line-288"></span>
+<span class="source-line-no">289</span><span id="line-289">            while ((line = reader.readLine()) != null) {</span>
+<span class="source-line-no">290</span><span id="line-290">                // Stop at steps or vertices</span>
+<span class="source-line-no">291</span><span id="line-291">                if (line.trim().startsWith("steps:") || line.trim().startsWith("vertices:")) {</span>
+<span class="source-line-no">292</span><span id="line-292">                    break;</span>
+<span class="source-line-no">293</span><span id="line-293">                }</span>
+<span class="source-line-no">294</span><span id="line-294"></span>
+<span class="source-line-no">295</span><span id="line-295">                if (inMultiLine) {</span>
+<span class="source-line-no">296</span><span id="line-296">                    if (line.startsWith("  ") || line.startsWith("\t") || line.trim().isEmpty()) {</span>
+<span class="source-line-no">297</span><span id="line-297">                        if (!line.trim().isEmpty()) {</span>
+<span class="source-line-no">298</span><span id="line-298">                            currentValue.append(line.trim()).append(" ");</span>
+<span class="source-line-no">299</span><span id="line-299">                        }</span>
+<span class="source-line-no">300</span><span id="line-300">                        continue;</span>
+<span class="source-line-no">301</span><span id="line-301">                    } else {</span>
+<span class="source-line-no">302</span><span id="line-302">                        // End of multi-line</span>
+<span class="source-line-no">303</span><span id="line-303">                        String value = currentValue.toString().trim();</span>
+<span class="source-line-no">304</span><span id="line-304">                        if ("name".equals(currentField)) name = value;</span>
+<span class="source-line-no">305</span><span id="line-305">                        else if ("description".equals(currentField)) description = value;</span>
+<span class="source-line-no">306</span><span id="line-306">                        else if ("note".equals(currentField)) note = value;</span>
+<span class="source-line-no">307</span><span id="line-307">                        inMultiLine = false;</span>
+<span class="source-line-no">308</span><span id="line-308">                        currentValue = new StringBuilder();</span>
+<span class="source-line-no">309</span><span id="line-309">                        currentField = null;</span>
+<span class="source-line-no">310</span><span id="line-310">                    }</span>
+<span class="source-line-no">311</span><span id="line-311">                }</span>
+<span class="source-line-no">312</span><span id="line-312"></span>
+<span class="source-line-no">313</span><span id="line-313">                if (line.trim().startsWith("name:") &amp;&amp; name == null) {</span>
+<span class="source-line-no">314</span><span id="line-314">                    String value = line.substring(line.indexOf(':') + 1).trim();</span>
+<span class="source-line-no">315</span><span id="line-315">                    if (value.equals("|") || value.equals("&gt;")) {</span>
+<span class="source-line-no">316</span><span id="line-316">                        inMultiLine = true;</span>
+<span class="source-line-no">317</span><span id="line-317">                        currentField = "name";</span>
+<span class="source-line-no">318</span><span id="line-318">                    } else if (!value.isEmpty()) {</span>
+<span class="source-line-no">319</span><span id="line-319">                        name = stripQuotes(value);</span>
+<span class="source-line-no">320</span><span id="line-320">                    }</span>
+<span class="source-line-no">321</span><span id="line-321">                } else if (line.trim().startsWith("description:") &amp;&amp; description == null) {</span>
+<span class="source-line-no">322</span><span id="line-322">                    String value = line.substring(line.indexOf(':') + 1).trim();</span>
+<span class="source-line-no">323</span><span id="line-323">                    if (value.equals("|") || value.equals("&gt;")) {</span>
+<span class="source-line-no">324</span><span id="line-324">                        inMultiLine = true;</span>
+<span class="source-line-no">325</span><span id="line-325">                        currentField = "description";</span>
+<span class="source-line-no">326</span><span id="line-326">                    } else if (!value.isEmpty()) {</span>
+<span class="source-line-no">327</span><span id="line-327">                        description = stripQuotes(value);</span>
+<span class="source-line-no">328</span><span id="line-328">                    }</span>
+<span class="source-line-no">329</span><span id="line-329">                } else if (line.trim().startsWith("note:") &amp;&amp; note == null) {</span>
+<span class="source-line-no">330</span><span id="line-330">                    String value = line.substring(line.indexOf(':') + 1).trim();</span>
+<span class="source-line-no">331</span><span id="line-331">                    if (value.equals("|") || value.equals("&gt;")) {</span>
+<span class="source-line-no">332</span><span id="line-332">                        inMultiLine = true;</span>
+<span class="source-line-no">333</span><span id="line-333">                        currentField = "note";</span>
+<span class="source-line-no">334</span><span id="line-334">                    } else if (!value.isEmpty()) {</span>
+<span class="source-line-no">335</span><span id="line-335">                        note = stripQuotes(value);</span>
+<span class="source-line-no">336</span><span id="line-336">                    }</span>
+<span class="source-line-no">337</span><span id="line-337">                }</span>
+<span class="source-line-no">338</span><span id="line-338">            }</span>
+<span class="source-line-no">339</span><span id="line-339"></span>
+<span class="source-line-no">340</span><span id="line-340">            // Handle trailing multi-line</span>
+<span class="source-line-no">341</span><span id="line-341">            if (inMultiLine &amp;&amp; currentValue.length() &gt; 0) {</span>
+<span class="source-line-no">342</span><span id="line-342">                String value = currentValue.toString().trim();</span>
+<span class="source-line-no">343</span><span id="line-343">                if ("name".equals(currentField)) name = value;</span>
+<span class="source-line-no">344</span><span id="line-344">                else if ("description".equals(currentField)) description = value;</span>
+<span class="source-line-no">345</span><span id="line-345">                else if ("note".equals(currentField)) note = value;</span>
+<span class="source-line-no">346</span><span id="line-346">            }</span>
+<span class="source-line-no">347</span><span id="line-347">        } catch (IOException e) {</span>
+<span class="source-line-no">348</span><span id="line-348">            // Ignore</span>
+<span class="source-line-no">349</span><span id="line-349">        }</span>
+<span class="source-line-no">350</span><span id="line-350">        return new WorkflowInfo(path, name, description, note);</span>
+<span class="source-line-no">351</span><span id="line-351">    }</span>
+<span class="source-line-no">352</span><span id="line-352"></span>
+<span class="source-line-no">353</span><span id="line-353">    private static String stripQuotes(String value) {</span>
+<span class="source-line-no">354</span><span id="line-354">        if ((value.startsWith("\"") &amp;&amp; value.endsWith("\"")) ||</span>
+<span class="source-line-no">355</span><span id="line-355">            (value.startsWith("'") &amp;&amp; value.endsWith("'"))) {</span>
+<span class="source-line-no">356</span><span id="line-356">            return value.substring(1, value.length() - 1);</span>
+<span class="source-line-no">357</span><span id="line-357">        }</span>
+<span class="source-line-no">358</span><span id="line-358">        return value;</span>
+<span class="source-line-no">359</span><span id="line-359">    }</span>
+<span class="source-line-no">360</span><span id="line-360"></span>
+<span class="source-line-no">361</span><span id="line-361">    private static WorkflowInfo extractWorkflowInfoFromJson(File file, String path) {</span>
+<span class="source-line-no">362</span><span id="line-362">        try (java.io.FileReader reader = new java.io.FileReader(file)) {</span>
+<span class="source-line-no">363</span><span id="line-363">            org.json.JSONTokener tokener = new org.json.JSONTokener(reader);</span>
+<span class="source-line-no">364</span><span id="line-364">            org.json.JSONObject json = new org.json.JSONObject(tokener);</span>
+<span class="source-line-no">365</span><span id="line-365">            return new WorkflowInfo(</span>
+<span class="source-line-no">366</span><span id="line-366">                path,</span>
+<span class="source-line-no">367</span><span id="line-367">                json.optString("name", null),</span>
+<span class="source-line-no">368</span><span id="line-368">                json.optString("description", null),</span>
+<span class="source-line-no">369</span><span id="line-369">                json.optString("note", null)</span>
+<span class="source-line-no">370</span><span id="line-370">            );</span>
+<span class="source-line-no">371</span><span id="line-371">        } catch (Exception e) {</span>
+<span class="source-line-no">372</span><span id="line-372">            // Ignore</span>
+<span class="source-line-no">373</span><span id="line-373">        }</span>
+<span class="source-line-no">374</span><span id="line-374">        return new WorkflowInfo(path, null, null, null);</span>
+<span class="source-line-no">375</span><span id="line-375">    }</span>
+<span class="source-line-no">376</span><span id="line-376"></span>
+<span class="source-line-no">377</span><span id="line-377">    private static record WorkflowInfo(String path, String name, String description, String note) {}</span>
+<span class="source-line-no">378</span><span id="line-378">}</span>
 
 
 
