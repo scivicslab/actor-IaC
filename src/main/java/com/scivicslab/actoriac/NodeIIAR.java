@@ -494,13 +494,30 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         // Create callback that forwards output to multiplexer accumulator
         Node.OutputCallback callback = createOutputCallback(nodeName);
 
-        Node.CommandResult result = this.ask(n -> {
-            try {
-                return n.executeSudoCommand(command, callback);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+        Node.CommandResult result;
+        try {
+            result = this.ask(n -> {
+                try {
+                    return n.executeSudoCommand(command, callback);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+        } catch (ExecutionException e) {
+            // Check if this is a SUDO_PASSWORD error
+            Throwable cause = e.getCause();
+            if (cause != null && cause.getMessage() != null &&
+                cause.getMessage().contains("SUDO_PASSWORD environment variable is not set")) {
+                // Output a % message for WorkflowReporter to capture
+                String hostname = this.object.getHostname();
+                String errorMessage = "%" + hostname + ": [FAIL] SUDO_PASSWORD not set";
+                // Report to multiplexer so it gets logged
+                reportOutputToMultiplexer(nodeName, errorMessage);
+                // Return failure with the error message
+                return new ActionResult(false, errorMessage);
             }
-        }).get();
+            throw e;
+        }
 
         // Report final result to legacy accumulator actor (for backward compatibility)
         reportToAccumulator(result);
@@ -559,6 +576,24 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
             reportArg.put("source", this.getName());
             reportArg.put("type", this.object.getCurrentTransitionYaml());
             reportArg.put("data", combineOutput(result));
+            multiplexer.callByActionName("add", reportArg.toString());
+        }
+    }
+
+    /**
+     * Reports a message to the multiplexer accumulator for logging and WorkflowReporter capture.
+     *
+     * @param nodeName the node name for the source field
+     * @param message the message to report (can include % prefix for WorkflowReporter)
+     */
+    private void reportOutputToMultiplexer(String nodeName, String message) {
+        IIActorSystem sys = (IIActorSystem) this.system();
+        IIActorRef<?> multiplexer = sys.getIIActor("outputMultiplexer");
+        if (multiplexer != null) {
+            JSONObject reportArg = new JSONObject();
+            reportArg.put("source", nodeName);
+            reportArg.put("type", "error");
+            reportArg.put("data", message);
             multiplexer.callByActionName("add", reportArg.toString());
         }
     }

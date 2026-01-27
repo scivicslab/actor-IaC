@@ -507,132 +507,167 @@
 <span class="source-line-no">494</span><span id="line-494">        // Create callback that forwards output to multiplexer accumulator</span>
 <span class="source-line-no">495</span><span id="line-495">        Node.OutputCallback callback = createOutputCallback(nodeName);</span>
 <span class="source-line-no">496</span><span id="line-496"></span>
-<span class="source-line-no">497</span><span id="line-497">        Node.CommandResult result = this.ask(n -&gt; {</span>
-<span class="source-line-no">498</span><span id="line-498">            try {</span>
-<span class="source-line-no">499</span><span id="line-499">                return n.executeSudoCommand(command, callback);</span>
-<span class="source-line-no">500</span><span id="line-500">            } catch (IOException e) {</span>
-<span class="source-line-no">501</span><span id="line-501">                throw new RuntimeException(e);</span>
-<span class="source-line-no">502</span><span id="line-502">            }</span>
-<span class="source-line-no">503</span><span id="line-503">        }).get();</span>
-<span class="source-line-no">504</span><span id="line-504"></span>
-<span class="source-line-no">505</span><span id="line-505">        // Report final result to legacy accumulator actor (for backward compatibility)</span>
-<span class="source-line-no">506</span><span id="line-506">        reportToAccumulator(result);</span>
-<span class="source-line-no">507</span><span id="line-507">        return new ActionResult(result.isSuccess(), combineOutput(result));</span>
-<span class="source-line-no">508</span><span id="line-508">    }</span>
-<span class="source-line-no">509</span><span id="line-509"></span>
-<span class="source-line-no">510</span><span id="line-510">    /**</span>
-<span class="source-line-no">511</span><span id="line-511">     * Creates an OutputCallback that forwards output to the multiplexer accumulator.</span>
-<span class="source-line-no">512</span><span id="line-512">     *</span>
-<span class="source-line-no">513</span><span id="line-513">     * &lt;p&gt;Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer"),</span>
-<span class="source-line-no">514</span><span id="line-514">     * enabling loose coupling between NodeIIAR and MultiplexerAccumulatorIIAR.&lt;/p&gt;</span>
-<span class="source-line-no">515</span><span id="line-515">     *</span>
-<span class="source-line-no">516</span><span id="line-516">     * @param nodeName the name of this node (used as source identifier)</span>
-<span class="source-line-no">517</span><span id="line-517">     * @return the callback, or null if multiplexer actor is not registered</span>
-<span class="source-line-no">518</span><span id="line-518">     */</span>
-<span class="source-line-no">519</span><span id="line-519">    private Node.OutputCallback createOutputCallback(String nodeName) {</span>
-<span class="source-line-no">520</span><span id="line-520">        IIActorSystem sys = (IIActorSystem) this.system();</span>
-<span class="source-line-no">521</span><span id="line-521">        IIActorRef&lt;?&gt; multiplexer = sys.getIIActor("outputMultiplexer");</span>
-<span class="source-line-no">522</span><span id="line-522"></span>
-<span class="source-line-no">523</span><span id="line-523">        if (multiplexer == null) {</span>
-<span class="source-line-no">524</span><span id="line-524">            // No multiplexer registered - return null (Node will not output anything)</span>
-<span class="source-line-no">525</span><span id="line-525">            return null;</span>
-<span class="source-line-no">526</span><span id="line-526">        }</span>
-<span class="source-line-no">527</span><span id="line-527"></span>
-<span class="source-line-no">528</span><span id="line-528">        return new Node.OutputCallback() {</span>
-<span class="source-line-no">529</span><span id="line-529">            @Override</span>
-<span class="source-line-no">530</span><span id="line-530">            public void onStdout(String line) {</span>
-<span class="source-line-no">531</span><span id="line-531">                JSONObject arg = new JSONObject();</span>
-<span class="source-line-no">532</span><span id="line-532">                arg.put("source", nodeName);</span>
-<span class="source-line-no">533</span><span id="line-533">                arg.put("type", "stdout");</span>
-<span class="source-line-no">534</span><span id="line-534">                arg.put("data", line);</span>
-<span class="source-line-no">535</span><span id="line-535">                multiplexer.callByActionName("add", arg.toString());</span>
-<span class="source-line-no">536</span><span id="line-536">            }</span>
-<span class="source-line-no">537</span><span id="line-537"></span>
-<span class="source-line-no">538</span><span id="line-538">            @Override</span>
-<span class="source-line-no">539</span><span id="line-539">            public void onStderr(String line) {</span>
-<span class="source-line-no">540</span><span id="line-540">                JSONObject arg = new JSONObject();</span>
-<span class="source-line-no">541</span><span id="line-541">                arg.put("source", nodeName);</span>
-<span class="source-line-no">542</span><span id="line-542">                arg.put("type", "stderr");</span>
-<span class="source-line-no">543</span><span id="line-543">                arg.put("data", line);</span>
-<span class="source-line-no">544</span><span id="line-544">                multiplexer.callByActionName("add", arg.toString());</span>
-<span class="source-line-no">545</span><span id="line-545">            }</span>
-<span class="source-line-no">546</span><span id="line-546">        };</span>
-<span class="source-line-no">547</span><span id="line-547">    }</span>
-<span class="source-line-no">548</span><span id="line-548"></span>
-<span class="source-line-no">549</span><span id="line-549">    /**</span>
-<span class="source-line-no">550</span><span id="line-550">     * Reports command result to the multiplexer accumulator actor if available.</span>
-<span class="source-line-no">551</span><span id="line-551">     *</span>
-<span class="source-line-no">552</span><span id="line-552">     * &lt;p&gt;Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer").&lt;/p&gt;</span>
-<span class="source-line-no">553</span><span id="line-553">     */</span>
-<span class="source-line-no">554</span><span id="line-554">    private void reportToAccumulator(Node.CommandResult result) {</span>
-<span class="source-line-no">555</span><span id="line-555">        IIActorSystem sys = (IIActorSystem) this.system();</span>
-<span class="source-line-no">556</span><span id="line-556">        IIActorRef&lt;?&gt; multiplexer = sys.getIIActor("outputMultiplexer");</span>
-<span class="source-line-no">557</span><span id="line-557">        if (multiplexer != null) {</span>
-<span class="source-line-no">558</span><span id="line-558">            JSONObject reportArg = new JSONObject();</span>
-<span class="source-line-no">559</span><span id="line-559">            reportArg.put("source", this.getName());</span>
-<span class="source-line-no">560</span><span id="line-560">            reportArg.put("type", this.object.getCurrentTransitionYaml());</span>
-<span class="source-line-no">561</span><span id="line-561">            reportArg.put("data", combineOutput(result));</span>
-<span class="source-line-no">562</span><span id="line-562">            multiplexer.callByActionName("add", reportArg.toString());</span>
-<span class="source-line-no">563</span><span id="line-563">        }</span>
+<span class="source-line-no">497</span><span id="line-497">        Node.CommandResult result;</span>
+<span class="source-line-no">498</span><span id="line-498">        try {</span>
+<span class="source-line-no">499</span><span id="line-499">            result = this.ask(n -&gt; {</span>
+<span class="source-line-no">500</span><span id="line-500">                try {</span>
+<span class="source-line-no">501</span><span id="line-501">                    return n.executeSudoCommand(command, callback);</span>
+<span class="source-line-no">502</span><span id="line-502">                } catch (IOException e) {</span>
+<span class="source-line-no">503</span><span id="line-503">                    throw new RuntimeException(e);</span>
+<span class="source-line-no">504</span><span id="line-504">                }</span>
+<span class="source-line-no">505</span><span id="line-505">            }).get();</span>
+<span class="source-line-no">506</span><span id="line-506">        } catch (ExecutionException e) {</span>
+<span class="source-line-no">507</span><span id="line-507">            // Check if this is a SUDO_PASSWORD error</span>
+<span class="source-line-no">508</span><span id="line-508">            Throwable cause = e.getCause();</span>
+<span class="source-line-no">509</span><span id="line-509">            if (cause != null &amp;&amp; cause.getMessage() != null &amp;&amp;</span>
+<span class="source-line-no">510</span><span id="line-510">                cause.getMessage().contains("SUDO_PASSWORD environment variable is not set")) {</span>
+<span class="source-line-no">511</span><span id="line-511">                // Output a % message for WorkflowReporter to capture</span>
+<span class="source-line-no">512</span><span id="line-512">                String hostname = this.object.getHostname();</span>
+<span class="source-line-no">513</span><span id="line-513">                String errorMessage = "%" + hostname + ": [FAIL] SUDO_PASSWORD not set";</span>
+<span class="source-line-no">514</span><span id="line-514">                // Report to multiplexer so it gets logged</span>
+<span class="source-line-no">515</span><span id="line-515">                reportOutputToMultiplexer(nodeName, errorMessage);</span>
+<span class="source-line-no">516</span><span id="line-516">                // Return failure with the error message</span>
+<span class="source-line-no">517</span><span id="line-517">                return new ActionResult(false, errorMessage);</span>
+<span class="source-line-no">518</span><span id="line-518">            }</span>
+<span class="source-line-no">519</span><span id="line-519">            throw e;</span>
+<span class="source-line-no">520</span><span id="line-520">        }</span>
+<span class="source-line-no">521</span><span id="line-521"></span>
+<span class="source-line-no">522</span><span id="line-522">        // Report final result to legacy accumulator actor (for backward compatibility)</span>
+<span class="source-line-no">523</span><span id="line-523">        reportToAccumulator(result);</span>
+<span class="source-line-no">524</span><span id="line-524">        return new ActionResult(result.isSuccess(), combineOutput(result));</span>
+<span class="source-line-no">525</span><span id="line-525">    }</span>
+<span class="source-line-no">526</span><span id="line-526"></span>
+<span class="source-line-no">527</span><span id="line-527">    /**</span>
+<span class="source-line-no">528</span><span id="line-528">     * Creates an OutputCallback that forwards output to the multiplexer accumulator.</span>
+<span class="source-line-no">529</span><span id="line-529">     *</span>
+<span class="source-line-no">530</span><span id="line-530">     * &lt;p&gt;Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer"),</span>
+<span class="source-line-no">531</span><span id="line-531">     * enabling loose coupling between NodeIIAR and MultiplexerAccumulatorIIAR.&lt;/p&gt;</span>
+<span class="source-line-no">532</span><span id="line-532">     *</span>
+<span class="source-line-no">533</span><span id="line-533">     * @param nodeName the name of this node (used as source identifier)</span>
+<span class="source-line-no">534</span><span id="line-534">     * @return the callback, or null if multiplexer actor is not registered</span>
+<span class="source-line-no">535</span><span id="line-535">     */</span>
+<span class="source-line-no">536</span><span id="line-536">    private Node.OutputCallback createOutputCallback(String nodeName) {</span>
+<span class="source-line-no">537</span><span id="line-537">        IIActorSystem sys = (IIActorSystem) this.system();</span>
+<span class="source-line-no">538</span><span id="line-538">        IIActorRef&lt;?&gt; multiplexer = sys.getIIActor("outputMultiplexer");</span>
+<span class="source-line-no">539</span><span id="line-539"></span>
+<span class="source-line-no">540</span><span id="line-540">        if (multiplexer == null) {</span>
+<span class="source-line-no">541</span><span id="line-541">            // No multiplexer registered - return null (Node will not output anything)</span>
+<span class="source-line-no">542</span><span id="line-542">            return null;</span>
+<span class="source-line-no">543</span><span id="line-543">        }</span>
+<span class="source-line-no">544</span><span id="line-544"></span>
+<span class="source-line-no">545</span><span id="line-545">        return new Node.OutputCallback() {</span>
+<span class="source-line-no">546</span><span id="line-546">            @Override</span>
+<span class="source-line-no">547</span><span id="line-547">            public void onStdout(String line) {</span>
+<span class="source-line-no">548</span><span id="line-548">                JSONObject arg = new JSONObject();</span>
+<span class="source-line-no">549</span><span id="line-549">                arg.put("source", nodeName);</span>
+<span class="source-line-no">550</span><span id="line-550">                arg.put("type", "stdout");</span>
+<span class="source-line-no">551</span><span id="line-551">                arg.put("data", line);</span>
+<span class="source-line-no">552</span><span id="line-552">                multiplexer.callByActionName("add", arg.toString());</span>
+<span class="source-line-no">553</span><span id="line-553">            }</span>
+<span class="source-line-no">554</span><span id="line-554"></span>
+<span class="source-line-no">555</span><span id="line-555">            @Override</span>
+<span class="source-line-no">556</span><span id="line-556">            public void onStderr(String line) {</span>
+<span class="source-line-no">557</span><span id="line-557">                JSONObject arg = new JSONObject();</span>
+<span class="source-line-no">558</span><span id="line-558">                arg.put("source", nodeName);</span>
+<span class="source-line-no">559</span><span id="line-559">                arg.put("type", "stderr");</span>
+<span class="source-line-no">560</span><span id="line-560">                arg.put("data", line);</span>
+<span class="source-line-no">561</span><span id="line-561">                multiplexer.callByActionName("add", arg.toString());</span>
+<span class="source-line-no">562</span><span id="line-562">            }</span>
+<span class="source-line-no">563</span><span id="line-563">        };</span>
 <span class="source-line-no">564</span><span id="line-564">    }</span>
 <span class="source-line-no">565</span><span id="line-565"></span>
 <span class="source-line-no">566</span><span id="line-566">    /**</span>
-<span class="source-line-no">567</span><span id="line-567">     * Combines stdout and stderr into a single output string.</span>
-<span class="source-line-no">568</span><span id="line-568">     */</span>
-<span class="source-line-no">569</span><span id="line-569">    private String combineOutput(Node.CommandResult result) {</span>
-<span class="source-line-no">570</span><span id="line-570">        String output = result.getStdout().trim();</span>
-<span class="source-line-no">571</span><span id="line-571">        String stderr = result.getStderr().trim();</span>
-<span class="source-line-no">572</span><span id="line-572">        if (!stderr.isEmpty()) {</span>
-<span class="source-line-no">573</span><span id="line-573">            output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;</span>
-<span class="source-line-no">574</span><span id="line-574">        }</span>
-<span class="source-line-no">575</span><span id="line-575">        return output;</span>
-<span class="source-line-no">576</span><span id="line-576">    }</span>
-<span class="source-line-no">577</span><span id="line-577"></span>
-<span class="source-line-no">578</span><span id="line-578">    /**</span>
-<span class="source-line-no">579</span><span id="line-579">     * Extracts a meaningful error message from an ExecutionException.</span>
-<span class="source-line-no">580</span><span id="line-580">     *</span>
-<span class="source-line-no">581</span><span id="line-581">     * &lt;p&gt;Prioritizes IOException messages (which contain our detailed SSH error messages)</span>
-<span class="source-line-no">582</span><span id="line-582">     * over the raw library exception messages.&lt;/p&gt;</span>
-<span class="source-line-no">583</span><span id="line-583">     */</span>
-<span class="source-line-no">584</span><span id="line-584">    private String extractRootCauseMessage(ExecutionException e) {</span>
-<span class="source-line-no">585</span><span id="line-585">        Throwable cause = e.getCause();</span>
-<span class="source-line-no">586</span><span id="line-586"></span>
-<span class="source-line-no">587</span><span id="line-587">        // Look for IOException first - it contains our detailed error messages</span>
-<span class="source-line-no">588</span><span id="line-588">        Throwable current = cause;</span>
-<span class="source-line-no">589</span><span id="line-589">        while (current != null) {</span>
-<span class="source-line-no">590</span><span id="line-590">            if (current instanceof java.io.IOException) {</span>
-<span class="source-line-no">591</span><span id="line-591">                return current.getMessage();</span>
-<span class="source-line-no">592</span><span id="line-592">            }</span>
-<span class="source-line-no">593</span><span id="line-593">            current = current.getCause();</span>
-<span class="source-line-no">594</span><span id="line-594">        }</span>
-<span class="source-line-no">595</span><span id="line-595"></span>
-<span class="source-line-no">596</span><span id="line-596">        // Fall back to the immediate cause message</span>
-<span class="source-line-no">597</span><span id="line-597">        return cause != null ? cause.getMessage() : e.getMessage();</span>
-<span class="source-line-no">598</span><span id="line-598">    }</span>
-<span class="source-line-no">599</span><span id="line-599"></span>
-<span class="source-line-no">600</span><span id="line-600">    /**</span>
-<span class="source-line-no">601</span><span id="line-601">     * Extracts a command string from JSON array arguments.</span>
-<span class="source-line-no">602</span><span id="line-602">     *</span>
-<span class="source-line-no">603</span><span id="line-603">     * &lt;p&gt;Expects arguments in the format: {@code ["command string"]}&lt;/p&gt;</span>
-<span class="source-line-no">604</span><span id="line-604">     *</span>
-<span class="source-line-no">605</span><span id="line-605">     * @param arg the JSON array argument string</span>
-<span class="source-line-no">606</span><span id="line-606">     * @return the extracted command string</span>
-<span class="source-line-no">607</span><span id="line-607">     * @throws IllegalArgumentException if the argument format is invalid</span>
-<span class="source-line-no">608</span><span id="line-608">     */</span>
-<span class="source-line-no">609</span><span id="line-609">    private String extractCommandFromArgs(String arg) {</span>
-<span class="source-line-no">610</span><span id="line-610">        try {</span>
-<span class="source-line-no">611</span><span id="line-611">            JSONArray jsonArray = new JSONArray(arg);</span>
-<span class="source-line-no">612</span><span id="line-612">            if (jsonArray.length() == 0) {</span>
-<span class="source-line-no">613</span><span id="line-613">                throw new IllegalArgumentException("Command arguments cannot be empty");</span>
-<span class="source-line-no">614</span><span id="line-614">            }</span>
-<span class="source-line-no">615</span><span id="line-615">            return jsonArray.getString(0);</span>
-<span class="source-line-no">616</span><span id="line-616">        } catch (Exception e) {</span>
-<span class="source-line-no">617</span><span id="line-617">            throw new IllegalArgumentException(</span>
-<span class="source-line-no">618</span><span id="line-618">                "Invalid command argument format. Expected JSON array with command string: " + arg, e);</span>
-<span class="source-line-no">619</span><span id="line-619">        }</span>
-<span class="source-line-no">620</span><span id="line-620">    }</span>
+<span class="source-line-no">567</span><span id="line-567">     * Reports command result to the multiplexer accumulator actor if available.</span>
+<span class="source-line-no">568</span><span id="line-568">     *</span>
+<span class="source-line-no">569</span><span id="line-569">     * &lt;p&gt;Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer").&lt;/p&gt;</span>
+<span class="source-line-no">570</span><span id="line-570">     */</span>
+<span class="source-line-no">571</span><span id="line-571">    private void reportToAccumulator(Node.CommandResult result) {</span>
+<span class="source-line-no">572</span><span id="line-572">        IIActorSystem sys = (IIActorSystem) this.system();</span>
+<span class="source-line-no">573</span><span id="line-573">        IIActorRef&lt;?&gt; multiplexer = sys.getIIActor("outputMultiplexer");</span>
+<span class="source-line-no">574</span><span id="line-574">        if (multiplexer != null) {</span>
+<span class="source-line-no">575</span><span id="line-575">            JSONObject reportArg = new JSONObject();</span>
+<span class="source-line-no">576</span><span id="line-576">            reportArg.put("source", this.getName());</span>
+<span class="source-line-no">577</span><span id="line-577">            reportArg.put("type", this.object.getCurrentTransitionYaml());</span>
+<span class="source-line-no">578</span><span id="line-578">            reportArg.put("data", combineOutput(result));</span>
+<span class="source-line-no">579</span><span id="line-579">            multiplexer.callByActionName("add", reportArg.toString());</span>
+<span class="source-line-no">580</span><span id="line-580">        }</span>
+<span class="source-line-no">581</span><span id="line-581">    }</span>
+<span class="source-line-no">582</span><span id="line-582"></span>
+<span class="source-line-no">583</span><span id="line-583">    /**</span>
+<span class="source-line-no">584</span><span id="line-584">     * Reports a message to the multiplexer accumulator for logging and WorkflowReporter capture.</span>
+<span class="source-line-no">585</span><span id="line-585">     *</span>
+<span class="source-line-no">586</span><span id="line-586">     * @param nodeName the node name for the source field</span>
+<span class="source-line-no">587</span><span id="line-587">     * @param message the message to report (can include % prefix for WorkflowReporter)</span>
+<span class="source-line-no">588</span><span id="line-588">     */</span>
+<span class="source-line-no">589</span><span id="line-589">    private void reportOutputToMultiplexer(String nodeName, String message) {</span>
+<span class="source-line-no">590</span><span id="line-590">        IIActorSystem sys = (IIActorSystem) this.system();</span>
+<span class="source-line-no">591</span><span id="line-591">        IIActorRef&lt;?&gt; multiplexer = sys.getIIActor("outputMultiplexer");</span>
+<span class="source-line-no">592</span><span id="line-592">        if (multiplexer != null) {</span>
+<span class="source-line-no">593</span><span id="line-593">            JSONObject reportArg = new JSONObject();</span>
+<span class="source-line-no">594</span><span id="line-594">            reportArg.put("source", nodeName);</span>
+<span class="source-line-no">595</span><span id="line-595">            reportArg.put("type", "error");</span>
+<span class="source-line-no">596</span><span id="line-596">            reportArg.put("data", message);</span>
+<span class="source-line-no">597</span><span id="line-597">            multiplexer.callByActionName("add", reportArg.toString());</span>
+<span class="source-line-no">598</span><span id="line-598">        }</span>
+<span class="source-line-no">599</span><span id="line-599">    }</span>
+<span class="source-line-no">600</span><span id="line-600"></span>
+<span class="source-line-no">601</span><span id="line-601">    /**</span>
+<span class="source-line-no">602</span><span id="line-602">     * Combines stdout and stderr into a single output string.</span>
+<span class="source-line-no">603</span><span id="line-603">     */</span>
+<span class="source-line-no">604</span><span id="line-604">    private String combineOutput(Node.CommandResult result) {</span>
+<span class="source-line-no">605</span><span id="line-605">        String output = result.getStdout().trim();</span>
+<span class="source-line-no">606</span><span id="line-606">        String stderr = result.getStderr().trim();</span>
+<span class="source-line-no">607</span><span id="line-607">        if (!stderr.isEmpty()) {</span>
+<span class="source-line-no">608</span><span id="line-608">            output = output.isEmpty() ? stderr : output + "\n[stderr]\n" + stderr;</span>
+<span class="source-line-no">609</span><span id="line-609">        }</span>
+<span class="source-line-no">610</span><span id="line-610">        return output;</span>
+<span class="source-line-no">611</span><span id="line-611">    }</span>
+<span class="source-line-no">612</span><span id="line-612"></span>
+<span class="source-line-no">613</span><span id="line-613">    /**</span>
+<span class="source-line-no">614</span><span id="line-614">     * Extracts a meaningful error message from an ExecutionException.</span>
+<span class="source-line-no">615</span><span id="line-615">     *</span>
+<span class="source-line-no">616</span><span id="line-616">     * &lt;p&gt;Prioritizes IOException messages (which contain our detailed SSH error messages)</span>
+<span class="source-line-no">617</span><span id="line-617">     * over the raw library exception messages.&lt;/p&gt;</span>
+<span class="source-line-no">618</span><span id="line-618">     */</span>
+<span class="source-line-no">619</span><span id="line-619">    private String extractRootCauseMessage(ExecutionException e) {</span>
+<span class="source-line-no">620</span><span id="line-620">        Throwable cause = e.getCause();</span>
 <span class="source-line-no">621</span><span id="line-621"></span>
-<span class="source-line-no">622</span><span id="line-622">}</span>
+<span class="source-line-no">622</span><span id="line-622">        // Look for IOException first - it contains our detailed error messages</span>
+<span class="source-line-no">623</span><span id="line-623">        Throwable current = cause;</span>
+<span class="source-line-no">624</span><span id="line-624">        while (current != null) {</span>
+<span class="source-line-no">625</span><span id="line-625">            if (current instanceof java.io.IOException) {</span>
+<span class="source-line-no">626</span><span id="line-626">                return current.getMessage();</span>
+<span class="source-line-no">627</span><span id="line-627">            }</span>
+<span class="source-line-no">628</span><span id="line-628">            current = current.getCause();</span>
+<span class="source-line-no">629</span><span id="line-629">        }</span>
+<span class="source-line-no">630</span><span id="line-630"></span>
+<span class="source-line-no">631</span><span id="line-631">        // Fall back to the immediate cause message</span>
+<span class="source-line-no">632</span><span id="line-632">        return cause != null ? cause.getMessage() : e.getMessage();</span>
+<span class="source-line-no">633</span><span id="line-633">    }</span>
+<span class="source-line-no">634</span><span id="line-634"></span>
+<span class="source-line-no">635</span><span id="line-635">    /**</span>
+<span class="source-line-no">636</span><span id="line-636">     * Extracts a command string from JSON array arguments.</span>
+<span class="source-line-no">637</span><span id="line-637">     *</span>
+<span class="source-line-no">638</span><span id="line-638">     * &lt;p&gt;Expects arguments in the format: {@code ["command string"]}&lt;/p&gt;</span>
+<span class="source-line-no">639</span><span id="line-639">     *</span>
+<span class="source-line-no">640</span><span id="line-640">     * @param arg the JSON array argument string</span>
+<span class="source-line-no">641</span><span id="line-641">     * @return the extracted command string</span>
+<span class="source-line-no">642</span><span id="line-642">     * @throws IllegalArgumentException if the argument format is invalid</span>
+<span class="source-line-no">643</span><span id="line-643">     */</span>
+<span class="source-line-no">644</span><span id="line-644">    private String extractCommandFromArgs(String arg) {</span>
+<span class="source-line-no">645</span><span id="line-645">        try {</span>
+<span class="source-line-no">646</span><span id="line-646">            JSONArray jsonArray = new JSONArray(arg);</span>
+<span class="source-line-no">647</span><span id="line-647">            if (jsonArray.length() == 0) {</span>
+<span class="source-line-no">648</span><span id="line-648">                throw new IllegalArgumentException("Command arguments cannot be empty");</span>
+<span class="source-line-no">649</span><span id="line-649">            }</span>
+<span class="source-line-no">650</span><span id="line-650">            return jsonArray.getString(0);</span>
+<span class="source-line-no">651</span><span id="line-651">        } catch (Exception e) {</span>
+<span class="source-line-no">652</span><span id="line-652">            throw new IllegalArgumentException(</span>
+<span class="source-line-no">653</span><span id="line-653">                "Invalid command argument format. Expected JSON array with command string: " + arg, e);</span>
+<span class="source-line-no">654</span><span id="line-654">        }</span>
+<span class="source-line-no">655</span><span id="line-655">    }</span>
+<span class="source-line-no">656</span><span id="line-656"></span>
+<span class="source-line-no">657</span><span id="line-657">}</span>
 
 
 
