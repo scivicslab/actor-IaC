@@ -399,9 +399,10 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
                 }
             }
         }
-        // Sort messages by hostname (messages are in format "hostname: [status] message")
-        messages.sort(null);
-        return messages;
+        // Remove duplicates while preserving order, then sort by hostname
+        List<String> uniqueMessages = new ArrayList<>(new java.util.LinkedHashSet<>(messages));
+        uniqueMessages.sort(null);
+        return uniqueMessages;
     }
 
     /**
