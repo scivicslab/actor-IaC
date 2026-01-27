@@ -399,6 +399,8 @@ public class WorkflowReporter implements CallableByActionName, ActorSystemAware 
                 }
             }
         }
+        // Sort messages by hostname (messages are in format "hostname: [status] message")
+        messages.sort(null);
         return messages;
     }
 
