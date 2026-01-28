@@ -61,7 +61,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "actor-iac",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC 2.12.1",
+    versionProvider = VersionProvider.class,
     description = "Infrastructure as Code workflow automation tool.",
     subcommands = {
         RunCLI.class,
@@ -128,7 +128,7 @@ public class WorkflowCLI implements Callable<Integer> {
 @Command(
     name = "list",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC list 2.12.1",
+    versionProvider = VersionProvider.class,
     description = "List workflows in the specified directory."
 )
 class ListWorkflowsCLI implements Callable<Integer> {

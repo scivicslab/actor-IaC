@@ -48,7 +48,7 @@ import picocli.CommandLine.Option;
 @Command(
     name = "db-clear",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC db-clear 2.12.0",
+    versionProvider = VersionProvider.class,
     description = "Clear (delete) the H2 log database files."
 )
 public class DbClearCLI implements Callable<Integer> {
