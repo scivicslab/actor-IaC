@@ -29,10 +29,12 @@ import java.util.logging.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.github.lalyos.jfiglet.FigletFont;
+import com.scivicslab.pojoactor.core.Action;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
+
+import static com.scivicslab.pojoactor.core.ActionArgs.getFirst;
 
 /**
  * Interpreter-interfaced actor reference for {@link NodeInterpreter} instances.
@@ -58,24 +60,6 @@ import com.scivicslab.pojoactor.workflow.IIActorSystem;
  *   <li>{@code executeSudoCommand} - Executes sudo command and reports to accumulator (default)</li>
  *   <li>{@code executeSudoCommandQuiet} - Executes sudo command without reporting</li>
  * </ul>
- *
- * <p><strong>Example YAML Workflow:</strong></p>
- * <pre>{@code
- * name: deploy-application
- * steps:
- *   - states: ["0", "1"]
- *     actions:
- *       - actor: this
- *         method: executeCommand
- *         arguments:
- *           - "apt-get update"
- *   - states: ["1", "end"]
- *     actions:
- *       - actor: this
- *         method: executeCommand
- *         arguments:
- *           - "ls -la"
- * }</pre>
  *
  * @author devteam@scivicslab.com
  */
@@ -110,244 +94,22 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         object.setSelfActorRef(this);
     }
 
-    /**
-     * Invokes an action on the node by name with the given arguments.
-     *
-     * <p>This method dispatches to specialized handler methods based on the action type:</p>
-     * <ul>
-     *   <li>Workflow actions: {@link #handleWorkflowAction}</li>
-     *   <li>Command execution actions: {@link #handleCommandAction}</li>
-     *   <li>Utility actions: {@link #handleUtilityAction}</li>
-     * </ul>
-     *
-     * @param actionName the name of the action to execute
-     * @param arg the argument string (file path for read operations, JSON array for commands)
-     * @return an {@link ActionResult} indicating success or failure with a message
-     */
-    @Override
-    public ActionResult callByActionName(String actionName, String arg) {
-        logger.fine(String.format("actionName = %s, args = %s", actionName, arg));
+    // ========================================================================
+    // Workflow Actions
+    // ========================================================================
 
+    @Action("execCode")
+    public ActionResult execCode(String args) {
         try {
-            // Workflow execution actions (from Interpreter)
-            ActionResult workflowResult = handleWorkflowAction(actionName, arg);
-            if (workflowResult != null) {
-                return workflowResult;
-            }
-
-            // Node-specific actions (SSH command execution)
-            ActionResult commandResult = handleCommandAction(actionName, arg);
-            if (commandResult != null) {
-                return commandResult;
-            }
-
-            // Utility actions
-            ActionResult utilityResult = handleUtilityAction(actionName, arg);
-            if (utilityResult != null) {
-                return utilityResult;
-            }
-
-            // Document workflow actions
-            ActionResult documentResult = handleDocumentAction(actionName, arg);
-            if (documentResult != null) {
-                return documentResult;
-            }
-
-            // Try parent class (IIActorRef) for JSON State API actions (putJson, getJson, etc.)
-            ActionResult parentResult = super.callByActionName(actionName, arg);
-            if (parentResult.isSuccess() || !parentResult.getResult().startsWith("Unknown action:")) {
-                return parentResult;
-            }
-
-            // Unknown action
-            logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
-                    this.getName(), actionName, arg));
-            return new ActionResult(false, "Unknown action: " + actionName);
-
-        } catch (InterruptedException e) {
-            String message = "Interrupted: " + e.getMessage();
-            logger.warning(String.format("%s: %s", this.getName(), message));
-            return new ActionResult(false, message);
-        } catch (ExecutionException e) {
-            String message = extractRootCauseMessage(e);
-            logger.warning(String.format("%s: %s", this.getName(), message));
-            return new ActionResult(false, message);
+            return this.ask(n -> n.execCode()).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
         }
     }
 
-    /**
-     * Handles workflow-related actions (from Interpreter).
-     *
-     * @param actionName the action name
-     * @param arg the argument string
-     * @return ActionResult if handled, null if not a workflow action
-     */
-    private ActionResult handleWorkflowAction(String actionName, String arg)
-            throws InterruptedException, ExecutionException {
-
-        switch (actionName) {
-            case "execCode":
-                return this.ask(n -> n.execCode()).get();
-
-            case "readYaml":
-                return handleReadYaml(arg);
-
-            case "readJson":
-                return handleReadJson(arg);
-
-            case "readXml":
-                return handleReadXml(arg);
-
-            case "reset":
-                this.tell(n -> n.reset()).get();
-                return new ActionResult(true, "Interpreter reset successfully");
-
-            case "runUntilEnd":
-                int maxIterations = parseMaxIterations(arg, 10000);
-                return this.ask(n -> n.runUntilEnd(maxIterations)).get();
-
-            case "call":
-                JSONArray callArgs = new JSONArray(arg);
-                String callWorkflowFile = callArgs.getString(0);
-                return this.ask(n -> n.call(callWorkflowFile)).get();
-
-            case "runWorkflow":
-                JSONArray runArgs = new JSONArray(arg);
-                String runWorkflowFile = runArgs.getString(0);
-                int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
-                logger.fine(String.format("Running workflow: %s (maxIterations=%d)", runWorkflowFile, runMaxIterations));
-                ActionResult result = this.object.runWorkflow(runWorkflowFile, runMaxIterations);
-                logger.fine(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
-                return result;
-
-            case "apply":
-                return this.ask(n -> n.apply(arg)).get();
-
-            default:
-                return null; // Not a workflow action
-        }
-    }
-
-    /**
-     * Handles SSH command execution actions.
-     *
-     * @param actionName the action name
-     * @param arg the argument string
-     * @return ActionResult if handled, null if not a command action
-     */
-    private ActionResult handleCommandAction(String actionName, String arg)
-            throws InterruptedException, ExecutionException {
-
-        switch (actionName) {
-            case "executeCommandQuiet":
-                return executeCommandQuiet(arg);
-
-            case "executeSudoCommandQuiet":
-                return executeSudoCommandQuiet(arg);
-
-            case "executeCommand":
-                return executeCommandWithReport(arg);
-
-            case "executeSudoCommand":
-                return executeSudoCommandWithReport(arg);
-
-            default:
-                return null; // Not a command action
-        }
-    }
-
-    /**
-     * Handles utility actions (sleep, print, doNothing).
-     *
-     * @param actionName the action name
-     * @param arg the argument string
-     * @return ActionResult if handled, null if not a utility action
-     */
-    private ActionResult handleUtilityAction(String actionName, String arg) {
-        switch (actionName) {
-            case "sleep":
-                try {
-                    long millis = Long.parseLong(arg);
-                    Thread.sleep(millis);
-                    return new ActionResult(true, "Slept for " + millis + "ms");
-                } catch (NumberFormatException e) {
-                    logger.log(Level.SEVERE, String.format("Invalid sleep duration: %s", arg), e);
-                    return new ActionResult(false, "Invalid sleep duration: " + arg);
-                } catch (InterruptedException e) {
-                    return new ActionResult(false, "Sleep interrupted: " + e.getMessage());
-                }
-
-            case "print":
-                System.out.println(arg);
-                return new ActionResult(true, "Printed: " + arg);
-
-            case "doNothing":
-                return new ActionResult(true, arg);
-
-            default:
-                return null; // Not a utility action
-        }
-    }
-
-    /**
-     * Handles document workflow actions (detect, clone, build, deploy).
-     *
-     * @param actionName the action name
-     * @param arg the argument string
-     * @return ActionResult if handled, null if not a document action
-     */
-    private ActionResult handleDocumentAction(String actionName, String arg)
-            throws InterruptedException, ExecutionException {
-
-        switch (actionName) {
-            case "detectDocumentChanges":
-                return this.ask(n -> {
-                    try {
-                        String docListPath = extractCommandFromArgs(arg);
-                        return n.detectDocumentChanges(docListPath);
-                    } catch (IOException e) {
-                        return new ActionResult(false, "Error detecting changes: " + e.getMessage());
-                    }
-                }).get();
-
-            case "cloneChangedDocuments":
-                return this.ask(n -> {
-                    try {
-                        String docListPath = extractCommandFromArgs(arg);
-                        return n.cloneChangedDocuments(docListPath);
-                    } catch (IOException e) {
-                        return new ActionResult(false, "Error cloning documents: " + e.getMessage());
-                    }
-                }).get();
-
-            case "buildChangedDocuments":
-                return this.ask(n -> {
-                    try {
-                        String docListPath = extractCommandFromArgs(arg);
-                        return n.buildChangedDocuments(docListPath);
-                    } catch (IOException e) {
-                        return new ActionResult(false, "Error building documents: " + e.getMessage());
-                    }
-                }).get();
-
-            case "deployChangedDocuments":
-                return this.ask(n -> {
-                    try {
-                        String docListPath = extractCommandFromArgs(arg);
-                        return n.deployChangedDocuments(docListPath);
-                    } catch (IOException e) {
-                        return new ActionResult(false, "Error deploying documents: " + e.getMessage());
-                    }
-                }).get();
-
-            default:
-                return null; // Not a document action
-        }
-    }
-
-    // --- Helper methods for workflow actions ---
-
-    private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {
+    @Action("readYaml")
+    public ActionResult readYaml(String args) {
+        String arg = getFirst(args);
         try {
             String overlayPath = this.object.getOverlayDir();
             if (overlayPath != null) {
@@ -373,6 +135,8 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         } catch (IOException e) {
             logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
             return new ActionResult(false, "IO error: " + arg);
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
         } catch (RuntimeException e) {
             if (e.getCause() instanceof IOException) {
                 logger.log(Level.SEVERE, String.format("IOException: %s", arg), e.getCause());
@@ -382,7 +146,9 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         }
     }
 
-    private ActionResult handleReadJson(String arg) throws InterruptedException, ExecutionException {
+    @Action("readJson")
+    public ActionResult readJson(String args) {
+        String arg = getFirst(args);
         try (InputStream input = new FileInputStream(new File(arg))) {
             this.tell(n -> {
                 try {
@@ -398,10 +164,14 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         } catch (IOException e) {
             logger.log(Level.SEVERE, String.format("IOException: %s", arg), e);
             return new ActionResult(false, "IO error: " + arg);
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
         }
     }
 
-    private ActionResult handleReadXml(String arg) throws InterruptedException, ExecutionException {
+    @Action("readXml")
+    public ActionResult readXml(String args) {
+        String arg = getFirst(args);
         try (InputStream input = new FileInputStream(new File(arg))) {
             this.tell(n -> {
                 try {
@@ -420,6 +190,290 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         }
     }
 
+    @Action("reset")
+    public ActionResult reset(String args) {
+        try {
+            this.tell(n -> n.reset()).get();
+            return new ActionResult(true, "Interpreter reset successfully");
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("runUntilEnd")
+    public ActionResult runUntilEnd(String args) {
+        try {
+            int maxIterations = parseMaxIterations(args, 10000);
+            return this.ask(n -> n.runUntilEnd(maxIterations)).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("call")
+    public ActionResult call(String args) {
+        try {
+            JSONArray callArgs = new JSONArray(args);
+            String callWorkflowFile = callArgs.getString(0);
+            return this.ask(n -> n.call(callWorkflowFile)).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("runWorkflow")
+    public ActionResult runWorkflow(String args) {
+        try {
+            JSONArray runArgs = new JSONArray(args);
+            String runWorkflowFile = runArgs.getString(0);
+            int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
+            logger.fine(String.format("Running workflow: %s (maxIterations=%d)", runWorkflowFile, runMaxIterations));
+            ActionResult result = this.object.runWorkflow(runWorkflowFile, runMaxIterations);
+            logger.fine(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
+            return result;
+        } catch (Exception e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("apply")
+    public ActionResult apply(String args) {
+        try {
+            return this.ask(n -> n.apply(args)).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    // ========================================================================
+    // Command Execution Actions
+    // ========================================================================
+
+    @Action("executeCommand")
+    public ActionResult executeCommand(String args) {
+        try {
+            String command = extractCommandFromArgs(args);
+            String nodeName = this.getName();
+
+            Node.OutputCallback callback = createOutputCallback(nodeName);
+
+            Node.CommandResult result = this.ask(n -> {
+                try {
+                    return n.executeCommand(command, callback);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+
+            reportToAccumulator(result);
+            return new ActionResult(result.isSuccess(), combineOutput(result));
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("executeCommandQuiet")
+    public ActionResult executeCommandQuiet(String args) {
+        try {
+            String command = extractCommandFromArgs(args);
+            Node.CommandResult result = this.ask(n -> {
+                try {
+                    return n.executeCommand(command);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+
+            return new ActionResult(result.isSuccess(),
+                String.format("exitCode=%d, stdout='%s', stderr='%s'",
+                    result.getExitCode(), result.getStdout(), result.getStderr()));
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("executeSudoCommand")
+    public ActionResult executeSudoCommand(String args) {
+        try {
+            String command = extractCommandFromArgs(args);
+            String nodeName = this.getName();
+
+            Node.OutputCallback callback = createOutputCallback(nodeName);
+
+            Node.CommandResult result = this.ask(n -> {
+                try {
+                    return n.executeSudoCommand(command, callback);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+
+            reportToAccumulator(result);
+            return new ActionResult(result.isSuccess(), combineOutput(result));
+        } catch (ExecutionException e) {
+            // Check if this is a SUDO_PASSWORD error
+            Throwable cause = e.getCause();
+            if (cause != null && cause.getMessage() != null &&
+                cause.getMessage().contains("SUDO_PASSWORD environment variable is not set")) {
+                String hostname = this.object.getHostname();
+                String errorMessage = "%" + hostname + ": [FAIL] SUDO_PASSWORD not set";
+                reportOutputToMultiplexer(this.getName(), errorMessage);
+                return new ActionResult(false, errorMessage);
+            }
+            return handleException(e);
+        } catch (InterruptedException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("executeSudoCommandQuiet")
+    public ActionResult executeSudoCommandQuiet(String args) {
+        try {
+            String command = extractCommandFromArgs(args);
+            Node.CommandResult result = this.ask(n -> {
+                try {
+                    return n.executeSudoCommand(command);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get();
+
+            return new ActionResult(result.isSuccess(),
+                String.format("exitCode=%d, stdout='%s', stderr='%s'",
+                    result.getExitCode(), result.getStdout(), result.getStderr()));
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    // ========================================================================
+    // Utility Actions
+    // ========================================================================
+
+    @Action("sleep")
+    public ActionResult sleep(String args) {
+        try {
+            long millis = Long.parseLong(getFirst(args));
+            Thread.sleep(millis);
+            return new ActionResult(true, "Slept for " + millis + "ms");
+        } catch (NumberFormatException e) {
+            logger.log(Level.SEVERE, String.format("Invalid sleep duration: %s", args), e);
+            return new ActionResult(false, "Invalid sleep duration: " + args);
+        } catch (InterruptedException e) {
+            return new ActionResult(false, "Sleep interrupted: " + e.getMessage());
+        }
+    }
+
+    @Action("print")
+    public ActionResult print(String args) {
+        String text = getFirst(args);
+        System.out.println(text);
+        return new ActionResult(true, "Printed: " + text);
+    }
+
+    @Action("doNothing")
+    public ActionResult doNothing(String args) {
+        return new ActionResult(true, getFirst(args));
+    }
+
+    // ========================================================================
+    // Document Workflow Actions
+    // ========================================================================
+
+    @Action("detectDocumentChanges")
+    public ActionResult detectDocumentChanges(String args) {
+        try {
+            return this.ask(n -> {
+                try {
+                    String docListPath = extractCommandFromArgs(args);
+                    return n.detectDocumentChanges(docListPath);
+                } catch (IOException e) {
+                    return new ActionResult(false, "Error detecting changes: " + e.getMessage());
+                }
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("cloneChangedDocuments")
+    public ActionResult cloneChangedDocuments(String args) {
+        try {
+            return this.ask(n -> {
+                try {
+                    String docListPath = extractCommandFromArgs(args);
+                    return n.cloneChangedDocuments(docListPath);
+                } catch (IOException e) {
+                    return new ActionResult(false, "Error cloning documents: " + e.getMessage());
+                }
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("buildChangedDocuments")
+    public ActionResult buildChangedDocuments(String args) {
+        try {
+            return this.ask(n -> {
+                try {
+                    String docListPath = extractCommandFromArgs(args);
+                    return n.buildChangedDocuments(docListPath);
+                } catch (IOException e) {
+                    return new ActionResult(false, "Error building documents: " + e.getMessage());
+                }
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    @Action("deployChangedDocuments")
+    public ActionResult deployChangedDocuments(String args) {
+        try {
+            return this.ask(n -> {
+                try {
+                    String docListPath = extractCommandFromArgs(args);
+                    return n.deployChangedDocuments(docListPath);
+                } catch (IOException e) {
+                    return new ActionResult(false, "Error deploying documents: " + e.getMessage());
+                }
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            return handleException(e);
+        }
+    }
+
+    // ========================================================================
+    // JSON State Actions
+    // ========================================================================
+
+    @Action("printJson")
+    public ActionResult printJson(String args) {
+        String path = getFirst(args);
+        String formatted = toStringOfJson(path);
+        System.out.println(formatted);
+        return new ActionResult(true, formatted);
+    }
+
+    // ========================================================================
+    // Helper Methods
+    // ========================================================================
+
+    /**
+     * Handles exceptions and returns an appropriate ActionResult.
+     */
+    private ActionResult handleException(Exception e) {
+        String message;
+        if (e instanceof ExecutionException) {
+            message = extractRootCauseMessage((ExecutionException) e);
+        } else {
+            message = e.getMessage();
+        }
+        logger.warning(String.format("%s: %s", this.getName(), message));
+        return new ActionResult(false, message);
+    }
+
     private int parseMaxIterations(String arg, int defaultValue) {
         if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
             try {
@@ -434,111 +488,14 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         return defaultValue;
     }
 
-    // --- Helper methods for command actions ---
-
-    private ActionResult executeCommandQuiet(String arg) throws InterruptedException, ExecutionException {
-        String command = extractCommandFromArgs(arg);
-        Node.CommandResult result = this.ask(n -> {
-            try {
-                return n.executeCommand(command);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).get();
-
-        return new ActionResult(result.isSuccess(),
-            String.format("exitCode=%d, stdout='%s', stderr='%s'",
-                result.getExitCode(), result.getStdout(), result.getStderr()));
-    }
-
-    private ActionResult executeSudoCommandQuiet(String arg) throws InterruptedException, ExecutionException {
-        String command = extractCommandFromArgs(arg);
-        Node.CommandResult result = this.ask(n -> {
-            try {
-                return n.executeSudoCommand(command);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).get();
-
-        return new ActionResult(result.isSuccess(),
-            String.format("exitCode=%d, stdout='%s', stderr='%s'",
-                result.getExitCode(), result.getStdout(), result.getStderr()));
-    }
-
-    private ActionResult executeCommandWithReport(String arg) throws InterruptedException, ExecutionException {
-        String command = extractCommandFromArgs(arg);
-        String nodeName = this.getName();
-        String transitionYaml = this.object.getCurrentTransitionYaml();
-
-        // Create callback that forwards output to multiplexer accumulator
-        Node.OutputCallback callback = createOutputCallback(nodeName);
-
-        Node.CommandResult result = this.ask(n -> {
-            try {
-                return n.executeCommand(command, callback);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).get();
-
-        // Report final result to legacy accumulator actor (for backward compatibility)
-        reportToAccumulator(result);
-        return new ActionResult(result.isSuccess(), combineOutput(result));
-    }
-
-    private ActionResult executeSudoCommandWithReport(String arg) throws InterruptedException, ExecutionException {
-        String command = extractCommandFromArgs(arg);
-        String nodeName = this.getName();
-
-        // Create callback that forwards output to multiplexer accumulator
-        Node.OutputCallback callback = createOutputCallback(nodeName);
-
-        Node.CommandResult result;
-        try {
-            result = this.ask(n -> {
-                try {
-                    return n.executeSudoCommand(command, callback);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }).get();
-        } catch (ExecutionException e) {
-            // Check if this is a SUDO_PASSWORD error
-            Throwable cause = e.getCause();
-            if (cause != null && cause.getMessage() != null &&
-                cause.getMessage().contains("SUDO_PASSWORD environment variable is not set")) {
-                // Output a % message for WorkflowReporter to capture
-                String hostname = this.object.getHostname();
-                String errorMessage = "%" + hostname + ": [FAIL] SUDO_PASSWORD not set";
-                // Report to multiplexer so it gets logged
-                reportOutputToMultiplexer(nodeName, errorMessage);
-                // Return failure with the error message
-                return new ActionResult(false, errorMessage);
-            }
-            throw e;
-        }
-
-        // Report final result to legacy accumulator actor (for backward compatibility)
-        reportToAccumulator(result);
-        return new ActionResult(result.isSuccess(), combineOutput(result));
-    }
-
     /**
      * Creates an OutputCallback that forwards output to the multiplexer accumulator.
-     *
-     * <p>Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer"),
-     * enabling loose coupling between NodeIIAR and MultiplexerAccumulatorIIAR.</p>
-     *
-     * @param nodeName the name of this node (used as source identifier)
-     * @return the callback, or null if multiplexer actor is not registered
      */
     private Node.OutputCallback createOutputCallback(String nodeName) {
         IIActorSystem sys = (IIActorSystem) this.system();
         IIActorRef<?> multiplexer = sys.getIIActor("outputMultiplexer");
 
         if (multiplexer == null) {
-            // No multiplexer registered - return null (Node will not output anything)
             return null;
         }
 
@@ -565,8 +522,6 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
 
     /**
      * Reports command result to the multiplexer accumulator actor if available.
-     *
-     * <p>Retrieves the multiplexer actor from ActorSystem by name ("outputMultiplexer").</p>
      */
     private void reportToAccumulator(Node.CommandResult result) {
         IIActorSystem sys = (IIActorSystem) this.system();
@@ -581,10 +536,7 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
     }
 
     /**
-     * Reports a message to the multiplexer accumulator for logging and WorkflowReporter capture.
-     *
-     * @param nodeName the node name for the source field
-     * @param message the message to report (can include % prefix for WorkflowReporter)
+     * Reports a message to the multiplexer accumulator.
      */
     private void reportOutputToMultiplexer(String nodeName, String message) {
         IIActorSystem sys = (IIActorSystem) this.system();
@@ -612,14 +564,9 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
 
     /**
      * Extracts a meaningful error message from an ExecutionException.
-     *
-     * <p>Prioritizes IOException messages (which contain our detailed SSH error messages)
-     * over the raw library exception messages.</p>
      */
     private String extractRootCauseMessage(ExecutionException e) {
         Throwable cause = e.getCause();
-
-        // Look for IOException first - it contains our detailed error messages
         Throwable current = cause;
         while (current != null) {
             if (current instanceof java.io.IOException) {
@@ -627,19 +574,11 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
             }
             current = current.getCause();
         }
-
-        // Fall back to the immediate cause message
         return cause != null ? cause.getMessage() : e.getMessage();
     }
 
     /**
      * Extracts a command string from JSON array arguments.
-     *
-     * <p>Expects arguments in the format: {@code ["command string"]}</p>
-     *
-     * @param arg the JSON array argument string
-     * @return the extracted command string
-     * @throws IllegalArgumentException if the argument format is invalid
      */
     private String extractCommandFromArgs(String arg) {
         try {
@@ -653,5 +592,4 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
                 "Invalid command argument format. Expected JSON array with command string: " + arg, e);
         }
     }
-
 }

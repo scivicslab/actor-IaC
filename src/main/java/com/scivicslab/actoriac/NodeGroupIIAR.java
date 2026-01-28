@@ -31,6 +31,7 @@ import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.scivicslab.pojoactor.core.Action;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
@@ -129,158 +130,75 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
         object.setSelfActorRef(this);
     }
 
+    // ========================================================================
+    // Workflow Actions (from Interpreter)
+    // ========================================================================
+
     /**
-     * Invokes an action on the node group by name with the given arguments.
+     * Executes the current step code.
      *
-     * <p>This method dispatches to specialized handler methods based on the action type:</p>
-     * <ul>
-     *   <li>Workflow actions: {@link #handleWorkflowAction}</li>
-     *   <li>NodeGroup-specific actions: {@link #handleNodeGroupAction}</li>
-     * </ul>
-     *
-     * @param actionName the name of the action to execute
-     * @param arg the argument string (JSON array format)
-     * @return an {@link ActionResult} indicating success or failure with a message
+     * @param args the argument string (not used)
+     * @return ActionResult indicating success or failure
      */
-    @Override
-    public ActionResult callByActionName(String actionName, String arg) {
-        logger.fine(String.format("actionName = %s, args = %s", actionName, arg));
-
+    @Action("execCode")
+    public ActionResult execCode(String args) {
         try {
-            // Workflow execution actions (from Interpreter)
-            ActionResult workflowResult = handleWorkflowAction(actionName, arg);
-            if (workflowResult != null) {
-                return workflowResult;
-            }
-
-            // NodeGroup-specific actions
-            ActionResult nodeGroupResult = handleNodeGroupAction(actionName, arg);
-            if (nodeGroupResult != null) {
-                return nodeGroupResult;
-            }
-
-            // Try parent class (IIActorRef) for JSON State API actions (putJson, getJson, etc.)
-            ActionResult parentResult = super.callByActionName(actionName, arg);
-            if (parentResult.isSuccess() || !parentResult.getResult().startsWith("Unknown action:")) {
-                return parentResult;
-            }
-
-            // Unknown action
-            logger.log(Level.SEVERE, String.format("Unknown action: actorName = %s, action = %s, arg = %s",
-                    this.getName(), actionName, arg));
-            return new ActionResult(false, "Unknown action: " + actionName);
-
-        } catch (InterruptedException e) {
-            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
-            return new ActionResult(false, "Interrupted: " + e.getMessage());
-        } catch (ExecutionException e) {
-            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
-            return new ActionResult(false, "Execution error: " + e.getMessage());
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, String.format("actionName = %s, args = %s", actionName, arg), e);
+            return this.ask(n -> n.execCode()).get();
+        } catch (InterruptedException | ExecutionException e) {
+            logger.log(Level.SEVERE, "execCode failed", e);
             return new ActionResult(false, "Error: " + e.getMessage());
         }
     }
 
     /**
-     * Handles workflow-related actions (from Interpreter).
+     * Runs the workflow until completion.
      *
-     * @param actionName the action name
-     * @param arg the argument string
-     * @return ActionResult if handled, null if not a workflow action
+     * @param args the argument string (optional max iterations)
+     * @return ActionResult indicating success or failure
      */
-    private ActionResult handleWorkflowAction(String actionName, String arg)
-            throws InterruptedException, ExecutionException {
-
-        switch (actionName) {
-            case "execCode":
-                return this.ask(n -> n.execCode()).get();
-
-            case "runUntilEnd":
-                int maxIterations = parseMaxIterations(arg, 10000);
-                return this.ask(n -> n.runUntilEnd(maxIterations)).get();
-
-            case "runWorkflow":
-                JSONArray runArgs = new JSONArray(arg);
-                String workflowFile = runArgs.getString(0);
-                this.currentWorkflowPath = workflowFile;  // Store for WorkflowReporter
-                int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
-                logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, runMaxIterations));
-                ActionResult result = this.object.runWorkflow(workflowFile, runMaxIterations);
-                logger.info(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
-                return result;
-
-            case "readYaml":
-                return handleReadYaml(arg);
-
-            default:
-                return null; // Not a workflow action
+    @Action("runUntilEnd")
+    public ActionResult runUntilEnd(String args) {
+        try {
+            int maxIterations = parseMaxIterations(args, 10000);
+            return this.ask(n -> n.runUntilEnd(maxIterations)).get();
+        } catch (InterruptedException | ExecutionException e) {
+            logger.log(Level.SEVERE, "runUntilEnd failed", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
         }
     }
 
     /**
-     * Handles NodeGroup-specific actions.
+     * Loads and runs a workflow file.
      *
-     * @param actionName the action name
-     * @param arg the argument string
-     * @return ActionResult if handled, null if not a NodeGroup action
+     * @param args JSON array with workflow file path and optional max iterations
+     * @return ActionResult indicating success or failure
      */
-    private ActionResult handleNodeGroupAction(String actionName, String arg)
-            throws InterruptedException, ExecutionException {
-
-        switch (actionName) {
-            case "hasInventory":
-                boolean hasInv = this.object.getInventory() != null;
-                return new ActionResult(hasInv, hasInv ? "Inventory available" : "No inventory");
-
-            case "createNodeActors":
-                String groupName = extractSingleArgument(arg);
-                createNodeActors(groupName);
-                return new ActionResult(true, String.format("Created node actors for group '%s'", groupName));
-
-            case "apply":
-                return apply(arg);
-
-            case "executeCommandOnAllNodes":
-                String command = extractSingleArgument(arg);
-                List<String> results = executeCommandOnAllNodes(command);
-                return new ActionResult(true,
-                    String.format("Executed command on %d nodes: %s", results.size(), results));
-
-            case "hasAccumulator":
-                // Check if outputMultiplexer exists (loose coupling)
-                boolean hasAcc = ((IIActorSystem) this.system()).getIIActor("outputMultiplexer") != null;
-                return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");
-
-            case "createAccumulator":
-                // No-op: MultiplexerAccumulator is now created by RunCLI
-                // This case is kept for backward compatibility with existing workflows
-                return new ActionResult(true, "Accumulator managed by CLI");
-
-            case "getAccumulatorSummary":
-                return getAccumulatorSummary();
-
-            case "printSessionSummary":
-                return printSessionSummary();
-
-            case "getSessionId":
-                return getSessionIdAction();
-
-            case "getWorkflowPath":
-                return getWorkflowPathAction();
-
-            case "doNothing":
-                return new ActionResult(true, arg);
-
-            default:
-                return null; // Not a NodeGroup action
+    @Action("runWorkflow")
+    public ActionResult runWorkflow(String args) {
+        try {
+            JSONArray runArgs = new JSONArray(args);
+            String workflowFile = runArgs.getString(0);
+            this.currentWorkflowPath = workflowFile;  // Store for WorkflowReporter
+            int runMaxIterations = runArgs.length() > 1 ? runArgs.getInt(1) : 10000;
+            logger.info(String.format("Running workflow: %s (maxIterations=%d)", workflowFile, runMaxIterations));
+            ActionResult result = this.object.runWorkflow(workflowFile, runMaxIterations);
+            logger.info(String.format("Workflow completed: success=%s, result=%s", result.isSuccess(), result.getResult()));
+            return result;
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "runWorkflow failed: " + args, e);
+            return new ActionResult(false, "Error: " + e.getMessage());
         }
     }
 
-    // --- Helper methods ---
-
-    private ActionResult handleReadYaml(String arg) throws InterruptedException, ExecutionException {
-        String filePath = extractSingleArgument(arg);
+    /**
+     * Reads a YAML workflow definition.
+     *
+     * @param args JSON array with file path
+     * @return ActionResult indicating success or failure
+     */
+    @Action("readYaml")
+    public ActionResult readYaml(String args) {
+        String filePath = extractSingleArgument(args);
         this.currentWorkflowPath = filePath;  // Store for WorkflowReporter
         try {
             String overlayPath = this.object.getOverlayDir();
@@ -313,8 +231,175 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
                 return new ActionResult(false, "IO error: " + filePath);
             }
             throw e;
+        } catch (InterruptedException | ExecutionException e) {
+            logger.log(Level.SEVERE, "readYaml failed: " + filePath, e);
+            return new ActionResult(false, "Error: " + e.getMessage());
         }
     }
+
+    // ========================================================================
+    // NodeGroup-specific Actions
+    // ========================================================================
+
+    /**
+     * Checks if inventory is loaded.
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with true if inventory exists
+     */
+    @Action("hasInventory")
+    public ActionResult hasInventory(String args) {
+        boolean hasInv = this.object.getInventory() != null;
+        return new ActionResult(hasInv, hasInv ? "Inventory available" : "No inventory");
+    }
+
+    /**
+     * Creates child actors for all nodes in a specified group.
+     *
+     * @param args JSON array with group name
+     * @return ActionResult indicating success or failure
+     */
+    @Action("createNodeActors")
+    public ActionResult createNodeActorsAction(String args) {
+        String groupName = extractSingleArgument(args);
+        createNodeActors(groupName);
+        return new ActionResult(true, String.format("Created node actors for group '%s'", groupName));
+    }
+
+    /**
+     * Applies an action to child actors matching a wildcard pattern.
+     *
+     * @param args JSON object defining the action to apply
+     * @return ActionResult indicating success or failure
+     */
+    @Action("apply")
+    public ActionResult applyAction(String args) {
+        return apply(args);
+    }
+
+    /**
+     * Executes a command on all child node actors.
+     *
+     * @param args JSON array with command
+     * @return ActionResult with execution results
+     */
+    @Action("executeCommandOnAllNodes")
+    public ActionResult executeCommandOnAllNodesAction(String args) {
+        try {
+            String command = extractSingleArgument(args);
+            List<String> results = executeCommandOnAllNodes(command);
+            return new ActionResult(true,
+                String.format("Executed command on %d nodes: %s", results.size(), results));
+        } catch (InterruptedException | ExecutionException e) {
+            logger.log(Level.SEVERE, "executeCommandOnAllNodes failed", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Checks if accumulator exists.
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with true if accumulator exists
+     */
+    @Action("hasAccumulator")
+    public ActionResult hasAccumulator(String args) {
+        boolean hasAcc = ((IIActorSystem) this.system()).getIIActor("outputMultiplexer") != null;
+        return new ActionResult(hasAcc, hasAcc ? "Accumulator exists" : "No accumulator");
+    }
+
+    /**
+     * Creates an accumulator (no-op, kept for backward compatibility).
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with success
+     */
+    @Action("createAccumulator")
+    public ActionResult createAccumulator(String args) {
+        // No-op: MultiplexerAccumulator is now created by RunCLI
+        // This case is kept for backward compatibility with existing workflows
+        return new ActionResult(true, "Accumulator managed by CLI");
+    }
+
+    /**
+     * Gets the summary from the output multiplexer.
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with the summary
+     */
+    @Action("getAccumulatorSummary")
+    public ActionResult getAccumulatorSummaryAction(String args) {
+        return getAccumulatorSummary();
+    }
+
+    /**
+     * Prints a summary of the current session's verification results.
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with the summary
+     */
+    @Action("printSessionSummary")
+    public ActionResult printSessionSummaryAction(String args) {
+        return printSessionSummary();
+    }
+
+    /**
+     * Gets the current session ID.
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with the session ID
+     */
+    @Action("getSessionId")
+    public ActionResult getSessionId(String args) {
+        long sessionId = this.object.getSessionId();
+        if (sessionId < 0) {
+            return new ActionResult(false, "No session ID set");
+        }
+        return new ActionResult(true, String.valueOf(sessionId));
+    }
+
+    /**
+     * Gets the current workflow file path.
+     *
+     * @param args the argument string (not used)
+     * @return ActionResult with the workflow path
+     */
+    @Action("getWorkflowPath")
+    public ActionResult getWorkflowPath(String args) {
+        if (currentWorkflowPath == null) {
+            return new ActionResult(false, "No workflow path set");
+        }
+        return new ActionResult(true, currentWorkflowPath);
+    }
+
+    /**
+     * Does nothing, returns the argument as result.
+     *
+     * @param args the argument string
+     * @return ActionResult with the argument
+     */
+    @Action("doNothing")
+    public ActionResult doNothing(String args) {
+        return new ActionResult(true, args);
+    }
+
+    /**
+     * Prints JSON State at the given path in pretty format.
+     *
+     * @param args the path to print (from JSON array)
+     * @return ActionResult with the formatted JSON
+     */
+    @Action("printJson")
+    public ActionResult printJson(String args) {
+        String path = getFirst(args);
+        String formatted = toStringOfJson(path);
+        System.out.println(formatted);
+        return new ActionResult(true, formatted);
+    }
+
+    // ========================================================================
+    // Helper Methods
+    // ========================================================================
 
     private int parseMaxIterations(String arg, int defaultValue) {
         if (arg != null && !arg.isEmpty() && !arg.equals("[]")) {
@@ -328,6 +413,21 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             }
         }
         return defaultValue;
+    }
+
+    private String getFirst(String args) {
+        if (args == null || args.isEmpty() || args.equals("[]")) {
+            return "";
+        }
+        try {
+            JSONArray jsonArray = new JSONArray(args);
+            if (jsonArray.length() > 0) {
+                return jsonArray.getString(0);
+            }
+        } catch (Exception e) {
+            // Return empty string if parsing fails
+        }
+        return "";
     }
 
     /**
@@ -603,38 +703,6 @@ public class NodeGroupIIAR extends IIActorRef<NodeGroupInterpreter> {
             throw new IllegalArgumentException(
                 "Invalid argument format. Expected JSON array: " + arg, e);
         }
-    }
-
-    /**
-     * Gets the current session ID.
-     *
-     * <p>Returns the session ID for the current workflow execution.
-     * This can be used by other actors (like SystemInfoAggregator) to
-     * query logs for the current session.</p>
-     *
-     * @return ActionResult with the session ID as the result string
-     */
-    private ActionResult getSessionIdAction() {
-        long sessionId = this.object.getSessionId();
-        if (sessionId < 0) {
-            return new ActionResult(false, "No session ID set");
-        }
-        return new ActionResult(true, String.valueOf(sessionId));
-    }
-
-    /**
-     * Gets the current workflow file path.
-     *
-     * <p>Returns the workflow file path that was passed to runWorkflow.
-     * This is used by WorkflowReporter to read workflow metadata.</p>
-     *
-     * @return ActionResult with the workflow path as the result string
-     */
-    private ActionResult getWorkflowPathAction() {
-        if (currentWorkflowPath == null) {
-            return new ActionResult(false, "No workflow path set");
-        }
-        return new ActionResult(true, currentWorkflowPath);
     }
 
     /**

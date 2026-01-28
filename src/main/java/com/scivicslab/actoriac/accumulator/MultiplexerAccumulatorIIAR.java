@@ -23,6 +23,7 @@ import java.util.logging.Logger;
 
 import org.json.JSONObject;
 
+import com.scivicslab.pojoactor.core.Action;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
@@ -90,43 +91,12 @@ public class MultiplexerAccumulatorIIAR extends IIActorRef<MultiplexerAccumulato
         this.logger = Logger.getLogger(actorName);
     }
 
-    /**
-     * Invokes an action on the multiplexer by name.
-     *
-     * @param actionName the name of the action to execute
-     * @param arg the argument string (JSON format for "add" action)
-     * @return an {@link ActionResult} indicating success or failure
-     */
-    @Override
-    public ActionResult callByActionName(String actionName, String arg) {
-        // Note: Do NOT log here - it causes infinite loop via MultiplexerLogHandler
-
-        try {
-            switch (actionName) {
-                case "add":
-                    return handleAdd(arg);
-
-                case "getSummary":
-                    return handleGetSummary();
-
-                case "getCount":
-                    return handleGetCount();
-
-                case "clear":
-                    return handleClear();
-
-                default:
-                    logger.warning("Unknown action: " + actionName);
-                    return new ActionResult(false, "Unknown action: " + actionName);
-            }
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error in " + actionName, e);
-            return new ActionResult(false, "Error: " + e.getMessage());
-        }
-    }
+    // ========================================================================
+    // Actions
+    // ========================================================================
 
     /**
-     * Handles the add action.
+     * Adds output to all registered accumulators.
      *
      * <p>Parses the JSON argument and forwards to the multiplexer, which then
      * distributes to all registered target accumulators.</p>
@@ -134,45 +104,73 @@ public class MultiplexerAccumulatorIIAR extends IIActorRef<MultiplexerAccumulato
      * @param arg JSON object with source, type, and data fields
      * @return ActionResult indicating success or failure
      */
-    private ActionResult handleAdd(String arg) throws ExecutionException, InterruptedException {
-        JSONObject json = new JSONObject(arg);
-        String source = json.getString("source");
-        String type = json.getString("type");
-        String data = json.getString("data");
+    @Action("add")
+    public ActionResult add(String arg) {
+        // Note: Do NOT log here - it causes infinite loop via MultiplexerLogHandler
+        try {
+            JSONObject json = new JSONObject(arg);
+            String source = json.getString("source");
+            String type = json.getString("type");
+            String data = json.getString("data");
 
-        // Forward to multiplexer (which distributes to all targets)
-        this.tell(acc -> acc.add(source, type, data)).get();
+            // Forward to multiplexer (which distributes to all targets)
+            this.tell(acc -> acc.add(source, type, data)).get();
 
-        return new ActionResult(true, "Added");
+            return new ActionResult(true, "Added");
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error in add", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the getSummary action.
+     * Returns formatted summary from all accumulators.
      *
+     * @param arg not used
      * @return ActionResult with the formatted summary
      */
-    private ActionResult handleGetSummary() throws ExecutionException, InterruptedException {
-        String summary = this.ask(MultiplexerAccumulator::getSummary).get();
-        return new ActionResult(true, summary);
+    @Action("getSummary")
+    public ActionResult getSummary(String arg) {
+        try {
+            String summary = this.ask(MultiplexerAccumulator::getSummary).get();
+            return new ActionResult(true, summary);
+        } catch (ExecutionException | InterruptedException e) {
+            logger.log(Level.SEVERE, "Error in getSummary", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the getCount action.
+     * Returns the number of added entries.
      *
+     * @param arg not used
      * @return ActionResult with the count
      */
-    private ActionResult handleGetCount() throws ExecutionException, InterruptedException {
-        int count = this.ask(MultiplexerAccumulator::getCount).get();
-        return new ActionResult(true, String.valueOf(count));
+    @Action("getCount")
+    public ActionResult getCount(String arg) {
+        try {
+            int count = this.ask(MultiplexerAccumulator::getCount).get();
+            return new ActionResult(true, String.valueOf(count));
+        } catch (ExecutionException | InterruptedException e) {
+            logger.log(Level.SEVERE, "Error in getCount", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the clear action.
+     * Clears all accumulated entries.
      *
+     * @param arg not used
      * @return ActionResult indicating success
      */
-    private ActionResult handleClear() throws ExecutionException, InterruptedException {
-        this.tell(MultiplexerAccumulator::clear).get();
-        return new ActionResult(true, "Cleared");
+    @Action("clear")
+    public ActionResult clear(String arg) {
+        try {
+            this.tell(MultiplexerAccumulator::clear).get();
+            return new ActionResult(true, "Cleared");
+        } catch (ExecutionException | InterruptedException e) {
+            logger.log(Level.SEVERE, "Error in clear", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 }

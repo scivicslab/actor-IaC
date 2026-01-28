@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.actoriac.log.LogLevel;
 import com.scivicslab.actoriac.log.SessionStatus;
+import com.scivicslab.pojoactor.core.Action;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
@@ -95,151 +96,157 @@ public class LogStoreIIAR extends IIActorRef<DistributedLogStore> {
         this.dbExecutor = dbExecutor;
     }
 
-    @Override
-    public ActionResult callByActionName(String actionName, String arg) {
-        logger.fine(String.format("actionName = %s, arg = %s", actionName, arg));
+    // ========================================================================
+    // Actions
+    // ========================================================================
 
+    /**
+     * Logs a message with level.
+     *
+     * @param arg JSON with sessionId, nodeId, level, message
+     * @return ActionResult
+     */
+    @Action("log")
+    public ActionResult log(String arg) {
         try {
-            switch (actionName) {
-                case "log":
-                    return handleLog(arg);
+            JSONObject json = new JSONObject(arg);
+            long sessionId = json.getLong("sessionId");
+            String nodeId = json.getString("nodeId");
+            String levelStr = json.getString("level");
+            String message = json.getString("message");
 
-                case "logAction":
-                    return handleLogAction(arg);
+            LogLevel level = LogLevel.valueOf(levelStr);
 
-                case "startSession":
-                    return handleStartSession(arg);
+            this.tell(store -> store.log(sessionId, nodeId, level, message), dbExecutor).get();
 
-                case "endSession":
-                    return handleEndSession(arg);
-
-                case "markNodeSuccess":
-                    return handleMarkNodeSuccess(arg);
-
-                case "markNodeFailed":
-                    return handleMarkNodeFailed(arg);
-
-                default:
-                    logger.warning("Unknown action: " + actionName);
-                    return new ActionResult(false, "Unknown action: " + actionName);
-            }
+            return new ActionResult(true, "Logged");
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error in " + actionName, e);
+            logger.log(Level.SEVERE, "Error in log", e);
             return new ActionResult(false, "Error: " + e.getMessage());
         }
     }
 
     /**
-     * Handles the log action.
-     *
-     * @param arg JSON with sessionId, nodeId, level, message
-     * @return ActionResult
-     */
-    private ActionResult handleLog(String arg) throws Exception {
-        JSONObject json = new JSONObject(arg);
-        long sessionId = json.getLong("sessionId");
-        String nodeId = json.getString("nodeId");
-        String levelStr = json.getString("level");
-        String message = json.getString("message");
-
-        LogLevel level = LogLevel.valueOf(levelStr);
-
-        this.tell(store -> store.log(sessionId, nodeId, level, message), dbExecutor).get();
-
-        return new ActionResult(true, "Logged");
-    }
-
-    /**
-     * Handles the logAction action.
+     * Logs an action result.
      *
      * @param arg JSON with sessionId, nodeId, label, actionName, exitCode, durationMs, output
      * @return ActionResult
      */
-    private ActionResult handleLogAction(String arg) throws Exception {
-        JSONObject json = new JSONObject(arg);
-        long sessionId = json.getLong("sessionId");
-        String nodeId = json.getString("nodeId");
-        String label = json.getString("label");
-        String action = json.getString("actionName");
-        int exitCode = json.getInt("exitCode");
-        long durationMs = json.getLong("durationMs");
-        String output = json.getString("output");
+    @Action("logAction")
+    public ActionResult logAction(String arg) {
+        try {
+            JSONObject json = new JSONObject(arg);
+            long sessionId = json.getLong("sessionId");
+            String nodeId = json.getString("nodeId");
+            String label = json.getString("label");
+            String action = json.getString("actionName");
+            int exitCode = json.getInt("exitCode");
+            long durationMs = json.getLong("durationMs");
+            String output = json.getString("output");
 
-        this.tell(store -> store.logAction(sessionId, nodeId, label, action, exitCode, durationMs, output),
-                  dbExecutor).get();
+            this.tell(store -> store.logAction(sessionId, nodeId, label, action, exitCode, durationMs, output),
+                      dbExecutor).get();
 
-        return new ActionResult(true, "Action logged");
+            return new ActionResult(true, "Action logged");
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error in logAction", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the startSession action.
+     * Starts a new workflow session.
      *
      * @param arg JSON with workflowName, overlayName, inventoryName, nodeCount
      * @return ActionResult with session ID
      */
-    private ActionResult handleStartSession(String arg) throws Exception {
-        JSONObject json = new JSONObject(arg);
-        String workflowName = json.getString("workflowName");
-        String overlayName = json.optString("overlayName", null);
-        String inventoryName = json.optString("inventoryName", null);
-        int nodeCount = json.getInt("nodeCount");
+    @Action("startSession")
+    public ActionResult startSession(String arg) {
+        try {
+            JSONObject json = new JSONObject(arg);
+            String workflowName = json.getString("workflowName");
+            String overlayName = json.optString("overlayName", null);
+            String inventoryName = json.optString("inventoryName", null);
+            int nodeCount = json.getInt("nodeCount");
 
-        long sessionId = this.ask(store ->
-            store.startSession(workflowName, overlayName, inventoryName, nodeCount),
-            dbExecutor).get();
+            long sessionId = this.ask(store ->
+                store.startSession(workflowName, overlayName, inventoryName, nodeCount),
+                dbExecutor).get();
 
-        return new ActionResult(true, String.valueOf(sessionId));
+            return new ActionResult(true, String.valueOf(sessionId));
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error in startSession", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the endSession action.
+     * Ends a workflow session.
      *
      * @param arg JSON with sessionId, status
      * @return ActionResult
      */
-    private ActionResult handleEndSession(String arg) throws Exception {
-        JSONObject json = new JSONObject(arg);
-        long sessionId = json.getLong("sessionId");
-        String statusStr = json.getString("status");
+    @Action("endSession")
+    public ActionResult endSession(String arg) {
+        try {
+            JSONObject json = new JSONObject(arg);
+            long sessionId = json.getLong("sessionId");
+            String statusStr = json.getString("status");
 
-        SessionStatus status = SessionStatus.valueOf(statusStr);
+            SessionStatus status = SessionStatus.valueOf(statusStr);
 
-        this.tell(store -> store.endSession(sessionId, status), dbExecutor).get();
+            this.tell(store -> store.endSession(sessionId, status), dbExecutor).get();
 
-        return new ActionResult(true, "Session ended");
+            return new ActionResult(true, "Session ended");
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error in endSession", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the markNodeSuccess action.
+     * Marks a node as succeeded.
      *
      * @param arg JSON with sessionId, nodeId
      * @return ActionResult
      */
-    private ActionResult handleMarkNodeSuccess(String arg) throws Exception {
-        JSONObject json = new JSONObject(arg);
-        long sessionId = json.getLong("sessionId");
-        String nodeId = json.getString("nodeId");
+    @Action("markNodeSuccess")
+    public ActionResult markNodeSuccess(String arg) {
+        try {
+            JSONObject json = new JSONObject(arg);
+            long sessionId = json.getLong("sessionId");
+            String nodeId = json.getString("nodeId");
 
-        this.tell(store -> store.markNodeSuccess(sessionId, nodeId), dbExecutor).get();
+            this.tell(store -> store.markNodeSuccess(sessionId, nodeId), dbExecutor).get();
 
-        return new ActionResult(true, "Node marked as success");
+            return new ActionResult(true, "Node marked as success");
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error in markNodeSuccess", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
-     * Handles the markNodeFailed action.
+     * Marks a node as failed.
      *
      * @param arg JSON with sessionId, nodeId, reason
      * @return ActionResult
      */
-    private ActionResult handleMarkNodeFailed(String arg) throws Exception {
-        JSONObject json = new JSONObject(arg);
-        long sessionId = json.getLong("sessionId");
-        String nodeId = json.getString("nodeId");
-        String reason = json.getString("reason");
+    @Action("markNodeFailed")
+    public ActionResult markNodeFailed(String arg) {
+        try {
+            JSONObject json = new JSONObject(arg);
+            long sessionId = json.getLong("sessionId");
+            String nodeId = json.getString("nodeId");
+            String reason = json.getString("reason");
 
-        this.tell(store -> store.markNodeFailed(sessionId, nodeId, reason), dbExecutor).get();
+            this.tell(store -> store.markNodeFailed(sessionId, nodeId, reason), dbExecutor).get();
 
-        return new ActionResult(true, "Node marked as failed");
+            return new ActionResult(true, "Node marked as failed");
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error in markNodeFailed", e);
+            return new ActionResult(false, "Error: " + e.getMessage());
+        }
     }
 
     /**
