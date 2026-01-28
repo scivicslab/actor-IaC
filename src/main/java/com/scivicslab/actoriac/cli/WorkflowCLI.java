@@ -182,21 +182,52 @@ class ListWorkflowsCLI implements Callable<Integer> {
         return 0;
     }
 
+    private static final int WRAP_WIDTH = 70;
+    private static final String INDENT = "    ";
+
     private void printTable(List<WorkflowInfo> workflows, String dirPath) {
         System.out.println("Workflows in " + dirPath + ":");
         System.out.println();
-        for (WorkflowInfo wf : workflows) {
-            System.out.println(wf.path());
+        String separator = "-".repeat(WRAP_WIDTH + INDENT.length());
+        for (int i = 0; i < workflows.size(); i++) {
+            WorkflowInfo wf = workflows.get(i);
+            System.out.println("  " + wf.path());
             if (wf.name() != null) {
-                System.out.println("  name: " + wf.name());
+                System.out.println(INDENT + "name: " + wf.name());
             }
             if (wf.description() != null) {
-                System.out.println("  description: " + wf.description());
+                printWrapped("description", wf.description());
             }
-            if (wf.note() != null) {
-                System.out.println("  note: " + wf.note());
+            if (i < workflows.size() - 1) {
+                System.out.println(separator);
             }
-            System.out.println();
+        }
+        System.out.println();
+    }
+
+    private void printWrapped(String label, String text) {
+        String prefix = INDENT + label + ": ";
+        String continuationIndent = INDENT + " ".repeat(label.length() + 2);
+        int maxWidth = WRAP_WIDTH;
+
+        String[] words = text.split("\\s+");
+        StringBuilder line = new StringBuilder(prefix);
+        boolean firstLine = true;
+
+        for (String word : words) {
+            int currentLen = firstLine ? line.length() : line.length();
+            if (currentLen + word.length() + 1 > maxWidth + prefix.length() && line.length() > (firstLine ? prefix.length() : continuationIndent.length())) {
+                System.out.println(line.toString());
+                line = new StringBuilder(continuationIndent);
+                firstLine = false;
+            }
+            if (line.length() > (firstLine ? prefix.length() : continuationIndent.length())) {
+                line.append(" ");
+            }
+            line.append(word);
+        }
+        if (line.length() > (firstLine ? prefix.length() : continuationIndent.length())) {
+            System.out.println(line.toString());
         }
     }
 
