@@ -74,7 +74,7 @@
 <span class="source-line-no">061</span><span id="line-61">@Command(</span>
 <span class="source-line-no">062</span><span id="line-62">    name = "actor-iac",</span>
 <span class="source-line-no">063</span><span id="line-63">    mixinStandardHelpOptions = true,</span>
-<span class="source-line-no">064</span><span id="line-64">    version = "actor-IaC 2.12.1",</span>
+<span class="source-line-no">064</span><span id="line-64">    versionProvider = VersionProvider.class,</span>
 <span class="source-line-no">065</span><span id="line-65">    description = "Infrastructure as Code workflow automation tool.",</span>
 <span class="source-line-no">066</span><span id="line-66">    subcommands = {</span>
 <span class="source-line-no">067</span><span id="line-67">        RunCLI.class,</span>
@@ -141,7 +141,7 @@
 <span class="source-line-no">128</span><span id="line-128">@Command(</span>
 <span class="source-line-no">129</span><span id="line-129">    name = "list",</span>
 <span class="source-line-no">130</span><span id="line-130">    mixinStandardHelpOptions = true,</span>
-<span class="source-line-no">131</span><span id="line-131">    version = "actor-IaC list 2.12.1",</span>
+<span class="source-line-no">131</span><span id="line-131">    versionProvider = VersionProvider.class,</span>
 <span class="source-line-no">132</span><span id="line-132">    description = "List workflows in the specified directory."</span>
 <span class="source-line-no">133</span><span id="line-133">)</span>
 <span class="source-line-no">134</span><span id="line-134">class ListWorkflowsCLI implements Callable&lt;Integer&gt; {</span>

@@ -82,13 +82,12 @@ import picocli.CommandLine.Option;
 @Command(
     name = "run",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC run 2.12.1",
+    versionProvider = VersionProvider.class,
     description = "Execute actor-IaC workflows defined in YAML, JSON, or XML format."
 )
 public class RunCLI implements Callable<Integer> {
 
     private static final Logger LOG = Logger.getLogger(RunCLI.class.getName());
-    private static final String ACTORIAC_VERSION = "2.12.1";
 
     @Option(
         names = {"-d", "--dir"},
@@ -564,7 +563,7 @@ public class RunCLI implements Callable<Integer> {
             String gitCommit = getGitCommit(workflowDir);
             String gitBranch = getGitBranch(workflowDir);
             String commandLine = buildCommandLine();
-            String actorIacVersion = ACTORIAC_VERSION;
+            String actorIacVersion = com.scivicslab.actoriac.Version.get();
             String actorIacCommit = getActorIacCommit();
 
             sessionId = logStore.startSession(workflowName, overlayName, inventoryName, 1,

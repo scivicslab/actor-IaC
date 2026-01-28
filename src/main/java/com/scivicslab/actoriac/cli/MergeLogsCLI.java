@@ -56,7 +56,7 @@ import picocli.CommandLine.Parameters;
 @Command(
     name = "log-merge",
     mixinStandardHelpOptions = true,
-    version = "actor-IaC log-merge 2.12.0",
+    versionProvider = VersionProvider.class,
     description = "Merge scattered log databases into a single database."
 )
 public class MergeLogsCLI implements Callable<Integer> {
