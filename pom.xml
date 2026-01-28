@@ -11,7 +11,7 @@
     <packaging>jar</packaging>
 
     <name>actor-IaC</name>
-    <description>Actor-based Infrastructure as Code - A CLI tool for executing SSH-based workflow automation using the POJO-actor framework.</description>
+    <description>Infrastructure as Code (IaC) tool for DevOps and cluster management. Executes SSH-based workflow automation with parallel execution, full traceability, and YAML-defined workflows.</description>
     <url>https://github.com/scivicslab/actor-IaC</url>
 
     <licenses>
