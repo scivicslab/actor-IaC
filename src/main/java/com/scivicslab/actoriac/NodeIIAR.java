@@ -456,6 +456,20 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
         return new ActionResult(true, formatted);
     }
 
+    /**
+     * Prints JSON State at the given path in YAML format.
+     *
+     * @param args the path to print (from JSON array)
+     * @return ActionResult with the formatted YAML
+     */
+    @Action("printYaml")
+    public ActionResult printYaml(String args) {
+        String path = getFirst(args);
+        String formatted = toStringOfYaml(path);
+        System.out.println(formatted);
+        return new ActionResult(true, formatted);
+    }
+
     // ========================================================================
     // Helper Methods
     // ========================================================================
