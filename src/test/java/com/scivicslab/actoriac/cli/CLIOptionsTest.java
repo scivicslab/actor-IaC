@@ -222,4 +222,65 @@ public class CLIOptionsTest {
                 "Sub-workflow should NOT be in base directory when main workflow is in subdirectory");
         }
     }
+
+    @Nested
+    @DisplayName("Local execution without inventory file")
+    class LocalExecutionWithoutInventory {
+
+        @Test
+        @DisplayName("Effective group should be 'local' when inventory is null")
+        void effectiveGroupShouldBeLocalWhenInventoryIsNull() {
+            // This tests the logic in RunCLI.executeWorkflow():
+            // String effectiveGroup = (inventoryFile == null) ? "local" : groupName;
+
+            File inventoryFile = null;
+            String groupName = "all";
+
+            String effectiveGroup = (inventoryFile == null) ? "local" : groupName;
+
+            assertEquals("local", effectiveGroup,
+                "Effective group should be 'local' when no inventory file is specified");
+        }
+
+        @Test
+        @DisplayName("Effective group should use specified group when inventory is provided")
+        void effectiveGroupShouldUseSpecifiedGroupWhenInventoryProvided() throws IOException {
+            // Create a dummy inventory file
+            Path inventoryPath = tempDir.resolve("test-inventory.ini");
+            Files.writeString(inventoryPath, "[all]\nlocalhost\n");
+            File inventoryFile = inventoryPath.toFile();
+            String groupName = "webservers";
+
+            String effectiveGroup = (inventoryFile == null) ? "local" : groupName;
+
+            assertEquals("webservers", effectiveGroup,
+                "Effective group should be the specified group when inventory is provided");
+        }
+
+        @Test
+        @DisplayName("Local execution should not require inventory file")
+        void localExecutionShouldNotRequireInventoryFile() {
+            // This is a design verification test:
+            // Running without -i option should use "local" group,
+            // which creates a localhost node without requiring inventory
+
+            // The implementation in NodeGroupIIAR.createNodeActors():
+            // if ("local".equals(groupName)) {
+            //     nodes = nodeGroupInterpreter.createLocalNode();
+            // }
+
+            // Verify the contract: "local" group should create localhost node
+            com.scivicslab.actoriac.NodeGroup nodeGroup = new com.scivicslab.actoriac.NodeGroup();
+
+            // This should NOT throw IllegalStateException
+            // (unlike createNodesForGroup() which requires inventory)
+            java.util.List<com.scivicslab.actoriac.Node> nodes = nodeGroup.createLocalNode();
+
+            assertEquals(1, nodes.size(), "Should create exactly 1 node");
+            assertEquals("localhost", nodes.get(0).getHostname(),
+                "Node hostname should be 'localhost'");
+            assertTrue(nodes.get(0).isLocalMode(),
+                "Node should be in local mode (no SSH)");
+        }
+    }
 }

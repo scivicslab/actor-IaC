@@ -277,4 +277,32 @@ class NodeGroupTest {
         // ansible_user should still work when actoriac_user is not specified
         assertEquals("ansible_only", mixed2.getUser(), "ansible_* should work as fallback");
     }
+
+    @Test
+    @DisplayName("Should create localhost node without inventory")
+    void testCreateLocalNode() {
+        // createLocalNode() should work without loading any inventory
+        List<Node> localNodes = nodeGroup.createLocalNode();
+
+        assertEquals(1, localNodes.size(), "Should create exactly 1 localhost node");
+
+        Node localhost = localNodes.get(0);
+        assertEquals("localhost", localhost.getHostname(), "Hostname should be 'localhost'");
+        assertEquals(System.getProperty("user.name"), localhost.getUser(),
+            "User should be current system user");
+        assertTrue(localhost.isLocalMode(), "Node should be in local mode");
+    }
+
+    @Test
+    @DisplayName("createLocalNode() should not require loadInventory()")
+    void testCreateLocalNodeWithoutInventory() {
+        // This is a regression test to ensure createLocalNode() doesn't throw
+        // IllegalStateException even when inventory is not loaded
+        NodeGroup emptyNodeGroup = new NodeGroup();
+
+        assertDoesNotThrow(() -> {
+            List<Node> nodes = emptyNodeGroup.createLocalNode();
+            assertFalse(nodes.isEmpty(), "Should return at least one node");
+        }, "createLocalNode() should work without inventory");
+    }
 }

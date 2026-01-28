@@ -702,474 +702,476 @@
 <span class="source-line-no">689</span><span id="line-689">                return 1;</span>
 <span class="source-line-no">690</span><span id="line-690">            }</span>
 <span class="source-line-no">691</span><span id="line-691"></span>
-<span class="source-line-no">692</span><span id="line-692">            // Step 3.5: Create node actors if group is specified</span>
-<span class="source-line-no">693</span><span id="line-693">            if (groupName != null) {</span>
-<span class="source-line-no">694</span><span id="line-694">                LOG.info("Creating node actors for group: " + groupName);</span>
-<span class="source-line-no">695</span><span id="line-695">                logToDb("cli", LogLevel.INFO, "Creating node actors for group: " + groupName);</span>
-<span class="source-line-no">696</span><span id="line-696">                ActionResult createResult = nodeGroupActor.callByActionName("createNodeActors", "[\"" + groupName + "\"]");</span>
-<span class="source-line-no">697</span><span id="line-697">                if (!createResult.isSuccess()) {</span>
-<span class="source-line-no">698</span><span id="line-698">                    LOG.severe("Failed to create node actors: " + createResult.getResult());</span>
-<span class="source-line-no">699</span><span id="line-699">                    logToDb("cli", LogLevel.ERROR, "Failed to create node actors: " + createResult.getResult());</span>
-<span class="source-line-no">700</span><span id="line-700">                    endSession(SessionStatus.FAILED);</span>
-<span class="source-line-no">701</span><span id="line-701">                    return 1;</span>
-<span class="source-line-no">702</span><span id="line-702">                }</span>
-<span class="source-line-no">703</span><span id="line-703">                LOG.info("Node actors created: " + createResult.getResult());</span>
-<span class="source-line-no">704</span><span id="line-704">            }</span>
-<span class="source-line-no">705</span><span id="line-705"></span>
-<span class="source-line-no">706</span><span id="line-706">            // Step 4: Execute the workflow</span>
-<span class="source-line-no">707</span><span id="line-707">            LOG.info("Starting workflow execution...");</span>
-<span class="source-line-no">708</span><span id="line-708">            LOG.info("Max steps: " + maxSteps);</span>
-<span class="source-line-no">709</span><span id="line-709">            LOG.info("-".repeat(50));</span>
-<span class="source-line-no">710</span><span id="line-710">            logToDb("cli", LogLevel.INFO, "Starting workflow execution (max steps: " + maxSteps + ")");</span>
-<span class="source-line-no">711</span><span id="line-711"></span>
-<span class="source-line-no">712</span><span id="line-712">            long startTime = System.currentTimeMillis();</span>
-<span class="source-line-no">713</span><span id="line-713">            ActionResult result = nodeGroupActor.callByActionName("runUntilEnd", "[" + maxSteps + "]");</span>
-<span class="source-line-no">714</span><span id="line-714">            long duration = System.currentTimeMillis() - startTime;</span>
-<span class="source-line-no">715</span><span id="line-715"></span>
-<span class="source-line-no">716</span><span id="line-716">            LOG.info("-".repeat(50));</span>
-<span class="source-line-no">717</span><span id="line-717">            if (result.isSuccess()) {</span>
-<span class="source-line-no">718</span><span id="line-718">                LOG.info("Workflow completed successfully: " + result.getResult());</span>
-<span class="source-line-no">719</span><span id="line-719">                logToDb("cli", LogLevel.INFO, "Workflow completed successfully in " + duration + "ms");</span>
-<span class="source-line-no">720</span><span id="line-720">                endSession(SessionStatus.COMPLETED);</span>
-<span class="source-line-no">721</span><span id="line-721">                return 0;</span>
-<span class="source-line-no">722</span><span id="line-722">            } else {</span>
-<span class="source-line-no">723</span><span id="line-723">                LOG.severe("Workflow failed: " + result.getResult());</span>
-<span class="source-line-no">724</span><span id="line-724">                logToDb("cli", LogLevel.ERROR, "Workflow failed: " + result.getResult());</span>
-<span class="source-line-no">725</span><span id="line-725">                endSession(SessionStatus.FAILED);</span>
-<span class="source-line-no">726</span><span id="line-726">                return 1;</span>
-<span class="source-line-no">727</span><span id="line-727">            }</span>
-<span class="source-line-no">728</span><span id="line-728"></span>
-<span class="source-line-no">729</span><span id="line-729">        } catch (Exception e) {</span>
-<span class="source-line-no">730</span><span id="line-730">            LOG.log(Level.SEVERE, "Workflow execution failed", e);</span>
-<span class="source-line-no">731</span><span id="line-731">            logToDb("cli", LogLevel.ERROR, "Exception: " + e.getMessage());</span>
-<span class="source-line-no">732</span><span id="line-732">            endSession(SessionStatus.FAILED);</span>
-<span class="source-line-no">733</span><span id="line-733">            return 1;</span>
-<span class="source-line-no">734</span><span id="line-734">        } finally {</span>
-<span class="source-line-no">735</span><span id="line-735">            system.terminate();</span>
-<span class="source-line-no">736</span><span id="line-736">        }</span>
-<span class="source-line-no">737</span><span id="line-737">    }</span>
-<span class="source-line-no">738</span><span id="line-738"></span>
-<span class="source-line-no">739</span><span id="line-739">    /**</span>
-<span class="source-line-no">740</span><span id="line-740">     * Logs a message to the distributed log store if available.</span>
-<span class="source-line-no">741</span><span id="line-741">     */</span>
-<span class="source-line-no">742</span><span id="line-742">    private void logToDb(String nodeId, LogLevel level, String message) {</span>
-<span class="source-line-no">743</span><span id="line-743">        if (logStore != null &amp;&amp; sessionId &gt;= 0) {</span>
-<span class="source-line-no">744</span><span id="line-744">            logStore.log(sessionId, nodeId, level, message);</span>
-<span class="source-line-no">745</span><span id="line-745">        }</span>
-<span class="source-line-no">746</span><span id="line-746">    }</span>
-<span class="source-line-no">747</span><span id="line-747"></span>
-<span class="source-line-no">748</span><span id="line-748">    /**</span>
-<span class="source-line-no">749</span><span id="line-749">     * Ends the current session with the given status.</span>
-<span class="source-line-no">750</span><span id="line-750">     */</span>
-<span class="source-line-no">751</span><span id="line-751">    private void endSession(SessionStatus status) {</span>
-<span class="source-line-no">752</span><span id="line-752">        if (logStore != null &amp;&amp; sessionId &gt;= 0) {</span>
-<span class="source-line-no">753</span><span id="line-753">            logStore.endSession(sessionId, status);</span>
-<span class="source-line-no">754</span><span id="line-754">        }</span>
-<span class="source-line-no">755</span><span id="line-755">    }</span>
-<span class="source-line-no">756</span><span id="line-756"></span>
-<span class="source-line-no">757</span><span id="line-757">    /**</span>
-<span class="source-line-no">758</span><span id="line-758">     * Prompts for a password from the console.</span>
-<span class="source-line-no">759</span><span id="line-759">     */</span>
-<span class="source-line-no">760</span><span id="line-760">    private String promptForPassword(String prompt) {</span>
-<span class="source-line-no">761</span><span id="line-761">        java.io.Console console = System.console();</span>
-<span class="source-line-no">762</span><span id="line-762">        if (console != null) {</span>
-<span class="source-line-no">763</span><span id="line-763">            // Secure input - password not echoed</span>
-<span class="source-line-no">764</span><span id="line-764">            char[] passwordChars = console.readPassword(prompt);</span>
-<span class="source-line-no">765</span><span id="line-765">            if (passwordChars != null) {</span>
-<span class="source-line-no">766</span><span id="line-766">                return new String(passwordChars);</span>
-<span class="source-line-no">767</span><span id="line-767">            }</span>
-<span class="source-line-no">768</span><span id="line-768">            return null;</span>
-<span class="source-line-no">769</span><span id="line-769">        } else {</span>
-<span class="source-line-no">770</span><span id="line-770">            // Fallback for environments without console (e.g., IDE)</span>
-<span class="source-line-no">771</span><span id="line-771">            System.out.print(prompt);</span>
-<span class="source-line-no">772</span><span id="line-772">            try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {</span>
-<span class="source-line-no">773</span><span id="line-773">                if (scanner.hasNextLine()) {</span>
-<span class="source-line-no">774</span><span id="line-774">                    return scanner.nextLine();</span>
-<span class="source-line-no">775</span><span id="line-775">                }</span>
-<span class="source-line-no">776</span><span id="line-776">            }</span>
-<span class="source-line-no">777</span><span id="line-777">            return null;</span>
-<span class="source-line-no">778</span><span id="line-778">        }</span>
-<span class="source-line-no">779</span><span id="line-779">    }</span>
-<span class="source-line-no">780</span><span id="line-780"></span>
-<span class="source-line-no">781</span><span id="line-781">    /**</span>
-<span class="source-line-no">782</span><span id="line-782">     * Scans the immediate directory for workflow files (non-recursive).</span>
-<span class="source-line-no">783</span><span id="line-783">     *</span>
-<span class="source-line-no">784</span><span id="line-784">     * @since 2.12.1</span>
-<span class="source-line-no">785</span><span id="line-785">     */</span>
-<span class="source-line-no">786</span><span id="line-786">    private void scanWorkflowDirectory(Path dir) {</span>
-<span class="source-line-no">787</span><span id="line-787">        try (Stream&lt;Path&gt; paths = Files.list(dir)) {</span>
-<span class="source-line-no">788</span><span id="line-788">            paths.filter(Files::isRegularFile)</span>
-<span class="source-line-no">789</span><span id="line-789">                 .filter(this::isWorkflowFile)</span>
-<span class="source-line-no">790</span><span id="line-790">                 .forEach(this::registerWorkflowFile);</span>
-<span class="source-line-no">791</span><span id="line-791">        } catch (IOException e) {</span>
-<span class="source-line-no">792</span><span id="line-792">            LOG.warning("Error scanning directory: " + e.getMessage());</span>
-<span class="source-line-no">793</span><span id="line-793">        }</span>
-<span class="source-line-no">794</span><span id="line-794">    }</span>
-<span class="source-line-no">795</span><span id="line-795"></span>
-<span class="source-line-no">796</span><span id="line-796">    /**</span>
-<span class="source-line-no">797</span><span id="line-797">     * Checks if a file is a workflow file (YAML, JSON, or XML).</span>
-<span class="source-line-no">798</span><span id="line-798">     */</span>
-<span class="source-line-no">799</span><span id="line-799">    private boolean isWorkflowFile(Path path) {</span>
-<span class="source-line-no">800</span><span id="line-800">        String name = path.getFileName().toString().toLowerCase();</span>
-<span class="source-line-no">801</span><span id="line-801">        return name.endsWith(".yaml") || name.endsWith(".yml") ||</span>
-<span class="source-line-no">802</span><span id="line-802">               name.endsWith(".json") || name.endsWith(".xml");</span>
-<span class="source-line-no">803</span><span id="line-803">    }</span>
-<span class="source-line-no">804</span><span id="line-804"></span>
-<span class="source-line-no">805</span><span id="line-805">    /**</span>
-<span class="source-line-no">806</span><span id="line-806">     * Registers a workflow file in the cache.</span>
-<span class="source-line-no">807</span><span id="line-807">     */</span>
-<span class="source-line-no">808</span><span id="line-808">    private void registerWorkflowFile(Path path) {</span>
-<span class="source-line-no">809</span><span id="line-809">        File file = path.toFile();</span>
-<span class="source-line-no">810</span><span id="line-810">        String fileName = file.getName();</span>
-<span class="source-line-no">811</span><span id="line-811"></span>
-<span class="source-line-no">812</span><span id="line-812">        // Register with full filename</span>
-<span class="source-line-no">813</span><span id="line-813">        workflowCache.put(fileName, file);</span>
-<span class="source-line-no">814</span><span id="line-814"></span>
-<span class="source-line-no">815</span><span id="line-815">        // Register without extension</span>
-<span class="source-line-no">816</span><span id="line-816">        int dotIndex = fileName.lastIndexOf('.');</span>
-<span class="source-line-no">817</span><span id="line-817">        if (dotIndex &gt; 0) {</span>
-<span class="source-line-no">818</span><span id="line-818">            String baseName = fileName.substring(0, dotIndex);</span>
-<span class="source-line-no">819</span><span id="line-819">            // Only register base name if not already taken by another file</span>
-<span class="source-line-no">820</span><span id="line-820">            workflowCache.putIfAbsent(baseName, file);</span>
-<span class="source-line-no">821</span><span id="line-821">        }</span>
-<span class="source-line-no">822</span><span id="line-822">    }</span>
-<span class="source-line-no">823</span><span id="line-823"></span>
-<span class="source-line-no">824</span><span id="line-824">    /**</span>
-<span class="source-line-no">825</span><span id="line-825">     * Finds a workflow file by path relative to workflowDir.</span>
-<span class="source-line-no">826</span><span id="line-826">     *</span>
-<span class="source-line-no">827</span><span id="line-827">     * &lt;p&gt;Supports paths like "sysinfo/main-collect-sysinfo.yaml" or</span>
-<span class="source-line-no">828</span><span id="line-828">     * "sysinfo/main-collect-sysinfo" (extension auto-detected).&lt;/p&gt;</span>
-<span class="source-line-no">829</span><span id="line-829">     *</span>
-<span class="source-line-no">830</span><span id="line-830">     * @param path workflow file path relative to workflowDir</span>
-<span class="source-line-no">831</span><span id="line-831">     * @return the workflow file, or null if not found</span>
-<span class="source-line-no">832</span><span id="line-832">     * @since 2.12.1</span>
-<span class="source-line-no">833</span><span id="line-833">     */</span>
-<span class="source-line-no">834</span><span id="line-834">    public File findWorkflowFile(String path) {</span>
-<span class="source-line-no">835</span><span id="line-835">        // Resolve path relative to workflowDir</span>
-<span class="source-line-no">836</span><span id="line-836">        File file = new File(workflowDir, path);</span>
-<span class="source-line-no">837</span><span id="line-837"></span>
-<span class="source-line-no">838</span><span id="line-838">        // Try exact path first</span>
-<span class="source-line-no">839</span><span id="line-839">        if (file.isFile()) {</span>
-<span class="source-line-no">840</span><span id="line-840">            return file;</span>
-<span class="source-line-no">841</span><span id="line-841">        }</span>
-<span class="source-line-no">842</span><span id="line-842"></span>
-<span class="source-line-no">843</span><span id="line-843">        // Try with common extensions</span>
-<span class="source-line-no">844</span><span id="line-844">        String[] extensions = {".yaml", ".yml", ".json", ".xml"};</span>
-<span class="source-line-no">845</span><span id="line-845">        for (String ext : extensions) {</span>
-<span class="source-line-no">846</span><span id="line-846">            File candidate = new File(workflowDir, path + ext);</span>
-<span class="source-line-no">847</span><span id="line-847">            if (candidate.isFile()) {</span>
-<span class="source-line-no">848</span><span id="line-848">                return candidate;</span>
-<span class="source-line-no">849</span><span id="line-849">            }</span>
-<span class="source-line-no">850</span><span id="line-850">        }</span>
-<span class="source-line-no">851</span><span id="line-851"></span>
-<span class="source-line-no">852</span><span id="line-852">        return null;</span>
-<span class="source-line-no">853</span><span id="line-853">    }</span>
-<span class="source-line-no">854</span><span id="line-854"></span>
-<span class="source-line-no">855</span><span id="line-855">    /**</span>
-<span class="source-line-no">856</span><span id="line-856">     * Loads the main workflow file with optional overlay support.</span>
-<span class="source-line-no">857</span><span id="line-857">     */</span>
-<span class="source-line-no">858</span><span id="line-858">    private ActionResult loadMainWorkflow(NodeGroupIIAR nodeGroupActor, File workflowFile, File overlayDir) {</span>
-<span class="source-line-no">859</span><span id="line-859">        LOG.info("Loading workflow: " + workflowFile.getAbsolutePath());</span>
-<span class="source-line-no">860</span><span id="line-860">        logToDb("cli", LogLevel.INFO, "Loading workflow: " + workflowFile.getName());</span>
-<span class="source-line-no">861</span><span id="line-861"></span>
-<span class="source-line-no">862</span><span id="line-862">        String loadArg;</span>
-<span class="source-line-no">863</span><span id="line-863">        if (overlayDir != null) {</span>
-<span class="source-line-no">864</span><span id="line-864">            // Pass both workflow path and overlay directory</span>
-<span class="source-line-no">865</span><span id="line-865">            loadArg = "[\"" + workflowFile.getAbsolutePath() + "\", \"" + overlayDir.getAbsolutePath() + "\"]";</span>
-<span class="source-line-no">866</span><span id="line-866">            LOG.fine("Loading with overlay: " + overlayDir.getAbsolutePath());</span>
-<span class="source-line-no">867</span><span id="line-867">        } else {</span>
-<span class="source-line-no">868</span><span id="line-868">            // Load without overlay</span>
-<span class="source-line-no">869</span><span id="line-869">            loadArg = "[\"" + workflowFile.getAbsolutePath() + "\"]";</span>
-<span class="source-line-no">870</span><span id="line-870">        }</span>
-<span class="source-line-no">871</span><span id="line-871"></span>
-<span class="source-line-no">872</span><span id="line-872">        return nodeGroupActor.callByActionName("readYaml", loadArg);</span>
-<span class="source-line-no">873</span><span id="line-873">    }</span>
-<span class="source-line-no">874</span><span id="line-874"></span>
-<span class="source-line-no">875</span><span id="line-875">    private void printWorkflowList() {</span>
-<span class="source-line-no">876</span><span id="line-876">        List&lt;WorkflowDisplay&gt; displays = scanWorkflowsForDisplay(workflowDir);</span>
-<span class="source-line-no">877</span><span id="line-877"></span>
-<span class="source-line-no">878</span><span id="line-878">        if (displays.isEmpty()) {</span>
-<span class="source-line-no">879</span><span id="line-879">            System.out.println("No workflow files found under "</span>
-<span class="source-line-no">880</span><span id="line-880">                + workflowDir.getAbsolutePath());</span>
-<span class="source-line-no">881</span><span id="line-881">            return;</span>
-<span class="source-line-no">882</span><span id="line-882">        }</span>
-<span class="source-line-no">883</span><span id="line-883"></span>
-<span class="source-line-no">884</span><span id="line-884">        System.out.println("Available workflows (directory: "</span>
-<span class="source-line-no">885</span><span id="line-885">            + workflowDir.getAbsolutePath() + ")");</span>
-<span class="source-line-no">886</span><span id="line-886">        System.out.println("-".repeat(90));</span>
-<span class="source-line-no">887</span><span id="line-887">        System.out.printf("%-4s %-25s %-35s %s%n", "#", "File (-w)", "Path", "Workflow Name (in logs)");</span>
+<span class="source-line-no">692</span><span id="line-692">            // Step 3.5: Create node actors</span>
+<span class="source-line-no">693</span><span id="line-693">            // If no inventory file is specified, use "local" group for localhost execution</span>
+<span class="source-line-no">694</span><span id="line-694">            String effectiveGroup = (inventoryFile == null) ? "local" : groupName;</span>
+<span class="source-line-no">695</span><span id="line-695">            if (effectiveGroup != null) {</span>
+<span class="source-line-no">696</span><span id="line-696">                LOG.info("Creating node actors for group: " + effectiveGroup);</span>
+<span class="source-line-no">697</span><span id="line-697">                logToDb("cli", LogLevel.INFO, "Creating node actors for group: " + effectiveGroup);</span>
+<span class="source-line-no">698</span><span id="line-698">                ActionResult createResult = nodeGroupActor.callByActionName("createNodeActors", "[\"" + effectiveGroup + "\"]");</span>
+<span class="source-line-no">699</span><span id="line-699">                if (!createResult.isSuccess()) {</span>
+<span class="source-line-no">700</span><span id="line-700">                    LOG.severe("Failed to create node actors: " + createResult.getResult());</span>
+<span class="source-line-no">701</span><span id="line-701">                    logToDb("cli", LogLevel.ERROR, "Failed to create node actors: " + createResult.getResult());</span>
+<span class="source-line-no">702</span><span id="line-702">                    endSession(SessionStatus.FAILED);</span>
+<span class="source-line-no">703</span><span id="line-703">                    return 1;</span>
+<span class="source-line-no">704</span><span id="line-704">                }</span>
+<span class="source-line-no">705</span><span id="line-705">                LOG.info("Node actors created: " + createResult.getResult());</span>
+<span class="source-line-no">706</span><span id="line-706">            }</span>
+<span class="source-line-no">707</span><span id="line-707"></span>
+<span class="source-line-no">708</span><span id="line-708">            // Step 4: Execute the workflow</span>
+<span class="source-line-no">709</span><span id="line-709">            LOG.info("Starting workflow execution...");</span>
+<span class="source-line-no">710</span><span id="line-710">            LOG.info("Max steps: " + maxSteps);</span>
+<span class="source-line-no">711</span><span id="line-711">            LOG.info("-".repeat(50));</span>
+<span class="source-line-no">712</span><span id="line-712">            logToDb("cli", LogLevel.INFO, "Starting workflow execution (max steps: " + maxSteps + ")");</span>
+<span class="source-line-no">713</span><span id="line-713"></span>
+<span class="source-line-no">714</span><span id="line-714">            long startTime = System.currentTimeMillis();</span>
+<span class="source-line-no">715</span><span id="line-715">            ActionResult result = nodeGroupActor.callByActionName("runUntilEnd", "[" + maxSteps + "]");</span>
+<span class="source-line-no">716</span><span id="line-716">            long duration = System.currentTimeMillis() - startTime;</span>
+<span class="source-line-no">717</span><span id="line-717"></span>
+<span class="source-line-no">718</span><span id="line-718">            LOG.info("-".repeat(50));</span>
+<span class="source-line-no">719</span><span id="line-719">            if (result.isSuccess()) {</span>
+<span class="source-line-no">720</span><span id="line-720">                LOG.info("Workflow completed successfully: " + result.getResult());</span>
+<span class="source-line-no">721</span><span id="line-721">                logToDb("cli", LogLevel.INFO, "Workflow completed successfully in " + duration + "ms");</span>
+<span class="source-line-no">722</span><span id="line-722">                endSession(SessionStatus.COMPLETED);</span>
+<span class="source-line-no">723</span><span id="line-723">                return 0;</span>
+<span class="source-line-no">724</span><span id="line-724">            } else {</span>
+<span class="source-line-no">725</span><span id="line-725">                LOG.severe("Workflow failed: " + result.getResult());</span>
+<span class="source-line-no">726</span><span id="line-726">                logToDb("cli", LogLevel.ERROR, "Workflow failed: " + result.getResult());</span>
+<span class="source-line-no">727</span><span id="line-727">                endSession(SessionStatus.FAILED);</span>
+<span class="source-line-no">728</span><span id="line-728">                return 1;</span>
+<span class="source-line-no">729</span><span id="line-729">            }</span>
+<span class="source-line-no">730</span><span id="line-730"></span>
+<span class="source-line-no">731</span><span id="line-731">        } catch (Exception e) {</span>
+<span class="source-line-no">732</span><span id="line-732">            LOG.log(Level.SEVERE, "Workflow execution failed", e);</span>
+<span class="source-line-no">733</span><span id="line-733">            logToDb("cli", LogLevel.ERROR, "Exception: " + e.getMessage());</span>
+<span class="source-line-no">734</span><span id="line-734">            endSession(SessionStatus.FAILED);</span>
+<span class="source-line-no">735</span><span id="line-735">            return 1;</span>
+<span class="source-line-no">736</span><span id="line-736">        } finally {</span>
+<span class="source-line-no">737</span><span id="line-737">            system.terminate();</span>
+<span class="source-line-no">738</span><span id="line-738">        }</span>
+<span class="source-line-no">739</span><span id="line-739">    }</span>
+<span class="source-line-no">740</span><span id="line-740"></span>
+<span class="source-line-no">741</span><span id="line-741">    /**</span>
+<span class="source-line-no">742</span><span id="line-742">     * Logs a message to the distributed log store if available.</span>
+<span class="source-line-no">743</span><span id="line-743">     */</span>
+<span class="source-line-no">744</span><span id="line-744">    private void logToDb(String nodeId, LogLevel level, String message) {</span>
+<span class="source-line-no">745</span><span id="line-745">        if (logStore != null &amp;&amp; sessionId &gt;= 0) {</span>
+<span class="source-line-no">746</span><span id="line-746">            logStore.log(sessionId, nodeId, level, message);</span>
+<span class="source-line-no">747</span><span id="line-747">        }</span>
+<span class="source-line-no">748</span><span id="line-748">    }</span>
+<span class="source-line-no">749</span><span id="line-749"></span>
+<span class="source-line-no">750</span><span id="line-750">    /**</span>
+<span class="source-line-no">751</span><span id="line-751">     * Ends the current session with the given status.</span>
+<span class="source-line-no">752</span><span id="line-752">     */</span>
+<span class="source-line-no">753</span><span id="line-753">    private void endSession(SessionStatus status) {</span>
+<span class="source-line-no">754</span><span id="line-754">        if (logStore != null &amp;&amp; sessionId &gt;= 0) {</span>
+<span class="source-line-no">755</span><span id="line-755">            logStore.endSession(sessionId, status);</span>
+<span class="source-line-no">756</span><span id="line-756">        }</span>
+<span class="source-line-no">757</span><span id="line-757">    }</span>
+<span class="source-line-no">758</span><span id="line-758"></span>
+<span class="source-line-no">759</span><span id="line-759">    /**</span>
+<span class="source-line-no">760</span><span id="line-760">     * Prompts for a password from the console.</span>
+<span class="source-line-no">761</span><span id="line-761">     */</span>
+<span class="source-line-no">762</span><span id="line-762">    private String promptForPassword(String prompt) {</span>
+<span class="source-line-no">763</span><span id="line-763">        java.io.Console console = System.console();</span>
+<span class="source-line-no">764</span><span id="line-764">        if (console != null) {</span>
+<span class="source-line-no">765</span><span id="line-765">            // Secure input - password not echoed</span>
+<span class="source-line-no">766</span><span id="line-766">            char[] passwordChars = console.readPassword(prompt);</span>
+<span class="source-line-no">767</span><span id="line-767">            if (passwordChars != null) {</span>
+<span class="source-line-no">768</span><span id="line-768">                return new String(passwordChars);</span>
+<span class="source-line-no">769</span><span id="line-769">            }</span>
+<span class="source-line-no">770</span><span id="line-770">            return null;</span>
+<span class="source-line-no">771</span><span id="line-771">        } else {</span>
+<span class="source-line-no">772</span><span id="line-772">            // Fallback for environments without console (e.g., IDE)</span>
+<span class="source-line-no">773</span><span id="line-773">            System.out.print(prompt);</span>
+<span class="source-line-no">774</span><span id="line-774">            try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {</span>
+<span class="source-line-no">775</span><span id="line-775">                if (scanner.hasNextLine()) {</span>
+<span class="source-line-no">776</span><span id="line-776">                    return scanner.nextLine();</span>
+<span class="source-line-no">777</span><span id="line-777">                }</span>
+<span class="source-line-no">778</span><span id="line-778">            }</span>
+<span class="source-line-no">779</span><span id="line-779">            return null;</span>
+<span class="source-line-no">780</span><span id="line-780">        }</span>
+<span class="source-line-no">781</span><span id="line-781">    }</span>
+<span class="source-line-no">782</span><span id="line-782"></span>
+<span class="source-line-no">783</span><span id="line-783">    /**</span>
+<span class="source-line-no">784</span><span id="line-784">     * Scans the immediate directory for workflow files (non-recursive).</span>
+<span class="source-line-no">785</span><span id="line-785">     *</span>
+<span class="source-line-no">786</span><span id="line-786">     * @since 2.12.1</span>
+<span class="source-line-no">787</span><span id="line-787">     */</span>
+<span class="source-line-no">788</span><span id="line-788">    private void scanWorkflowDirectory(Path dir) {</span>
+<span class="source-line-no">789</span><span id="line-789">        try (Stream&lt;Path&gt; paths = Files.list(dir)) {</span>
+<span class="source-line-no">790</span><span id="line-790">            paths.filter(Files::isRegularFile)</span>
+<span class="source-line-no">791</span><span id="line-791">                 .filter(this::isWorkflowFile)</span>
+<span class="source-line-no">792</span><span id="line-792">                 .forEach(this::registerWorkflowFile);</span>
+<span class="source-line-no">793</span><span id="line-793">        } catch (IOException e) {</span>
+<span class="source-line-no">794</span><span id="line-794">            LOG.warning("Error scanning directory: " + e.getMessage());</span>
+<span class="source-line-no">795</span><span id="line-795">        }</span>
+<span class="source-line-no">796</span><span id="line-796">    }</span>
+<span class="source-line-no">797</span><span id="line-797"></span>
+<span class="source-line-no">798</span><span id="line-798">    /**</span>
+<span class="source-line-no">799</span><span id="line-799">     * Checks if a file is a workflow file (YAML, JSON, or XML).</span>
+<span class="source-line-no">800</span><span id="line-800">     */</span>
+<span class="source-line-no">801</span><span id="line-801">    private boolean isWorkflowFile(Path path) {</span>
+<span class="source-line-no">802</span><span id="line-802">        String name = path.getFileName().toString().toLowerCase();</span>
+<span class="source-line-no">803</span><span id="line-803">        return name.endsWith(".yaml") || name.endsWith(".yml") ||</span>
+<span class="source-line-no">804</span><span id="line-804">               name.endsWith(".json") || name.endsWith(".xml");</span>
+<span class="source-line-no">805</span><span id="line-805">    }</span>
+<span class="source-line-no">806</span><span id="line-806"></span>
+<span class="source-line-no">807</span><span id="line-807">    /**</span>
+<span class="source-line-no">808</span><span id="line-808">     * Registers a workflow file in the cache.</span>
+<span class="source-line-no">809</span><span id="line-809">     */</span>
+<span class="source-line-no">810</span><span id="line-810">    private void registerWorkflowFile(Path path) {</span>
+<span class="source-line-no">811</span><span id="line-811">        File file = path.toFile();</span>
+<span class="source-line-no">812</span><span id="line-812">        String fileName = file.getName();</span>
+<span class="source-line-no">813</span><span id="line-813"></span>
+<span class="source-line-no">814</span><span id="line-814">        // Register with full filename</span>
+<span class="source-line-no">815</span><span id="line-815">        workflowCache.put(fileName, file);</span>
+<span class="source-line-no">816</span><span id="line-816"></span>
+<span class="source-line-no">817</span><span id="line-817">        // Register without extension</span>
+<span class="source-line-no">818</span><span id="line-818">        int dotIndex = fileName.lastIndexOf('.');</span>
+<span class="source-line-no">819</span><span id="line-819">        if (dotIndex &gt; 0) {</span>
+<span class="source-line-no">820</span><span id="line-820">            String baseName = fileName.substring(0, dotIndex);</span>
+<span class="source-line-no">821</span><span id="line-821">            // Only register base name if not already taken by another file</span>
+<span class="source-line-no">822</span><span id="line-822">            workflowCache.putIfAbsent(baseName, file);</span>
+<span class="source-line-no">823</span><span id="line-823">        }</span>
+<span class="source-line-no">824</span><span id="line-824">    }</span>
+<span class="source-line-no">825</span><span id="line-825"></span>
+<span class="source-line-no">826</span><span id="line-826">    /**</span>
+<span class="source-line-no">827</span><span id="line-827">     * Finds a workflow file by path relative to workflowDir.</span>
+<span class="source-line-no">828</span><span id="line-828">     *</span>
+<span class="source-line-no">829</span><span id="line-829">     * &lt;p&gt;Supports paths like "sysinfo/main-collect-sysinfo.yaml" or</span>
+<span class="source-line-no">830</span><span id="line-830">     * "sysinfo/main-collect-sysinfo" (extension auto-detected).&lt;/p&gt;</span>
+<span class="source-line-no">831</span><span id="line-831">     *</span>
+<span class="source-line-no">832</span><span id="line-832">     * @param path workflow file path relative to workflowDir</span>
+<span class="source-line-no">833</span><span id="line-833">     * @return the workflow file, or null if not found</span>
+<span class="source-line-no">834</span><span id="line-834">     * @since 2.12.1</span>
+<span class="source-line-no">835</span><span id="line-835">     */</span>
+<span class="source-line-no">836</span><span id="line-836">    public File findWorkflowFile(String path) {</span>
+<span class="source-line-no">837</span><span id="line-837">        // Resolve path relative to workflowDir</span>
+<span class="source-line-no">838</span><span id="line-838">        File file = new File(workflowDir, path);</span>
+<span class="source-line-no">839</span><span id="line-839"></span>
+<span class="source-line-no">840</span><span id="line-840">        // Try exact path first</span>
+<span class="source-line-no">841</span><span id="line-841">        if (file.isFile()) {</span>
+<span class="source-line-no">842</span><span id="line-842">            return file;</span>
+<span class="source-line-no">843</span><span id="line-843">        }</span>
+<span class="source-line-no">844</span><span id="line-844"></span>
+<span class="source-line-no">845</span><span id="line-845">        // Try with common extensions</span>
+<span class="source-line-no">846</span><span id="line-846">        String[] extensions = {".yaml", ".yml", ".json", ".xml"};</span>
+<span class="source-line-no">847</span><span id="line-847">        for (String ext : extensions) {</span>
+<span class="source-line-no">848</span><span id="line-848">            File candidate = new File(workflowDir, path + ext);</span>
+<span class="source-line-no">849</span><span id="line-849">            if (candidate.isFile()) {</span>
+<span class="source-line-no">850</span><span id="line-850">                return candidate;</span>
+<span class="source-line-no">851</span><span id="line-851">            }</span>
+<span class="source-line-no">852</span><span id="line-852">        }</span>
+<span class="source-line-no">853</span><span id="line-853"></span>
+<span class="source-line-no">854</span><span id="line-854">        return null;</span>
+<span class="source-line-no">855</span><span id="line-855">    }</span>
+<span class="source-line-no">856</span><span id="line-856"></span>
+<span class="source-line-no">857</span><span id="line-857">    /**</span>
+<span class="source-line-no">858</span><span id="line-858">     * Loads the main workflow file with optional overlay support.</span>
+<span class="source-line-no">859</span><span id="line-859">     */</span>
+<span class="source-line-no">860</span><span id="line-860">    private ActionResult loadMainWorkflow(NodeGroupIIAR nodeGroupActor, File workflowFile, File overlayDir) {</span>
+<span class="source-line-no">861</span><span id="line-861">        LOG.info("Loading workflow: " + workflowFile.getAbsolutePath());</span>
+<span class="source-line-no">862</span><span id="line-862">        logToDb("cli", LogLevel.INFO, "Loading workflow: " + workflowFile.getName());</span>
+<span class="source-line-no">863</span><span id="line-863"></span>
+<span class="source-line-no">864</span><span id="line-864">        String loadArg;</span>
+<span class="source-line-no">865</span><span id="line-865">        if (overlayDir != null) {</span>
+<span class="source-line-no">866</span><span id="line-866">            // Pass both workflow path and overlay directory</span>
+<span class="source-line-no">867</span><span id="line-867">            loadArg = "[\"" + workflowFile.getAbsolutePath() + "\", \"" + overlayDir.getAbsolutePath() + "\"]";</span>
+<span class="source-line-no">868</span><span id="line-868">            LOG.fine("Loading with overlay: " + overlayDir.getAbsolutePath());</span>
+<span class="source-line-no">869</span><span id="line-869">        } else {</span>
+<span class="source-line-no">870</span><span id="line-870">            // Load without overlay</span>
+<span class="source-line-no">871</span><span id="line-871">            loadArg = "[\"" + workflowFile.getAbsolutePath() + "\"]";</span>
+<span class="source-line-no">872</span><span id="line-872">        }</span>
+<span class="source-line-no">873</span><span id="line-873"></span>
+<span class="source-line-no">874</span><span id="line-874">        return nodeGroupActor.callByActionName("readYaml", loadArg);</span>
+<span class="source-line-no">875</span><span id="line-875">    }</span>
+<span class="source-line-no">876</span><span id="line-876"></span>
+<span class="source-line-no">877</span><span id="line-877">    private void printWorkflowList() {</span>
+<span class="source-line-no">878</span><span id="line-878">        List&lt;WorkflowDisplay&gt; displays = scanWorkflowsForDisplay(workflowDir);</span>
+<span class="source-line-no">879</span><span id="line-879"></span>
+<span class="source-line-no">880</span><span id="line-880">        if (displays.isEmpty()) {</span>
+<span class="source-line-no">881</span><span id="line-881">            System.out.println("No workflow files found under "</span>
+<span class="source-line-no">882</span><span id="line-882">                + workflowDir.getAbsolutePath());</span>
+<span class="source-line-no">883</span><span id="line-883">            return;</span>
+<span class="source-line-no">884</span><span id="line-884">        }</span>
+<span class="source-line-no">885</span><span id="line-885"></span>
+<span class="source-line-no">886</span><span id="line-886">        System.out.println("Available workflows (directory: "</span>
+<span class="source-line-no">887</span><span id="line-887">            + workflowDir.getAbsolutePath() + ")");</span>
 <span class="source-line-no">888</span><span id="line-888">        System.out.println("-".repeat(90));</span>
-<span class="source-line-no">889</span><span id="line-889">        int index = 1;</span>
-<span class="source-line-no">890</span><span id="line-890">        for (WorkflowDisplay display : displays) {</span>
-<span class="source-line-no">891</span><span id="line-891">            String wfName = display.workflowName() != null ? display.workflowName() : "(no name)";</span>
-<span class="source-line-no">892</span><span id="line-892">            System.out.printf("%2d.  %-25s %-35s %s%n",</span>
-<span class="source-line-no">893</span><span id="line-893">                index++, display.baseName(), display.relativePath(), wfName);</span>
-<span class="source-line-no">894</span><span id="line-894">        }</span>
-<span class="source-line-no">895</span><span id="line-895">        System.out.println("-".repeat(90));</span>
-<span class="source-line-no">896</span><span id="line-896">        System.out.println("Use -w &lt;File&gt; with the names shown in the 'File (-w)' column.");</span>
-<span class="source-line-no">897</span><span id="line-897">    }</span>
-<span class="source-line-no">898</span><span id="line-898"></span>
-<span class="source-line-no">899</span><span id="line-899">    /**</span>
-<span class="source-line-no">900</span><span id="line-900">     * Prints available cowfiles for cowsay output customization.</span>
-<span class="source-line-no">901</span><span id="line-901">     */</span>
-<span class="source-line-no">902</span><span id="line-902">    private void printAvailableCowfiles() {</span>
-<span class="source-line-no">903</span><span id="line-903">        System.out.println("Available cowfiles for --cowfile option:");</span>
-<span class="source-line-no">904</span><span id="line-904">        System.out.println("=".repeat(70));</span>
-<span class="source-line-no">905</span><span id="line-905">        System.out.println();</span>
-<span class="source-line-no">906</span><span id="line-906"></span>
-<span class="source-line-no">907</span><span id="line-907">        // Get list from Cowsay library</span>
-<span class="source-line-no">908</span><span id="line-908">        String[] listArgs = { "-l" };</span>
-<span class="source-line-no">909</span><span id="line-909">        String cowList = com.github.ricksbrown.cowsay.Cowsay.say(listArgs);</span>
-<span class="source-line-no">910</span><span id="line-910"></span>
-<span class="source-line-no">911</span><span id="line-911">        // Split and format nicely</span>
-<span class="source-line-no">912</span><span id="line-912">        String[] cowfiles = cowList.trim().split("\\s+");</span>
-<span class="source-line-no">913</span><span id="line-913">        System.out.println("Total: " + cowfiles.length + " cowfiles");</span>
-<span class="source-line-no">914</span><span id="line-914">        System.out.println();</span>
-<span class="source-line-no">915</span><span id="line-915"></span>
-<span class="source-line-no">916</span><span id="line-916">        // Print in columns</span>
-<span class="source-line-no">917</span><span id="line-917">        int cols = 4;</span>
-<span class="source-line-no">918</span><span id="line-918">        int colWidth = 17;</span>
-<span class="source-line-no">919</span><span id="line-919">        for (int i = 0; i &lt; cowfiles.length; i++) {</span>
-<span class="source-line-no">920</span><span id="line-920">            System.out.printf("%-" + colWidth + "s", cowfiles[i]);</span>
-<span class="source-line-no">921</span><span id="line-921">            if ((i + 1) % cols == 0) {</span>
-<span class="source-line-no">922</span><span id="line-922">                System.out.println();</span>
-<span class="source-line-no">923</span><span id="line-923">            }</span>
-<span class="source-line-no">924</span><span id="line-924">        }</span>
-<span class="source-line-no">925</span><span id="line-925">        if (cowfiles.length % cols != 0) {</span>
-<span class="source-line-no">926</span><span id="line-926">            System.out.println();</span>
-<span class="source-line-no">927</span><span id="line-927">        }</span>
-<span class="source-line-no">928</span><span id="line-928"></span>
-<span class="source-line-no">929</span><span id="line-929">        System.out.println();</span>
-<span class="source-line-no">930</span><span id="line-930">        System.out.println("=".repeat(70));</span>
-<span class="source-line-no">931</span><span id="line-931">        System.out.println("Usage: actor_iac.java run -d &lt;dir&gt; -w &lt;workflow&gt; --cowfile tux");</span>
-<span class="source-line-no">932</span><span id="line-932">        System.out.println();</span>
-<span class="source-line-no">933</span><span id="line-933">        System.out.println("Popular choices:");</span>
-<span class="source-line-no">934</span><span id="line-934">        System.out.println("  tux         - Linux penguin (great for server work)");</span>
-<span class="source-line-no">935</span><span id="line-935">        System.out.println("  dragon      - Majestic dragon");</span>
-<span class="source-line-no">936</span><span id="line-936">        System.out.println("  stegosaurus - Prehistoric dinosaur");</span>
-<span class="source-line-no">937</span><span id="line-937">        System.out.println("  turtle      - Slow and steady");</span>
-<span class="source-line-no">938</span><span id="line-938">        System.out.println("  ghostbusters - Who you gonna call?");</span>
-<span class="source-line-no">939</span><span id="line-939">    }</span>
-<span class="source-line-no">940</span><span id="line-940"></span>
-<span class="source-line-no">941</span><span id="line-941">    private static String getBaseName(String fileName) {</span>
-<span class="source-line-no">942</span><span id="line-942">        int dotIndex = fileName.lastIndexOf('.');</span>
-<span class="source-line-no">943</span><span id="line-943">        if (dotIndex &gt; 0) {</span>
-<span class="source-line-no">944</span><span id="line-944">            return fileName.substring(0, dotIndex);</span>
-<span class="source-line-no">945</span><span id="line-945">        }</span>
-<span class="source-line-no">946</span><span id="line-946">        return fileName;</span>
-<span class="source-line-no">947</span><span id="line-947">    }</span>
-<span class="source-line-no">948</span><span id="line-948"></span>
-<span class="source-line-no">949</span><span id="line-949">    private static String relativize(Path base, Path target) {</span>
-<span class="source-line-no">950</span><span id="line-950">        try {</span>
-<span class="source-line-no">951</span><span id="line-951">            return base.relativize(target).toString();</span>
-<span class="source-line-no">952</span><span id="line-952">        } catch (IllegalArgumentException e) {</span>
-<span class="source-line-no">953</span><span id="line-953">            return target.toAbsolutePath().toString();</span>
-<span class="source-line-no">954</span><span id="line-954">        }</span>
-<span class="source-line-no">955</span><span id="line-955">    }</span>
-<span class="source-line-no">956</span><span id="line-956"></span>
-<span class="source-line-no">957</span><span id="line-957">    /**</span>
-<span class="source-line-no">958</span><span id="line-958">     * Scans the immediate directory for workflow files (non-recursive).</span>
-<span class="source-line-no">959</span><span id="line-959">     *</span>
-<span class="source-line-no">960</span><span id="line-960">     * @since 2.12.1</span>
-<span class="source-line-no">961</span><span id="line-961">     */</span>
-<span class="source-line-no">962</span><span id="line-962">    private static List&lt;WorkflowDisplay&gt; scanWorkflowsForDisplay(File directory) {</span>
-<span class="source-line-no">963</span><span id="line-963">        if (directory == null) {</span>
-<span class="source-line-no">964</span><span id="line-964">            return List.of();</span>
-<span class="source-line-no">965</span><span id="line-965">        }</span>
-<span class="source-line-no">966</span><span id="line-966"></span>
-<span class="source-line-no">967</span><span id="line-967">        try (Stream&lt;Path&gt; paths = Files.list(directory.toPath())) {</span>
-<span class="source-line-no">968</span><span id="line-968">            Map&lt;String, File&gt; uniqueFiles = new LinkedHashMap&lt;&gt;();</span>
-<span class="source-line-no">969</span><span id="line-969">            paths.filter(Files::isRegularFile)</span>
-<span class="source-line-no">970</span><span id="line-970">                 .filter(path -&gt; {</span>
-<span class="source-line-no">971</span><span id="line-971">                     String name = path.getFileName().toString().toLowerCase();</span>
-<span class="source-line-no">972</span><span id="line-972">                     return name.endsWith(".yaml") || name.endsWith(".yml")</span>
-<span class="source-line-no">973</span><span id="line-973">                         || name.endsWith(".json") || name.endsWith(".xml");</span>
-<span class="source-line-no">974</span><span id="line-974">                 })</span>
-<span class="source-line-no">975</span><span id="line-975">                 .forEach(path -&gt; uniqueFiles.putIfAbsent(path.toFile().getAbsolutePath(), path.toFile()));</span>
-<span class="source-line-no">976</span><span id="line-976"></span>
-<span class="source-line-no">977</span><span id="line-977">            Path basePath = directory.toPath();</span>
-<span class="source-line-no">978</span><span id="line-978">            return uniqueFiles.values().stream()</span>
-<span class="source-line-no">979</span><span id="line-979">                .map(file -&gt; new WorkflowDisplay(</span>
-<span class="source-line-no">980</span><span id="line-980">                    getBaseName(file.getName()),</span>
-<span class="source-line-no">981</span><span id="line-981">                    relativize(basePath, file.toPath()),</span>
-<span class="source-line-no">982</span><span id="line-982">                    extractWorkflowName(file)))</span>
-<span class="source-line-no">983</span><span id="line-983">                .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))</span>
-<span class="source-line-no">984</span><span id="line-984">                .collect(Collectors.toList());</span>
-<span class="source-line-no">985</span><span id="line-985">        } catch (IOException e) {</span>
-<span class="source-line-no">986</span><span id="line-986">            System.err.println("Failed to scan workflows: " + e.getMessage());</span>
-<span class="source-line-no">987</span><span id="line-987">            return List.of();</span>
-<span class="source-line-no">988</span><span id="line-988">        }</span>
-<span class="source-line-no">989</span><span id="line-989">    }</span>
-<span class="source-line-no">990</span><span id="line-990"></span>
-<span class="source-line-no">991</span><span id="line-991">    /**</span>
-<span class="source-line-no">992</span><span id="line-992">     * Extracts the workflow name from a YAML/JSON/XML file.</span>
-<span class="source-line-no">993</span><span id="line-993">     */</span>
-<span class="source-line-no">994</span><span id="line-994">    private static String extractWorkflowName(File file) {</span>
-<span class="source-line-no">995</span><span id="line-995">        String fileName = file.getName().toLowerCase();</span>
-<span class="source-line-no">996</span><span id="line-996">        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {</span>
-<span class="source-line-no">997</span><span id="line-997">            return extractNameFromYaml(file);</span>
-<span class="source-line-no">998</span><span id="line-998">        } else if (fileName.endsWith(".json")) {</span>
-<span class="source-line-no">999</span><span id="line-999">            return extractNameFromJson(file);</span>
-<span class="source-line-no">1000</span><span id="line-1000">        }</span>
-<span class="source-line-no">1001</span><span id="line-1001">        return null;</span>
-<span class="source-line-no">1002</span><span id="line-1002">    }</span>
-<span class="source-line-no">1003</span><span id="line-1003"></span>
-<span class="source-line-no">1004</span><span id="line-1004">    /**</span>
-<span class="source-line-no">1005</span><span id="line-1005">     * Extracts name field from YAML file using simple line parsing.</span>
-<span class="source-line-no">1006</span><span id="line-1006">     */</span>
-<span class="source-line-no">1007</span><span id="line-1007">    private static String extractNameFromYaml(File file) {</span>
-<span class="source-line-no">1008</span><span id="line-1008">        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {</span>
-<span class="source-line-no">1009</span><span id="line-1009">            String line;</span>
-<span class="source-line-no">1010</span><span id="line-1010">            while ((line = reader.readLine()) != null) {</span>
-<span class="source-line-no">1011</span><span id="line-1011">                line = line.trim();</span>
-<span class="source-line-no">1012</span><span id="line-1012">                // Look for "name: value" at the top level (not indented)</span>
-<span class="source-line-no">1013</span><span id="line-1013">                if (line.startsWith("name:")) {</span>
-<span class="source-line-no">1014</span><span id="line-1014">                    String value = line.substring(5).trim();</span>
-<span class="source-line-no">1015</span><span id="line-1015">                    // Remove quotes if present</span>
-<span class="source-line-no">1016</span><span id="line-1016">                    if ((value.startsWith("\"") &amp;&amp; value.endsWith("\"")) ||</span>
-<span class="source-line-no">1017</span><span id="line-1017">                        (value.startsWith("'") &amp;&amp; value.endsWith("'"))) {</span>
-<span class="source-line-no">1018</span><span id="line-1018">                        value = value.substring(1, value.length() - 1);</span>
-<span class="source-line-no">1019</span><span id="line-1019">                    }</span>
-<span class="source-line-no">1020</span><span id="line-1020">                    return value.isEmpty() ? null : value;</span>
-<span class="source-line-no">1021</span><span id="line-1021">                }</span>
-<span class="source-line-no">1022</span><span id="line-1022">                // Stop if we hit a steps: or other major section</span>
-<span class="source-line-no">1023</span><span id="line-1023">                if (line.startsWith("steps:") || line.startsWith("vertices:")) {</span>
-<span class="source-line-no">1024</span><span id="line-1024">                    break;</span>
-<span class="source-line-no">1025</span><span id="line-1025">                }</span>
-<span class="source-line-no">1026</span><span id="line-1026">            }</span>
-<span class="source-line-no">1027</span><span id="line-1027">        } catch (IOException e) {</span>
-<span class="source-line-no">1028</span><span id="line-1028">            // Ignore and return null</span>
-<span class="source-line-no">1029</span><span id="line-1029">        }</span>
-<span class="source-line-no">1030</span><span id="line-1030">        return null;</span>
-<span class="source-line-no">1031</span><span id="line-1031">    }</span>
-<span class="source-line-no">1032</span><span id="line-1032"></span>
-<span class="source-line-no">1033</span><span id="line-1033">    /**</span>
-<span class="source-line-no">1034</span><span id="line-1034">     * Extracts name field from JSON file.</span>
-<span class="source-line-no">1035</span><span id="line-1035">     */</span>
-<span class="source-line-no">1036</span><span id="line-1036">    private static String extractNameFromJson(File file) {</span>
-<span class="source-line-no">1037</span><span id="line-1037">        try (java.io.FileReader reader = new java.io.FileReader(file)) {</span>
-<span class="source-line-no">1038</span><span id="line-1038">            org.json.JSONTokener tokener = new org.json.JSONTokener(reader);</span>
-<span class="source-line-no">1039</span><span id="line-1039">            org.json.JSONObject json = new org.json.JSONObject(tokener);</span>
-<span class="source-line-no">1040</span><span id="line-1040">            return json.optString("name", null);</span>
-<span class="source-line-no">1041</span><span id="line-1041">        } catch (Exception e) {</span>
-<span class="source-line-no">1042</span><span id="line-1042">            // Ignore and return null</span>
-<span class="source-line-no">1043</span><span id="line-1043">        }</span>
-<span class="source-line-no">1044</span><span id="line-1044">        return null;</span>
-<span class="source-line-no">1045</span><span id="line-1045">    }</span>
-<span class="source-line-no">1046</span><span id="line-1046"></span>
-<span class="source-line-no">1047</span><span id="line-1047">    /**</span>
-<span class="source-line-no">1048</span><span id="line-1048">     * Record for displaying workflow information.</span>
-<span class="source-line-no">1049</span><span id="line-1049">     */</span>
-<span class="source-line-no">1050</span><span id="line-1050">    private static record WorkflowDisplay(String baseName, String relativePath, String workflowName) {}</span>
-<span class="source-line-no">1051</span><span id="line-1051"></span>
-<span class="source-line-no">1052</span><span id="line-1052">    /**</span>
-<span class="source-line-no">1053</span><span id="line-1053">     * Gets the git commit hash of the specified directory.</span>
-<span class="source-line-no">1054</span><span id="line-1054">     *</span>
-<span class="source-line-no">1055</span><span id="line-1055">     * @param dir directory to check (uses current directory if null)</span>
-<span class="source-line-no">1056</span><span id="line-1056">     * @return short git commit hash, or null if not a git repository</span>
-<span class="source-line-no">1057</span><span id="line-1057">     */</span>
-<span class="source-line-no">1058</span><span id="line-1058">    private String getGitCommit(File dir) {</span>
-<span class="source-line-no">1059</span><span id="line-1059">        try {</span>
-<span class="source-line-no">1060</span><span id="line-1060">            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "--short", "HEAD");</span>
-<span class="source-line-no">1061</span><span id="line-1061">            if (dir != null) {</span>
-<span class="source-line-no">1062</span><span id="line-1062">                pb.directory(dir);</span>
-<span class="source-line-no">1063</span><span id="line-1063">            }</span>
-<span class="source-line-no">1064</span><span id="line-1064">            pb.redirectErrorStream(true);</span>
-<span class="source-line-no">1065</span><span id="line-1065">            Process p = pb.start();</span>
-<span class="source-line-no">1066</span><span id="line-1066">            String output = new String(p.getInputStream().readAllBytes()).trim();</span>
-<span class="source-line-no">1067</span><span id="line-1067">            int exitCode = p.waitFor();</span>
-<span class="source-line-no">1068</span><span id="line-1068">            return exitCode == 0 &amp;&amp; !output.isEmpty() ? output : null;</span>
-<span class="source-line-no">1069</span><span id="line-1069">        } catch (Exception e) {</span>
-<span class="source-line-no">1070</span><span id="line-1070">            return null;</span>
-<span class="source-line-no">1071</span><span id="line-1071">        }</span>
-<span class="source-line-no">1072</span><span id="line-1072">    }</span>
-<span class="source-line-no">1073</span><span id="line-1073"></span>
-<span class="source-line-no">1074</span><span id="line-1074">    /**</span>
-<span class="source-line-no">1075</span><span id="line-1075">     * Gets the git branch name of the specified directory.</span>
-<span class="source-line-no">1076</span><span id="line-1076">     *</span>
-<span class="source-line-no">1077</span><span id="line-1077">     * @param dir directory to check (uses current directory if null)</span>
-<span class="source-line-no">1078</span><span id="line-1078">     * @return git branch name, or null if not a git repository</span>
-<span class="source-line-no">1079</span><span id="line-1079">     */</span>
-<span class="source-line-no">1080</span><span id="line-1080">    private String getGitBranch(File dir) {</span>
-<span class="source-line-no">1081</span><span id="line-1081">        try {</span>
-<span class="source-line-no">1082</span><span id="line-1082">            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD");</span>
-<span class="source-line-no">1083</span><span id="line-1083">            if (dir != null) {</span>
-<span class="source-line-no">1084</span><span id="line-1084">                pb.directory(dir);</span>
-<span class="source-line-no">1085</span><span id="line-1085">            }</span>
-<span class="source-line-no">1086</span><span id="line-1086">            pb.redirectErrorStream(true);</span>
-<span class="source-line-no">1087</span><span id="line-1087">            Process p = pb.start();</span>
-<span class="source-line-no">1088</span><span id="line-1088">            String output = new String(p.getInputStream().readAllBytes()).trim();</span>
-<span class="source-line-no">1089</span><span id="line-1089">            int exitCode = p.waitFor();</span>
-<span class="source-line-no">1090</span><span id="line-1090">            return exitCode == 0 &amp;&amp; !output.isEmpty() ? output : null;</span>
-<span class="source-line-no">1091</span><span id="line-1091">        } catch (Exception e) {</span>
-<span class="source-line-no">1092</span><span id="line-1092">            return null;</span>
-<span class="source-line-no">1093</span><span id="line-1093">        }</span>
-<span class="source-line-no">1094</span><span id="line-1094">    }</span>
-<span class="source-line-no">1095</span><span id="line-1095"></span>
-<span class="source-line-no">1096</span><span id="line-1096">    /**</span>
-<span class="source-line-no">1097</span><span id="line-1097">     * Builds a command line string from the current options.</span>
-<span class="source-line-no">1098</span><span id="line-1098">     *</span>
-<span class="source-line-no">1099</span><span id="line-1099">     * @return command line string</span>
-<span class="source-line-no">1100</span><span id="line-1100">     */</span>
-<span class="source-line-no">1101</span><span id="line-1101">    private String buildCommandLine() {</span>
-<span class="source-line-no">1102</span><span id="line-1102">        StringBuilder sb = new StringBuilder("run");</span>
-<span class="source-line-no">1103</span><span id="line-1103">        if (workflowDir != null) {</span>
-<span class="source-line-no">1104</span><span id="line-1104">            sb.append(" -d ").append(workflowDir.getPath());</span>
-<span class="source-line-no">1105</span><span id="line-1105">        }</span>
-<span class="source-line-no">1106</span><span id="line-1106">        if (workflowName != null) {</span>
-<span class="source-line-no">1107</span><span id="line-1107">            sb.append(" -w ").append(workflowName);</span>
-<span class="source-line-no">1108</span><span id="line-1108">        }</span>
-<span class="source-line-no">1109</span><span id="line-1109">        if (inventoryFile != null) {</span>
-<span class="source-line-no">1110</span><span id="line-1110">            sb.append(" -i ").append(inventoryFile.getPath());</span>
-<span class="source-line-no">1111</span><span id="line-1111">        }</span>
-<span class="source-line-no">1112</span><span id="line-1112">        if (groupName != null &amp;&amp; !groupName.equals("all")) {</span>
-<span class="source-line-no">1113</span><span id="line-1113">            sb.append(" -g ").append(groupName);</span>
-<span class="source-line-no">1114</span><span id="line-1114">        }</span>
-<span class="source-line-no">1115</span><span id="line-1115">        if (overlayDir != null) {</span>
-<span class="source-line-no">1116</span><span id="line-1116">            sb.append(" -o ").append(overlayDir.getPath());</span>
-<span class="source-line-no">1117</span><span id="line-1117">        }</span>
-<span class="source-line-no">1118</span><span id="line-1118">        if (threads != 4) {</span>
-<span class="source-line-no">1119</span><span id="line-1119">            sb.append(" -t ").append(threads);</span>
-<span class="source-line-no">1120</span><span id="line-1120">        }</span>
-<span class="source-line-no">1121</span><span id="line-1121">        if (verbose) {</span>
-<span class="source-line-no">1122</span><span id="line-1122">            sb.append(" -v");</span>
-<span class="source-line-no">1123</span><span id="line-1123">        }</span>
-<span class="source-line-no">1124</span><span id="line-1124">        if (quiet) {</span>
-<span class="source-line-no">1125</span><span id="line-1125">            sb.append(" -q");</span>
-<span class="source-line-no">1126</span><span id="line-1126">        }</span>
-<span class="source-line-no">1127</span><span id="line-1127">        if (limitHosts != null) {</span>
-<span class="source-line-no">1128</span><span id="line-1128">            sb.append(" --limit ").append(limitHosts);</span>
-<span class="source-line-no">1129</span><span id="line-1129">        }</span>
-<span class="source-line-no">1130</span><span id="line-1130">        return sb.toString();</span>
-<span class="source-line-no">1131</span><span id="line-1131">    }</span>
-<span class="source-line-no">1132</span><span id="line-1132"></span>
-<span class="source-line-no">1133</span><span id="line-1133">    /**</span>
-<span class="source-line-no">1134</span><span id="line-1134">     * Gets the git commit hash of the actor-IaC installation.</span>
-<span class="source-line-no">1135</span><span id="line-1135">     * This looks for a .git directory relative to where actor-IaC is running.</span>
-<span class="source-line-no">1136</span><span id="line-1136">     *</span>
-<span class="source-line-no">1137</span><span id="line-1137">     * @return short git commit hash, or null if not available</span>
-<span class="source-line-no">1138</span><span id="line-1138">     */</span>
-<span class="source-line-no">1139</span><span id="line-1139">    private String getActorIacCommit() {</span>
-<span class="source-line-no">1140</span><span id="line-1140">        // Try to get commit from the actor-IaC source directory if running in dev mode</span>
-<span class="source-line-no">1141</span><span id="line-1141">        try {</span>
-<span class="source-line-no">1142</span><span id="line-1142">            String classPath = RunCLI.class.getProtectionDomain().getCodeSource().getLocation().getPath();</span>
-<span class="source-line-no">1143</span><span id="line-1143">            File classFile = new File(classPath);</span>
-<span class="source-line-no">1144</span><span id="line-1144">            // If running from target/classes, go up to project root</span>
-<span class="source-line-no">1145</span><span id="line-1145">            if (classFile.getPath().contains("target")) {</span>
-<span class="source-line-no">1146</span><span id="line-1146">                File projectRoot = classFile.getParentFile();</span>
-<span class="source-line-no">1147</span><span id="line-1147">                while (projectRoot != null &amp;&amp; !new File(projectRoot, ".git").exists()) {</span>
-<span class="source-line-no">1148</span><span id="line-1148">                    projectRoot = projectRoot.getParentFile();</span>
-<span class="source-line-no">1149</span><span id="line-1149">                }</span>
-<span class="source-line-no">1150</span><span id="line-1150">                if (projectRoot != null) {</span>
-<span class="source-line-no">1151</span><span id="line-1151">                    return getGitCommit(projectRoot);</span>
-<span class="source-line-no">1152</span><span id="line-1152">                }</span>
-<span class="source-line-no">1153</span><span id="line-1153">            }</span>
-<span class="source-line-no">1154</span><span id="line-1154">        } catch (Exception e) {</span>
-<span class="source-line-no">1155</span><span id="line-1155">            // Ignore</span>
-<span class="source-line-no">1156</span><span id="line-1156">        }</span>
-<span class="source-line-no">1157</span><span id="line-1157">        return null;</span>
-<span class="source-line-no">1158</span><span id="line-1158">    }</span>
-<span class="source-line-no">1159</span><span id="line-1159">}</span>
+<span class="source-line-no">889</span><span id="line-889">        System.out.printf("%-4s %-25s %-35s %s%n", "#", "File (-w)", "Path", "Workflow Name (in logs)");</span>
+<span class="source-line-no">890</span><span id="line-890">        System.out.println("-".repeat(90));</span>
+<span class="source-line-no">891</span><span id="line-891">        int index = 1;</span>
+<span class="source-line-no">892</span><span id="line-892">        for (WorkflowDisplay display : displays) {</span>
+<span class="source-line-no">893</span><span id="line-893">            String wfName = display.workflowName() != null ? display.workflowName() : "(no name)";</span>
+<span class="source-line-no">894</span><span id="line-894">            System.out.printf("%2d.  %-25s %-35s %s%n",</span>
+<span class="source-line-no">895</span><span id="line-895">                index++, display.baseName(), display.relativePath(), wfName);</span>
+<span class="source-line-no">896</span><span id="line-896">        }</span>
+<span class="source-line-no">897</span><span id="line-897">        System.out.println("-".repeat(90));</span>
+<span class="source-line-no">898</span><span id="line-898">        System.out.println("Use -w &lt;File&gt; with the names shown in the 'File (-w)' column.");</span>
+<span class="source-line-no">899</span><span id="line-899">    }</span>
+<span class="source-line-no">900</span><span id="line-900"></span>
+<span class="source-line-no">901</span><span id="line-901">    /**</span>
+<span class="source-line-no">902</span><span id="line-902">     * Prints available cowfiles for cowsay output customization.</span>
+<span class="source-line-no">903</span><span id="line-903">     */</span>
+<span class="source-line-no">904</span><span id="line-904">    private void printAvailableCowfiles() {</span>
+<span class="source-line-no">905</span><span id="line-905">        System.out.println("Available cowfiles for --cowfile option:");</span>
+<span class="source-line-no">906</span><span id="line-906">        System.out.println("=".repeat(70));</span>
+<span class="source-line-no">907</span><span id="line-907">        System.out.println();</span>
+<span class="source-line-no">908</span><span id="line-908"></span>
+<span class="source-line-no">909</span><span id="line-909">        // Get list from Cowsay library</span>
+<span class="source-line-no">910</span><span id="line-910">        String[] listArgs = { "-l" };</span>
+<span class="source-line-no">911</span><span id="line-911">        String cowList = com.github.ricksbrown.cowsay.Cowsay.say(listArgs);</span>
+<span class="source-line-no">912</span><span id="line-912"></span>
+<span class="source-line-no">913</span><span id="line-913">        // Split and format nicely</span>
+<span class="source-line-no">914</span><span id="line-914">        String[] cowfiles = cowList.trim().split("\\s+");</span>
+<span class="source-line-no">915</span><span id="line-915">        System.out.println("Total: " + cowfiles.length + " cowfiles");</span>
+<span class="source-line-no">916</span><span id="line-916">        System.out.println();</span>
+<span class="source-line-no">917</span><span id="line-917"></span>
+<span class="source-line-no">918</span><span id="line-918">        // Print in columns</span>
+<span class="source-line-no">919</span><span id="line-919">        int cols = 4;</span>
+<span class="source-line-no">920</span><span id="line-920">        int colWidth = 17;</span>
+<span class="source-line-no">921</span><span id="line-921">        for (int i = 0; i &lt; cowfiles.length; i++) {</span>
+<span class="source-line-no">922</span><span id="line-922">            System.out.printf("%-" + colWidth + "s", cowfiles[i]);</span>
+<span class="source-line-no">923</span><span id="line-923">            if ((i + 1) % cols == 0) {</span>
+<span class="source-line-no">924</span><span id="line-924">                System.out.println();</span>
+<span class="source-line-no">925</span><span id="line-925">            }</span>
+<span class="source-line-no">926</span><span id="line-926">        }</span>
+<span class="source-line-no">927</span><span id="line-927">        if (cowfiles.length % cols != 0) {</span>
+<span class="source-line-no">928</span><span id="line-928">            System.out.println();</span>
+<span class="source-line-no">929</span><span id="line-929">        }</span>
+<span class="source-line-no">930</span><span id="line-930"></span>
+<span class="source-line-no">931</span><span id="line-931">        System.out.println();</span>
+<span class="source-line-no">932</span><span id="line-932">        System.out.println("=".repeat(70));</span>
+<span class="source-line-no">933</span><span id="line-933">        System.out.println("Usage: actor_iac.java run -d &lt;dir&gt; -w &lt;workflow&gt; --cowfile tux");</span>
+<span class="source-line-no">934</span><span id="line-934">        System.out.println();</span>
+<span class="source-line-no">935</span><span id="line-935">        System.out.println("Popular choices:");</span>
+<span class="source-line-no">936</span><span id="line-936">        System.out.println("  tux         - Linux penguin (great for server work)");</span>
+<span class="source-line-no">937</span><span id="line-937">        System.out.println("  dragon      - Majestic dragon");</span>
+<span class="source-line-no">938</span><span id="line-938">        System.out.println("  stegosaurus - Prehistoric dinosaur");</span>
+<span class="source-line-no">939</span><span id="line-939">        System.out.println("  turtle      - Slow and steady");</span>
+<span class="source-line-no">940</span><span id="line-940">        System.out.println("  ghostbusters - Who you gonna call?");</span>
+<span class="source-line-no">941</span><span id="line-941">    }</span>
+<span class="source-line-no">942</span><span id="line-942"></span>
+<span class="source-line-no">943</span><span id="line-943">    private static String getBaseName(String fileName) {</span>
+<span class="source-line-no">944</span><span id="line-944">        int dotIndex = fileName.lastIndexOf('.');</span>
+<span class="source-line-no">945</span><span id="line-945">        if (dotIndex &gt; 0) {</span>
+<span class="source-line-no">946</span><span id="line-946">            return fileName.substring(0, dotIndex);</span>
+<span class="source-line-no">947</span><span id="line-947">        }</span>
+<span class="source-line-no">948</span><span id="line-948">        return fileName;</span>
+<span class="source-line-no">949</span><span id="line-949">    }</span>
+<span class="source-line-no">950</span><span id="line-950"></span>
+<span class="source-line-no">951</span><span id="line-951">    private static String relativize(Path base, Path target) {</span>
+<span class="source-line-no">952</span><span id="line-952">        try {</span>
+<span class="source-line-no">953</span><span id="line-953">            return base.relativize(target).toString();</span>
+<span class="source-line-no">954</span><span id="line-954">        } catch (IllegalArgumentException e) {</span>
+<span class="source-line-no">955</span><span id="line-955">            return target.toAbsolutePath().toString();</span>
+<span class="source-line-no">956</span><span id="line-956">        }</span>
+<span class="source-line-no">957</span><span id="line-957">    }</span>
+<span class="source-line-no">958</span><span id="line-958"></span>
+<span class="source-line-no">959</span><span id="line-959">    /**</span>
+<span class="source-line-no">960</span><span id="line-960">     * Scans the immediate directory for workflow files (non-recursive).</span>
+<span class="source-line-no">961</span><span id="line-961">     *</span>
+<span class="source-line-no">962</span><span id="line-962">     * @since 2.12.1</span>
+<span class="source-line-no">963</span><span id="line-963">     */</span>
+<span class="source-line-no">964</span><span id="line-964">    private static List&lt;WorkflowDisplay&gt; scanWorkflowsForDisplay(File directory) {</span>
+<span class="source-line-no">965</span><span id="line-965">        if (directory == null) {</span>
+<span class="source-line-no">966</span><span id="line-966">            return List.of();</span>
+<span class="source-line-no">967</span><span id="line-967">        }</span>
+<span class="source-line-no">968</span><span id="line-968"></span>
+<span class="source-line-no">969</span><span id="line-969">        try (Stream&lt;Path&gt; paths = Files.list(directory.toPath())) {</span>
+<span class="source-line-no">970</span><span id="line-970">            Map&lt;String, File&gt; uniqueFiles = new LinkedHashMap&lt;&gt;();</span>
+<span class="source-line-no">971</span><span id="line-971">            paths.filter(Files::isRegularFile)</span>
+<span class="source-line-no">972</span><span id="line-972">                 .filter(path -&gt; {</span>
+<span class="source-line-no">973</span><span id="line-973">                     String name = path.getFileName().toString().toLowerCase();</span>
+<span class="source-line-no">974</span><span id="line-974">                     return name.endsWith(".yaml") || name.endsWith(".yml")</span>
+<span class="source-line-no">975</span><span id="line-975">                         || name.endsWith(".json") || name.endsWith(".xml");</span>
+<span class="source-line-no">976</span><span id="line-976">                 })</span>
+<span class="source-line-no">977</span><span id="line-977">                 .forEach(path -&gt; uniqueFiles.putIfAbsent(path.toFile().getAbsolutePath(), path.toFile()));</span>
+<span class="source-line-no">978</span><span id="line-978"></span>
+<span class="source-line-no">979</span><span id="line-979">            Path basePath = directory.toPath();</span>
+<span class="source-line-no">980</span><span id="line-980">            return uniqueFiles.values().stream()</span>
+<span class="source-line-no">981</span><span id="line-981">                .map(file -&gt; new WorkflowDisplay(</span>
+<span class="source-line-no">982</span><span id="line-982">                    getBaseName(file.getName()),</span>
+<span class="source-line-no">983</span><span id="line-983">                    relativize(basePath, file.toPath()),</span>
+<span class="source-line-no">984</span><span id="line-984">                    extractWorkflowName(file)))</span>
+<span class="source-line-no">985</span><span id="line-985">                .sorted(Comparator.comparing(WorkflowDisplay::baseName, String.CASE_INSENSITIVE_ORDER))</span>
+<span class="source-line-no">986</span><span id="line-986">                .collect(Collectors.toList());</span>
+<span class="source-line-no">987</span><span id="line-987">        } catch (IOException e) {</span>
+<span class="source-line-no">988</span><span id="line-988">            System.err.println("Failed to scan workflows: " + e.getMessage());</span>
+<span class="source-line-no">989</span><span id="line-989">            return List.of();</span>
+<span class="source-line-no">990</span><span id="line-990">        }</span>
+<span class="source-line-no">991</span><span id="line-991">    }</span>
+<span class="source-line-no">992</span><span id="line-992"></span>
+<span class="source-line-no">993</span><span id="line-993">    /**</span>
+<span class="source-line-no">994</span><span id="line-994">     * Extracts the workflow name from a YAML/JSON/XML file.</span>
+<span class="source-line-no">995</span><span id="line-995">     */</span>
+<span class="source-line-no">996</span><span id="line-996">    private static String extractWorkflowName(File file) {</span>
+<span class="source-line-no">997</span><span id="line-997">        String fileName = file.getName().toLowerCase();</span>
+<span class="source-line-no">998</span><span id="line-998">        if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {</span>
+<span class="source-line-no">999</span><span id="line-999">            return extractNameFromYaml(file);</span>
+<span class="source-line-no">1000</span><span id="line-1000">        } else if (fileName.endsWith(".json")) {</span>
+<span class="source-line-no">1001</span><span id="line-1001">            return extractNameFromJson(file);</span>
+<span class="source-line-no">1002</span><span id="line-1002">        }</span>
+<span class="source-line-no">1003</span><span id="line-1003">        return null;</span>
+<span class="source-line-no">1004</span><span id="line-1004">    }</span>
+<span class="source-line-no">1005</span><span id="line-1005"></span>
+<span class="source-line-no">1006</span><span id="line-1006">    /**</span>
+<span class="source-line-no">1007</span><span id="line-1007">     * Extracts name field from YAML file using simple line parsing.</span>
+<span class="source-line-no">1008</span><span id="line-1008">     */</span>
+<span class="source-line-no">1009</span><span id="line-1009">    private static String extractNameFromYaml(File file) {</span>
+<span class="source-line-no">1010</span><span id="line-1010">        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {</span>
+<span class="source-line-no">1011</span><span id="line-1011">            String line;</span>
+<span class="source-line-no">1012</span><span id="line-1012">            while ((line = reader.readLine()) != null) {</span>
+<span class="source-line-no">1013</span><span id="line-1013">                line = line.trim();</span>
+<span class="source-line-no">1014</span><span id="line-1014">                // Look for "name: value" at the top level (not indented)</span>
+<span class="source-line-no">1015</span><span id="line-1015">                if (line.startsWith("name:")) {</span>
+<span class="source-line-no">1016</span><span id="line-1016">                    String value = line.substring(5).trim();</span>
+<span class="source-line-no">1017</span><span id="line-1017">                    // Remove quotes if present</span>
+<span class="source-line-no">1018</span><span id="line-1018">                    if ((value.startsWith("\"") &amp;&amp; value.endsWith("\"")) ||</span>
+<span class="source-line-no">1019</span><span id="line-1019">                        (value.startsWith("'") &amp;&amp; value.endsWith("'"))) {</span>
+<span class="source-line-no">1020</span><span id="line-1020">                        value = value.substring(1, value.length() - 1);</span>
+<span class="source-line-no">1021</span><span id="line-1021">                    }</span>
+<span class="source-line-no">1022</span><span id="line-1022">                    return value.isEmpty() ? null : value;</span>
+<span class="source-line-no">1023</span><span id="line-1023">                }</span>
+<span class="source-line-no">1024</span><span id="line-1024">                // Stop if we hit a steps: or other major section</span>
+<span class="source-line-no">1025</span><span id="line-1025">                if (line.startsWith("steps:") || line.startsWith("vertices:")) {</span>
+<span class="source-line-no">1026</span><span id="line-1026">                    break;</span>
+<span class="source-line-no">1027</span><span id="line-1027">                }</span>
+<span class="source-line-no">1028</span><span id="line-1028">            }</span>
+<span class="source-line-no">1029</span><span id="line-1029">        } catch (IOException e) {</span>
+<span class="source-line-no">1030</span><span id="line-1030">            // Ignore and return null</span>
+<span class="source-line-no">1031</span><span id="line-1031">        }</span>
+<span class="source-line-no">1032</span><span id="line-1032">        return null;</span>
+<span class="source-line-no">1033</span><span id="line-1033">    }</span>
+<span class="source-line-no">1034</span><span id="line-1034"></span>
+<span class="source-line-no">1035</span><span id="line-1035">    /**</span>
+<span class="source-line-no">1036</span><span id="line-1036">     * Extracts name field from JSON file.</span>
+<span class="source-line-no">1037</span><span id="line-1037">     */</span>
+<span class="source-line-no">1038</span><span id="line-1038">    private static String extractNameFromJson(File file) {</span>
+<span class="source-line-no">1039</span><span id="line-1039">        try (java.io.FileReader reader = new java.io.FileReader(file)) {</span>
+<span class="source-line-no">1040</span><span id="line-1040">            org.json.JSONTokener tokener = new org.json.JSONTokener(reader);</span>
+<span class="source-line-no">1041</span><span id="line-1041">            org.json.JSONObject json = new org.json.JSONObject(tokener);</span>
+<span class="source-line-no">1042</span><span id="line-1042">            return json.optString("name", null);</span>
+<span class="source-line-no">1043</span><span id="line-1043">        } catch (Exception e) {</span>
+<span class="source-line-no">1044</span><span id="line-1044">            // Ignore and return null</span>
+<span class="source-line-no">1045</span><span id="line-1045">        }</span>
+<span class="source-line-no">1046</span><span id="line-1046">        return null;</span>
+<span class="source-line-no">1047</span><span id="line-1047">    }</span>
+<span class="source-line-no">1048</span><span id="line-1048"></span>
+<span class="source-line-no">1049</span><span id="line-1049">    /**</span>
+<span class="source-line-no">1050</span><span id="line-1050">     * Record for displaying workflow information.</span>
+<span class="source-line-no">1051</span><span id="line-1051">     */</span>
+<span class="source-line-no">1052</span><span id="line-1052">    private static record WorkflowDisplay(String baseName, String relativePath, String workflowName) {}</span>
+<span class="source-line-no">1053</span><span id="line-1053"></span>
+<span class="source-line-no">1054</span><span id="line-1054">    /**</span>
+<span class="source-line-no">1055</span><span id="line-1055">     * Gets the git commit hash of the specified directory.</span>
+<span class="source-line-no">1056</span><span id="line-1056">     *</span>
+<span class="source-line-no">1057</span><span id="line-1057">     * @param dir directory to check (uses current directory if null)</span>
+<span class="source-line-no">1058</span><span id="line-1058">     * @return short git commit hash, or null if not a git repository</span>
+<span class="source-line-no">1059</span><span id="line-1059">     */</span>
+<span class="source-line-no">1060</span><span id="line-1060">    private String getGitCommit(File dir) {</span>
+<span class="source-line-no">1061</span><span id="line-1061">        try {</span>
+<span class="source-line-no">1062</span><span id="line-1062">            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "--short", "HEAD");</span>
+<span class="source-line-no">1063</span><span id="line-1063">            if (dir != null) {</span>
+<span class="source-line-no">1064</span><span id="line-1064">                pb.directory(dir);</span>
+<span class="source-line-no">1065</span><span id="line-1065">            }</span>
+<span class="source-line-no">1066</span><span id="line-1066">            pb.redirectErrorStream(true);</span>
+<span class="source-line-no">1067</span><span id="line-1067">            Process p = pb.start();</span>
+<span class="source-line-no">1068</span><span id="line-1068">            String output = new String(p.getInputStream().readAllBytes()).trim();</span>
+<span class="source-line-no">1069</span><span id="line-1069">            int exitCode = p.waitFor();</span>
+<span class="source-line-no">1070</span><span id="line-1070">            return exitCode == 0 &amp;&amp; !output.isEmpty() ? output : null;</span>
+<span class="source-line-no">1071</span><span id="line-1071">        } catch (Exception e) {</span>
+<span class="source-line-no">1072</span><span id="line-1072">            return null;</span>
+<span class="source-line-no">1073</span><span id="line-1073">        }</span>
+<span class="source-line-no">1074</span><span id="line-1074">    }</span>
+<span class="source-line-no">1075</span><span id="line-1075"></span>
+<span class="source-line-no">1076</span><span id="line-1076">    /**</span>
+<span class="source-line-no">1077</span><span id="line-1077">     * Gets the git branch name of the specified directory.</span>
+<span class="source-line-no">1078</span><span id="line-1078">     *</span>
+<span class="source-line-no">1079</span><span id="line-1079">     * @param dir directory to check (uses current directory if null)</span>
+<span class="source-line-no">1080</span><span id="line-1080">     * @return git branch name, or null if not a git repository</span>
+<span class="source-line-no">1081</span><span id="line-1081">     */</span>
+<span class="source-line-no">1082</span><span id="line-1082">    private String getGitBranch(File dir) {</span>
+<span class="source-line-no">1083</span><span id="line-1083">        try {</span>
+<span class="source-line-no">1084</span><span id="line-1084">            ProcessBuilder pb = new ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD");</span>
+<span class="source-line-no">1085</span><span id="line-1085">            if (dir != null) {</span>
+<span class="source-line-no">1086</span><span id="line-1086">                pb.directory(dir);</span>
+<span class="source-line-no">1087</span><span id="line-1087">            }</span>
+<span class="source-line-no">1088</span><span id="line-1088">            pb.redirectErrorStream(true);</span>
+<span class="source-line-no">1089</span><span id="line-1089">            Process p = pb.start();</span>
+<span class="source-line-no">1090</span><span id="line-1090">            String output = new String(p.getInputStream().readAllBytes()).trim();</span>
+<span class="source-line-no">1091</span><span id="line-1091">            int exitCode = p.waitFor();</span>
+<span class="source-line-no">1092</span><span id="line-1092">            return exitCode == 0 &amp;&amp; !output.isEmpty() ? output : null;</span>
+<span class="source-line-no">1093</span><span id="line-1093">        } catch (Exception e) {</span>
+<span class="source-line-no">1094</span><span id="line-1094">            return null;</span>
+<span class="source-line-no">1095</span><span id="line-1095">        }</span>
+<span class="source-line-no">1096</span><span id="line-1096">    }</span>
+<span class="source-line-no">1097</span><span id="line-1097"></span>
+<span class="source-line-no">1098</span><span id="line-1098">    /**</span>
+<span class="source-line-no">1099</span><span id="line-1099">     * Builds a command line string from the current options.</span>
+<span class="source-line-no">1100</span><span id="line-1100">     *</span>
+<span class="source-line-no">1101</span><span id="line-1101">     * @return command line string</span>
+<span class="source-line-no">1102</span><span id="line-1102">     */</span>
+<span class="source-line-no">1103</span><span id="line-1103">    private String buildCommandLine() {</span>
+<span class="source-line-no">1104</span><span id="line-1104">        StringBuilder sb = new StringBuilder("run");</span>
+<span class="source-line-no">1105</span><span id="line-1105">        if (workflowDir != null) {</span>
+<span class="source-line-no">1106</span><span id="line-1106">            sb.append(" -d ").append(workflowDir.getPath());</span>
+<span class="source-line-no">1107</span><span id="line-1107">        }</span>
+<span class="source-line-no">1108</span><span id="line-1108">        if (workflowName != null) {</span>
+<span class="source-line-no">1109</span><span id="line-1109">            sb.append(" -w ").append(workflowName);</span>
+<span class="source-line-no">1110</span><span id="line-1110">        }</span>
+<span class="source-line-no">1111</span><span id="line-1111">        if (inventoryFile != null) {</span>
+<span class="source-line-no">1112</span><span id="line-1112">            sb.append(" -i ").append(inventoryFile.getPath());</span>
+<span class="source-line-no">1113</span><span id="line-1113">        }</span>
+<span class="source-line-no">1114</span><span id="line-1114">        if (groupName != null &amp;&amp; !groupName.equals("all")) {</span>
+<span class="source-line-no">1115</span><span id="line-1115">            sb.append(" -g ").append(groupName);</span>
+<span class="source-line-no">1116</span><span id="line-1116">        }</span>
+<span class="source-line-no">1117</span><span id="line-1117">        if (overlayDir != null) {</span>
+<span class="source-line-no">1118</span><span id="line-1118">            sb.append(" -o ").append(overlayDir.getPath());</span>
+<span class="source-line-no">1119</span><span id="line-1119">        }</span>
+<span class="source-line-no">1120</span><span id="line-1120">        if (threads != 4) {</span>
+<span class="source-line-no">1121</span><span id="line-1121">            sb.append(" -t ").append(threads);</span>
+<span class="source-line-no">1122</span><span id="line-1122">        }</span>
+<span class="source-line-no">1123</span><span id="line-1123">        if (verbose) {</span>
+<span class="source-line-no">1124</span><span id="line-1124">            sb.append(" -v");</span>
+<span class="source-line-no">1125</span><span id="line-1125">        }</span>
+<span class="source-line-no">1126</span><span id="line-1126">        if (quiet) {</span>
+<span class="source-line-no">1127</span><span id="line-1127">            sb.append(" -q");</span>
+<span class="source-line-no">1128</span><span id="line-1128">        }</span>
+<span class="source-line-no">1129</span><span id="line-1129">        if (limitHosts != null) {</span>
+<span class="source-line-no">1130</span><span id="line-1130">            sb.append(" --limit ").append(limitHosts);</span>
+<span class="source-line-no">1131</span><span id="line-1131">        }</span>
+<span class="source-line-no">1132</span><span id="line-1132">        return sb.toString();</span>
+<span class="source-line-no">1133</span><span id="line-1133">    }</span>
+<span class="source-line-no">1134</span><span id="line-1134"></span>
+<span class="source-line-no">1135</span><span id="line-1135">    /**</span>
+<span class="source-line-no">1136</span><span id="line-1136">     * Gets the git commit hash of the actor-IaC installation.</span>
+<span class="source-line-no">1137</span><span id="line-1137">     * This looks for a .git directory relative to where actor-IaC is running.</span>
+<span class="source-line-no">1138</span><span id="line-1138">     *</span>
+<span class="source-line-no">1139</span><span id="line-1139">     * @return short git commit hash, or null if not available</span>
+<span class="source-line-no">1140</span><span id="line-1140">     */</span>
+<span class="source-line-no">1141</span><span id="line-1141">    private String getActorIacCommit() {</span>
+<span class="source-line-no">1142</span><span id="line-1142">        // Try to get commit from the actor-IaC source directory if running in dev mode</span>
+<span class="source-line-no">1143</span><span id="line-1143">        try {</span>
+<span class="source-line-no">1144</span><span id="line-1144">            String classPath = RunCLI.class.getProtectionDomain().getCodeSource().getLocation().getPath();</span>
+<span class="source-line-no">1145</span><span id="line-1145">            File classFile = new File(classPath);</span>
+<span class="source-line-no">1146</span><span id="line-1146">            // If running from target/classes, go up to project root</span>
+<span class="source-line-no">1147</span><span id="line-1147">            if (classFile.getPath().contains("target")) {</span>
+<span class="source-line-no">1148</span><span id="line-1148">                File projectRoot = classFile.getParentFile();</span>
+<span class="source-line-no">1149</span><span id="line-1149">                while (projectRoot != null &amp;&amp; !new File(projectRoot, ".git").exists()) {</span>
+<span class="source-line-no">1150</span><span id="line-1150">                    projectRoot = projectRoot.getParentFile();</span>
+<span class="source-line-no">1151</span><span id="line-1151">                }</span>
+<span class="source-line-no">1152</span><span id="line-1152">                if (projectRoot != null) {</span>
+<span class="source-line-no">1153</span><span id="line-1153">                    return getGitCommit(projectRoot);</span>
+<span class="source-line-no">1154</span><span id="line-1154">                }</span>
+<span class="source-line-no">1155</span><span id="line-1155">            }</span>
+<span class="source-line-no">1156</span><span id="line-1156">        } catch (Exception e) {</span>
+<span class="source-line-no">1157</span><span id="line-1157">            // Ignore</span>
+<span class="source-line-no">1158</span><span id="line-1158">        }</span>
+<span class="source-line-no">1159</span><span id="line-1159">        return null;</span>
+<span class="source-line-no">1160</span><span id="line-1160">    }</span>
+<span class="source-line-no">1161</span><span id="line-1161">}</span>
 
 
 

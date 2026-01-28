@@ -689,11 +689,13 @@ public class RunCLI implements Callable<Integer> {
                 return 1;
             }
 
-            // Step 3.5: Create node actors if group is specified
-            if (groupName != null) {
-                LOG.info("Creating node actors for group: " + groupName);
-                logToDb("cli", LogLevel.INFO, "Creating node actors for group: " + groupName);
-                ActionResult createResult = nodeGroupActor.callByActionName("createNodeActors", "[\"" + groupName + "\"]");
+            // Step 3.5: Create node actors
+            // If no inventory file is specified, use "local" group for localhost execution
+            String effectiveGroup = (inventoryFile == null) ? "local" : groupName;
+            if (effectiveGroup != null) {
+                LOG.info("Creating node actors for group: " + effectiveGroup);
+                logToDb("cli", LogLevel.INFO, "Creating node actors for group: " + effectiveGroup);
+                ActionResult createResult = nodeGroupActor.callByActionName("createNodeActors", "[\"" + effectiveGroup + "\"]");
                 if (!createResult.isSuccess()) {
                     LOG.severe("Failed to create node actors: " + createResult.getResult());
                     logToDb("cli", LogLevel.ERROR, "Failed to create node actors: " + createResult.getResult());

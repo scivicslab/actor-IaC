@@ -445,29 +445,57 @@ public class NodeIIAR extends IIActorRef<NodeInterpreter> {
     }
 
     // ========================================================================
-    // JSON State Actions
+    // JSON State Output Actions
     // ========================================================================
 
+    /**
+     * Outputs JSON State at the given path in pretty JSON format via outputMultiplexer.
+     *
+     * @param args the path to output (from JSON array)
+     * @return ActionResult with the formatted JSON
+     */
     @Action("printJson")
     public ActionResult printJson(String args) {
         String path = getFirst(args);
         String formatted = toStringOfJson(path);
-        System.out.println(formatted);
+        sendToMultiplexer(formatted);
         return new ActionResult(true, formatted);
     }
 
     /**
-     * Prints JSON State at the given path in YAML format.
+     * Outputs JSON State at the given path in YAML format via outputMultiplexer.
      *
-     * @param args the path to print (from JSON array)
+     * @param args the path to output (from JSON array)
      * @return ActionResult with the formatted YAML
      */
     @Action("printYaml")
     public ActionResult printYaml(String args) {
         String path = getFirst(args);
+        logger.info(String.format("printYaml called: path='%s'", path));
         String formatted = toStringOfYaml(path);
-        System.out.println(formatted);
+        logger.info(String.format("printYaml output length: %d", formatted.length()));
+        sendToMultiplexer(formatted);
         return new ActionResult(true, formatted);
+    }
+
+    /**
+     * Sends formatted output to the outputMultiplexer, line by line.
+     */
+    private void sendToMultiplexer(String formatted) {
+        IIActorSystem sys = (IIActorSystem) this.system();
+        IIActorRef<?> multiplexer = sys.getIIActor("outputMultiplexer");
+        if (multiplexer == null) {
+            return;
+        }
+
+        String nodeName = this.getName();
+        for (String line : formatted.split("\n")) {
+            JSONObject arg = new JSONObject();
+            arg.put("source", nodeName);
+            arg.put("type", "stdout");
+            arg.put("data", line);
+            multiplexer.callByActionName("add", arg.toString());
+        }
     }
 
     // ========================================================================
