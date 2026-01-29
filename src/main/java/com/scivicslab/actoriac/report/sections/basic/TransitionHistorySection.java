@@ -318,11 +318,6 @@ public class TransitionHistorySection implements SectionBuilder {
         return null;  // Title is embedded in content
     }
 
-    @Override
-    public int getOrder() {
-        return 500;  // After JsonState section
-    }
-
     /**
      * Internal class to hold transition entry data.
      */

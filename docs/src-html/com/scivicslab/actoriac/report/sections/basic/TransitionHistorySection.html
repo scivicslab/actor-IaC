@@ -331,30 +331,25 @@
 <span class="source-line-no">318</span><span id="line-318">        return null;  // Title is embedded in content</span>
 <span class="source-line-no">319</span><span id="line-319">    }</span>
 <span class="source-line-no">320</span><span id="line-320"></span>
-<span class="source-line-no">321</span><span id="line-321">    @Override</span>
-<span class="source-line-no">322</span><span id="line-322">    public int getOrder() {</span>
-<span class="source-line-no">323</span><span id="line-323">        return 500;  // After JsonState section</span>
-<span class="source-line-no">324</span><span id="line-324">    }</span>
-<span class="source-line-no">325</span><span id="line-325"></span>
-<span class="source-line-no">326</span><span id="line-326">    /**</span>
-<span class="source-line-no">327</span><span id="line-327">     * Internal class to hold transition entry data.</span>
-<span class="source-line-no">328</span><span id="line-328">     */</span>
-<span class="source-line-no">329</span><span id="line-329">    private static class TransitionEntry {</span>
-<span class="source-line-no">330</span><span id="line-330">        final String timestamp;</span>
-<span class="source-line-no">331</span><span id="line-331">        final String label;</span>
-<span class="source-line-no">332</span><span id="line-332">        final String note;</span>
-<span class="source-line-no">333</span><span id="line-333">        final boolean success;</span>
-<span class="source-line-no">334</span><span id="line-334">        final String errorMessage;</span>
-<span class="source-line-no">335</span><span id="line-335"></span>
-<span class="source-line-no">336</span><span id="line-336">        TransitionEntry(String timestamp, String label, String note, boolean success, String errorMessage) {</span>
-<span class="source-line-no">337</span><span id="line-337">            this.timestamp = timestamp;</span>
-<span class="source-line-no">338</span><span id="line-338">            this.label = label;</span>
-<span class="source-line-no">339</span><span id="line-339">            this.note = note;</span>
-<span class="source-line-no">340</span><span id="line-340">            this.success = success;</span>
-<span class="source-line-no">341</span><span id="line-341">            this.errorMessage = errorMessage;</span>
-<span class="source-line-no">342</span><span id="line-342">        }</span>
-<span class="source-line-no">343</span><span id="line-343">    }</span>
-<span class="source-line-no">344</span><span id="line-344">}</span>
+<span class="source-line-no">321</span><span id="line-321">    /**</span>
+<span class="source-line-no">322</span><span id="line-322">     * Internal class to hold transition entry data.</span>
+<span class="source-line-no">323</span><span id="line-323">     */</span>
+<span class="source-line-no">324</span><span id="line-324">    private static class TransitionEntry {</span>
+<span class="source-line-no">325</span><span id="line-325">        final String timestamp;</span>
+<span class="source-line-no">326</span><span id="line-326">        final String label;</span>
+<span class="source-line-no">327</span><span id="line-327">        final String note;</span>
+<span class="source-line-no">328</span><span id="line-328">        final boolean success;</span>
+<span class="source-line-no">329</span><span id="line-329">        final String errorMessage;</span>
+<span class="source-line-no">330</span><span id="line-330"></span>
+<span class="source-line-no">331</span><span id="line-331">        TransitionEntry(String timestamp, String label, String note, boolean success, String errorMessage) {</span>
+<span class="source-line-no">332</span><span id="line-332">            this.timestamp = timestamp;</span>
+<span class="source-line-no">333</span><span id="line-333">            this.label = label;</span>
+<span class="source-line-no">334</span><span id="line-334">            this.note = note;</span>
+<span class="source-line-no">335</span><span id="line-335">            this.success = success;</span>
+<span class="source-line-no">336</span><span id="line-336">            this.errorMessage = errorMessage;</span>
+<span class="source-line-no">337</span><span id="line-337">        }</span>
+<span class="source-line-no">338</span><span id="line-338">    }</span>
+<span class="source-line-no">339</span><span id="line-339">}</span>
 
 
 

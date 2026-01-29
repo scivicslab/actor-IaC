@@ -55,7 +55,7 @@ class ReportBuilderTest {
         @Test
         @DisplayName("セクションを追加して出力")
         void build_withSection_includesSection() {
-            builder.addSection(new SimpleSection("Test Section", "Test content", 100));
+            builder.addSection(new SimpleSection("Test Section", "Test content"));
 
             String report = builder.build();
 
@@ -64,11 +64,11 @@ class ReportBuilderTest {
         }
 
         @Test
-        @DisplayName("複数セクションは順序通りに出力")
-        void build_multipleSections_orderedByOrder() {
-            builder.addSection(new SimpleSection("Second", "Content 2", 200));
-            builder.addSection(new SimpleSection("First", "Content 1", 100));
-            builder.addSection(new SimpleSection("Third", "Content 3", 300));
+        @DisplayName("複数セクションは追加順に出力")
+        void build_multipleSections_orderedByInsertion() {
+            builder.addSection(new SimpleSection("First", "Content 1"));
+            builder.addSection(new SimpleSection("Second", "Content 2"));
+            builder.addSection(new SimpleSection("Third", "Content 3"));
 
             String report = builder.build();
 
@@ -83,7 +83,7 @@ class ReportBuilderTest {
         @Test
         @DisplayName("タイトルがnullのセクションはタイトル行なし")
         void build_sectionWithNullTitle_noTitleLine() {
-            builder.addSection(new SimpleSection(null, "Direct content", 100));
+            builder.addSection(new SimpleSection(null, "Direct content"));
 
             String report = builder.build();
 
@@ -94,8 +94,8 @@ class ReportBuilderTest {
         @Test
         @DisplayName("空のコンテンツのセクションは出力されない")
         void build_sectionWithEmptyContent_skipped() {
-            builder.addSection(new SimpleSection("Empty", "", 100));
-            builder.addSection(new SimpleSection("HasContent", "Some content", 200));
+            builder.addSection(new SimpleSection("Empty", ""));
+            builder.addSection(new SimpleSection("HasContent", "Some content"));
 
             String report = builder.build();
 
@@ -153,13 +153,6 @@ class ReportBuilderTest {
             assertNull(section.getTitle());
         }
 
-        @Test
-        @DisplayName("orderは100（先頭）")
-        void getOrder_returns100() {
-            WorkflowInfoSection section = new WorkflowInfoSection("path", "name", "desc");
-
-            assertEquals(100, section.getOrder());
-        }
     }
 
     // ========================================================================
@@ -191,13 +184,6 @@ class ReportBuilderTest {
             assertTrue(title.contains("node-localhost"));
         }
 
-        @Test
-        @DisplayName("orderは400")
-        void getOrder_returns400() {
-            JsonStateSection section = new JsonStateSection("actor", "content");
-
-            assertEquals(400, section.getOrder());
-        }
     }
 
     // ========================================================================
@@ -253,12 +239,10 @@ class ReportBuilderTest {
     static class SimpleSection implements ReportSection {
         private final String title;
         private final String content;
-        private final int order;
 
-        SimpleSection(String title, String content, int order) {
+        SimpleSection(String title, String content) {
             this.title = title;
             this.content = content;
-            this.order = order;
         }
 
         @Override
@@ -269,11 +253,6 @@ class ReportBuilderTest {
         @Override
         public String getContent() {
             return content;
-        }
-
-        @Override
-        public int getOrder() {
-            return order;
         }
     }
 }

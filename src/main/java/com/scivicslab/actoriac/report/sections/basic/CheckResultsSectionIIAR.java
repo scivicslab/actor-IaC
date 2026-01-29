@@ -125,9 +125,4 @@ public class CheckResultsSectionIIAR extends IIActorRef<CheckResultsSection> {
         String title = object.getTitle();
         return new ActionResult(true, title != null ? title : "");
     }
-
-    @Action("getOrder")
-    public ActionResult getOrder(String args) {
-        return new ActionResult(true, String.valueOf(object.getOrder()));
-    }
 }

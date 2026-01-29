@@ -153,11 +153,6 @@ public class JsonStateSectionIIAR extends IIActorRef<JsonStateSection> {
         return new ActionResult(true, title != null ? title : "");
     }
 
-    @Action("getOrder")
-    public ActionResult getOrder(String args) {
-        return new ActionResult(true, String.valueOf(object.getOrder()));
-    }
-
     /**
      * Sets the target actor name dynamically.
      *

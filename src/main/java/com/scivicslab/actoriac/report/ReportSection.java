@@ -18,10 +18,10 @@
 package com.scivicslab.actoriac.report;
 
 /**
- * Interface for report sections.
+ * Interface for report sections (legacy).
  *
  * <p>Each implementation provides a specific type of content for the final report.
- * Sections are ordered by their {@link #getOrder()} value when assembled.</p>
+ * Sections are output in the order they were added.</p>
  *
  * @author devteam@scivicslab.com
  * @since 2.15.0
@@ -45,20 +45,4 @@ public interface ReportSection {
      * @return the section content
      */
     String getContent();
-
-    /**
-     * Returns the display order.
-     *
-     * <p>Sections with lower order values are displayed first.
-     * Recommended values:</p>
-     * <ul>
-     *   <li>100 - Workflow info (header area)</li>
-     *   <li>200 - Check results (% messages)</li>
-     *   <li>300 - Transitions</li>
-     *   <li>400 - Collected data (JsonState)</li>
-     * </ul>
-     *
-     * @return the order value
-     */
-    int getOrder();
 }

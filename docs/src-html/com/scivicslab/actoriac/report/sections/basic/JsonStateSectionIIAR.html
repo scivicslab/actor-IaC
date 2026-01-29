@@ -166,39 +166,34 @@
 <span class="source-line-no">153</span><span id="line-153">        return new ActionResult(true, title != null ? title : "");</span>
 <span class="source-line-no">154</span><span id="line-154">    }</span>
 <span class="source-line-no">155</span><span id="line-155"></span>
-<span class="source-line-no">156</span><span id="line-156">    @Action("getOrder")</span>
-<span class="source-line-no">157</span><span id="line-157">    public ActionResult getOrder(String args) {</span>
-<span class="source-line-no">158</span><span id="line-158">        return new ActionResult(true, String.valueOf(object.getOrder()));</span>
-<span class="source-line-no">159</span><span id="line-159">    }</span>
-<span class="source-line-no">160</span><span id="line-160"></span>
-<span class="source-line-no">161</span><span id="line-161">    /**</span>
-<span class="source-line-no">162</span><span id="line-162">     * Sets the target actor name dynamically.</span>
-<span class="source-line-no">163</span><span id="line-163">     *</span>
-<span class="source-line-no">164</span><span id="line-164">     * @param args the target actor name</span>
-<span class="source-line-no">165</span><span id="line-165">     * @return action result</span>
-<span class="source-line-no">166</span><span id="line-166">     */</span>
-<span class="source-line-no">167</span><span id="line-167">    @Action("setTargetActor")</span>
-<span class="source-line-no">168</span><span id="line-168">    public ActionResult setTargetActor(String args) {</span>
-<span class="source-line-no">169</span><span id="line-169">        if (args != null &amp;&amp; !args.isEmpty()) {</span>
-<span class="source-line-no">170</span><span id="line-170">            this.targetActorName = args.trim();</span>
-<span class="source-line-no">171</span><span id="line-171">            object.setActorName(this.targetActorName);</span>
-<span class="source-line-no">172</span><span id="line-172">        }</span>
-<span class="source-line-no">173</span><span id="line-173">        return new ActionResult(true, "Target actor set: " + targetActorName);</span>
-<span class="source-line-no">174</span><span id="line-174">    }</span>
-<span class="source-line-no">175</span><span id="line-175"></span>
-<span class="source-line-no">176</span><span id="line-176">    /**</span>
-<span class="source-line-no">177</span><span id="line-177">     * Sets the JSON path filter dynamically.</span>
-<span class="source-line-no">178</span><span id="line-178">     *</span>
-<span class="source-line-no">179</span><span id="line-179">     * @param args the JSON path</span>
-<span class="source-line-no">180</span><span id="line-180">     * @return action result</span>
-<span class="source-line-no">181</span><span id="line-181">     */</span>
-<span class="source-line-no">182</span><span id="line-182">    @Action("setJsonPath")</span>
-<span class="source-line-no">183</span><span id="line-183">    public ActionResult setJsonPath(String args) {</span>
-<span class="source-line-no">184</span><span id="line-184">        this.jsonPath = (args != null &amp;&amp; !args.isEmpty()) ? args.trim() : null;</span>
-<span class="source-line-no">185</span><span id="line-185">        object.setJsonPath(this.jsonPath);</span>
-<span class="source-line-no">186</span><span id="line-186">        return new ActionResult(true, "JSON path set: " + jsonPath);</span>
-<span class="source-line-no">187</span><span id="line-187">    }</span>
-<span class="source-line-no">188</span><span id="line-188">}</span>
+<span class="source-line-no">156</span><span id="line-156">    /**</span>
+<span class="source-line-no">157</span><span id="line-157">     * Sets the target actor name dynamically.</span>
+<span class="source-line-no">158</span><span id="line-158">     *</span>
+<span class="source-line-no">159</span><span id="line-159">     * @param args the target actor name</span>
+<span class="source-line-no">160</span><span id="line-160">     * @return action result</span>
+<span class="source-line-no">161</span><span id="line-161">     */</span>
+<span class="source-line-no">162</span><span id="line-162">    @Action("setTargetActor")</span>
+<span class="source-line-no">163</span><span id="line-163">    public ActionResult setTargetActor(String args) {</span>
+<span class="source-line-no">164</span><span id="line-164">        if (args != null &amp;&amp; !args.isEmpty()) {</span>
+<span class="source-line-no">165</span><span id="line-165">            this.targetActorName = args.trim();</span>
+<span class="source-line-no">166</span><span id="line-166">            object.setActorName(this.targetActorName);</span>
+<span class="source-line-no">167</span><span id="line-167">        }</span>
+<span class="source-line-no">168</span><span id="line-168">        return new ActionResult(true, "Target actor set: " + targetActorName);</span>
+<span class="source-line-no">169</span><span id="line-169">    }</span>
+<span class="source-line-no">170</span><span id="line-170"></span>
+<span class="source-line-no">171</span><span id="line-171">    /**</span>
+<span class="source-line-no">172</span><span id="line-172">     * Sets the JSON path filter dynamically.</span>
+<span class="source-line-no">173</span><span id="line-173">     *</span>
+<span class="source-line-no">174</span><span id="line-174">     * @param args the JSON path</span>
+<span class="source-line-no">175</span><span id="line-175">     * @return action result</span>
+<span class="source-line-no">176</span><span id="line-176">     */</span>
+<span class="source-line-no">177</span><span id="line-177">    @Action("setJsonPath")</span>
+<span class="source-line-no">178</span><span id="line-178">    public ActionResult setJsonPath(String args) {</span>
+<span class="source-line-no">179</span><span id="line-179">        this.jsonPath = (args != null &amp;&amp; !args.isEmpty()) ? args.trim() : null;</span>
+<span class="source-line-no">180</span><span id="line-180">        object.setJsonPath(this.jsonPath);</span>
+<span class="source-line-no">181</span><span id="line-181">        return new ActionResult(true, "JSON path set: " + jsonPath);</span>
+<span class="source-line-no">182</span><span id="line-182">    }</span>
+<span class="source-line-no">183</span><span id="line-183">}</span>
 
 
 

@@ -71,16 +71,4 @@ public interface SectionBuilder {
     default String getTitle() {
         return null;
     }
-
-    /**
-     * Returns the display order.
-     *
-     * <p>Sections with lower order values are displayed first.
-     * Default is 100.</p>
-     *
-     * @return the order value
-     */
-    default int getOrder() {
-        return 100;
-    }
 }

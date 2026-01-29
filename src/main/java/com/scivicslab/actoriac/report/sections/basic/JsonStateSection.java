@@ -104,9 +104,4 @@ public class JsonStateSection implements SectionBuilder {
     public String getTitle() {
         return null;  // Title is embedded in content
     }
-
-    @Override
-    public int getOrder() {
-        return 400;  // After check results
-    }
 }

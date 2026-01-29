@@ -66,9 +66,4 @@ public class WorkflowInfoSection implements ReportSection {
         }
         return sb.toString();
     }
-
-    @Override
-    public int getOrder() {
-        return 100;  // Display first (header area)
-    }
 }

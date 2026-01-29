@@ -276,11 +276,6 @@ public class GpuSummarySection implements SectionBuilder {
         return null;  // Title is embedded in content
     }
 
-    @Override
-    public int getOrder() {
-        return 600;  // After Transition History section
-    }
-
     /**
      * GPU information holder.
      */

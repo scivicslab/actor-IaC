@@ -76,9 +76,4 @@ public class WorkflowNameSection implements SectionBuilder {
     public String getTitle() {
         return null;  // Title is embedded in content
     }
-
-    @Override
-    public int getOrder() {
-        return 100;  // Display first
-    }
 }

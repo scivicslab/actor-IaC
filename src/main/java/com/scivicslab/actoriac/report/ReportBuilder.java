@@ -33,7 +33,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -244,10 +243,10 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware, II
     /**
      * Builds the report string.
      *
-     * <p>Collects sections from two sources:</p>
+     * <p>Collects sections from two sources in order:</p>
      * <ol>
      *   <li>Legacy sections added via {@code addWorkflowInfo} and {@code addJsonStateSection}</li>
-     *   <li>Child actor sections implementing {@link SectionBuilder}</li>
+     *   <li>Child actor sections implementing {@link SectionBuilder} (in creation order)</li>
      * </ol>
      *
      * @return the formatted report string
@@ -258,19 +257,12 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware, II
         // Header
         sb.append("=== Workflow Execution Report ===\n");
 
-        // Collect all sections (both legacy and child actors)
-        List<SectionEntry> allSections = new ArrayList<>();
-
-        // 1. Add legacy sections
+        // 1. Output legacy sections first (in order added)
         for (ReportSection section : sections) {
-            allSections.add(new SectionEntry(
-                section.getOrder(),
-                section.getTitle(),
-                section.getContent()
-            ));
+            appendSection(sb, section.getTitle(), section.getContent());
         }
 
-        // 2. Add child actor sections via callByActionName
+        // 2. Output child actor sections (in creation order)
         if (selfRef != null && system != null) {
             Set<String> childNames = selfRef.getNamesOfChildren();
             for (String childName : childNames) {
@@ -289,17 +281,6 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware, II
                     continue;
                 }
 
-                // Get order (default 100 if not supported)
-                int order = 100;
-                ActionResult orderResult = childRef.callByActionName("getOrder", "");
-                if (orderResult.isSuccess()) {
-                    try {
-                        order = Integer.parseInt(orderResult.getResult());
-                    } catch (NumberFormatException e) {
-                        // Use default
-                    }
-                }
-
                 // Get title (may be empty)
                 String title = null;
                 ActionResult titleResult = childRef.callByActionName("getTitle", "");
@@ -310,31 +291,21 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware, II
                     }
                 }
 
-                allSections.add(new SectionEntry(order, title, content));
+                appendSection(sb, title, content);
             }
         }
-
-        // Sort sections by order and output
-        allSections.stream()
-            .sorted(Comparator.comparingInt(SectionEntry::order))
-            .forEach(entry -> {
-                String content = entry.content();
-                if (content != null && !content.isEmpty()) {
-                    String title = entry.title();
-                    if (title != null && !title.isEmpty()) {
-                        sb.append("\n--- ").append(title).append(" ---\n");
-                    }
-                    sb.append(content).append("\n");
-                }
-            });
 
         return sb.toString();
     }
 
-    /**
-     * Internal record to hold section data for sorting.
-     */
-    private record SectionEntry(int order, String title, String content) {}
+    private void appendSection(StringBuilder sb, String title, String content) {
+        if (content != null && !content.isEmpty()) {
+            if (title != null && !title.isEmpty()) {
+                sb.append("\n--- ").append(title).append(" ---\n");
+            }
+            sb.append(content).append("\n");
+        }
+    }
 
     // ========================================================================
     // Helper Methods

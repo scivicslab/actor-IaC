@@ -50,9 +50,4 @@ public class JsonStateSection implements ReportSection {
     public String getContent() {
         return yamlContent;
     }
-
-    @Override
-    public int getOrder() {
-        return 400;
-    }
 }
