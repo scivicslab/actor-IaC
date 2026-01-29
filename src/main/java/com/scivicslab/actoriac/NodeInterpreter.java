@@ -285,13 +285,18 @@ public class NodeInterpreter extends Interpreter {
             label = transition.getStates().get(0) + " -> " + transition.getStates().get(1);
         }
 
+        // noteを取得（60文字または最初の行まで）
+        String note = getTransitionNote(transition);
+
         String status = success ? "SUCCESS" : "FAILED";
         String resultMsg = result != null ? result.getResult() : "";
         // Truncate long result messages
         if (resultMsg.length() > 500) {
             resultMsg = resultMsg.substring(0, 500) + "...";
         }
+        // noteがあればメッセージに含める
         String message = "Transition " + status + ": " + label +
+                (note.isEmpty() ? "" : " [" + note + "]") +
                 (resultMsg.isEmpty() ? "" : " - " + resultMsg);
 
         // Send to outputMultiplexer
@@ -304,6 +309,27 @@ public class NodeInterpreter extends Interpreter {
             arg.put("data", message);
             multiplexer.callByActionName("add", arg.toString());
         }
+    }
+
+    /**
+     * transitionのnoteを取得する。60文字または最初の行までに制限。
+     * noteがない場合は空文字列を返す。
+     */
+    private String getTransitionNote(Transition transition) {
+        String note = transition.getNote();
+        if (note == null || note.isEmpty()) {
+            return "";
+        }
+        // 最初の行のみ
+        int newlineIdx = note.indexOf('\n');
+        if (newlineIdx > 0) {
+            note = note.substring(0, newlineIdx);
+        }
+        // 60文字まで
+        if (note.length() > 60) {
+            note = note.substring(0, 57) + "...";
+        }
+        return note.trim();
     }
 
     /**

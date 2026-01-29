@@ -363,13 +363,18 @@ public class NodeGroupInterpreter extends Interpreter {
         }
         final String finalLabel = label;
 
+        // noteを取得（60文字または最初の行まで）
+        String note = getTransitionNote(transition);
+
         String status = success ? "SUCCESS" : "FAILED";
         String resultMsg = result != null ? result.getResult() : "";
         // Truncate long result messages
         if (resultMsg.length() > 500) {
             resultMsg = resultMsg.substring(0, 500) + "...";
         }
+        // noteがあればメッセージに含める
         final String message = "Transition " + status + ": " + finalLabel +
+                (note.isEmpty() ? "" : " [" + note + "]") +
                 (resultMsg.isEmpty() ? "" : " - " + resultMsg);
 
         LogLevel level = success ? LogLevel.INFO : LogLevel.WARN;
@@ -378,5 +383,26 @@ public class NodeGroupInterpreter extends Interpreter {
         logStoreActor.tell(
             store -> store.log(sessionId, "nodeGroup", finalLabel, level, message),
             dbExecutor);
+    }
+
+    /**
+     * transitionのnoteを取得する。60文字または最初の行までに制限。
+     * noteがない場合は空文字列を返す。
+     */
+    private String getTransitionNote(Transition transition) {
+        String note = transition.getNote();
+        if (note == null || note.isEmpty()) {
+            return "";
+        }
+        // 最初の行のみ
+        int newlineIdx = note.indexOf('\n');
+        if (newlineIdx > 0) {
+            note = note.substring(0, newlineIdx);
+        }
+        // 60文字まで
+        if (note.length() > 60) {
+            note = note.substring(0, 57) + "...";
+        }
+        return note.trim();
     }
 }
