@@ -67,10 +67,10 @@ class TransitionViewerPluginTest {
                 "node_id VARCHAR(255), label VARCHAR(255), level VARCHAR(50), " +
                 "message TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
             stmt.execute("CREATE TABLE IF NOT EXISTS sessions " +
-                "(id BIGINT PRIMARY KEY, workflow_name VARCHAR(255), " +
+                "(id BIGINT PRIMARY KEY, workflow_name VARCHAR(255), cwd VARCHAR(1000), " +
                 "started_at TIMESTAMP, ended_at TIMESTAMP)");
             // Insert test session
-            stmt.execute("INSERT INTO sessions (id, workflow_name) VALUES (1, 'test-workflow.yaml')");
+            stmt.execute("INSERT INTO sessions (id, workflow_name, cwd) VALUES (1, 'test-workflow.yaml', '/tmp')");
         }
 
         plugin.setConnection(connection);

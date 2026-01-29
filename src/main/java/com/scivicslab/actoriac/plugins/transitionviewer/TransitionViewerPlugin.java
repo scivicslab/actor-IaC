@@ -167,12 +167,15 @@ public class TransitionViewerPlugin implements CallableByActionName, ActorSystem
      */
     private String buildSingleActorOutput(String source, long sessionId) throws Exception {
         List<TransitionEntry> entries = queryTransitions(source, sessionId);
-        String workflowName = querySessionWorkflowName(sessionId);
+        SessionInfo sessionInfo = querySessionInfo(sessionId);
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== Transition History ===\n");
-        if (workflowName != null && !workflowName.isEmpty()) {
-            sb.append("Workflow: ").append(workflowName).append("\n");
+        if (sessionInfo.workflowName != null && !sessionInfo.workflowName.isEmpty()) {
+            sb.append("Workflow: ").append(sessionInfo.workflowName).append("\n");
+        }
+        if (sessionInfo.description != null && !sessionInfo.description.isEmpty()) {
+            sb.append("Description: ").append(sessionInfo.description).append("\n");
         }
         sb.append("Session: ").append(sessionId).append("\n");
         sb.append("Target: ").append(source).append("\n\n");
@@ -211,12 +214,15 @@ public class TransitionViewerPlugin implements CallableByActionName, ActorSystem
     private String buildAggregatedOutput(long sessionId) throws Exception {
         // セッション内の全アクターを取得
         List<String> sources = queryDistinctSources(sessionId);
-        String workflowName = querySessionWorkflowName(sessionId);
+        SessionInfo sessionInfo = querySessionInfo(sessionId);
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== Transition History ===\n");
-        if (workflowName != null && !workflowName.isEmpty()) {
-            sb.append("Workflow: ").append(workflowName).append("\n");
+        if (sessionInfo.workflowName != null && !sessionInfo.workflowName.isEmpty()) {
+            sb.append("Workflow: ").append(sessionInfo.workflowName).append("\n");
+        }
+        if (sessionInfo.description != null && !sessionInfo.description.isEmpty()) {
+            sb.append("Description: ").append(sessionInfo.description).append("\n");
         }
         sb.append("Session: ").append(sessionId).append("\n");
         sb.append("Target: nodeGroup (with children)\n");
@@ -328,22 +334,73 @@ public class TransitionViewerPlugin implements CallableByActionName, ActorSystem
     }
 
     /**
-     * セッションIDからワークフロー名を取得する。
+     * セッション情報（ワークフロー名、説明）を取得する。
      */
-    private String querySessionWorkflowName(long sessionId) throws Exception {
-        String sql = "SELECT workflow_name FROM sessions WHERE id = ?";
+    private SessionInfo querySessionInfo(long sessionId) throws Exception {
+        String sql = "SELECT workflow_name, cwd FROM sessions WHERE id = ?";
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setLong(1, sessionId);
 
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getString("workflow_name");
+                    String workflowName = rs.getString("workflow_name");
+                    String cwd = rs.getString("cwd");
+                    String description = readWorkflowDescription(cwd, workflowName);
+                    return new SessionInfo(workflowName, description);
                 }
             }
         }
 
+        return new SessionInfo(null, null);
+    }
+
+    /**
+     * ワークフローYAMLからdescriptionを読み取る。
+     */
+    private String readWorkflowDescription(String cwd, String workflowName) {
+        if (cwd == null || workflowName == null) return null;
+
+        try {
+            java.nio.file.Path path = java.nio.file.Paths.get(cwd, workflowName);
+            if (!java.nio.file.Files.exists(path)) return null;
+
+            try (java.io.InputStream is = java.nio.file.Files.newInputStream(path)) {
+                org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                Map<String, Object> data = yaml.load(is);
+                if (data != null) {
+                    Object descObj = data.get("description");
+                    if (descObj != null) {
+                        String desc = descObj.toString().trim();
+                        // 一行目だけ、または60文字まで
+                        int newlineIdx = desc.indexOf('\n');
+                        if (newlineIdx > 0) {
+                            desc = desc.substring(0, newlineIdx);
+                        }
+                        if (desc.length() > 60) {
+                            desc = desc.substring(0, 57) + "...";
+                        }
+                        return desc.trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.fine("Could not read workflow description: " + e.getMessage());
+        }
         return null;
+    }
+
+    /**
+     * セッション情報を保持する内部クラス。
+     */
+    private static class SessionInfo {
+        final String workflowName;
+        final String description;
+
+        SessionInfo(String workflowName, String description) {
+            this.workflowName = workflowName;
+            this.description = description;
+        }
     }
 
     private long getSessionIdFromNodeGroup() {
