@@ -167,11 +167,15 @@ public class TransitionViewerPlugin implements CallableByActionName, ActorSystem
      */
     private String buildSingleActorOutput(String source, long sessionId) throws Exception {
         List<TransitionEntry> entries = queryTransitions(source, sessionId);
+        String workflowName = querySessionWorkflowName(sessionId);
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== Transition History ===\n");
-        sb.append("Target: ").append(source).append("\n");
-        sb.append("Session: ").append(sessionId).append("\n\n");
+        if (workflowName != null && !workflowName.isEmpty()) {
+            sb.append("Workflow: ").append(workflowName).append("\n");
+        }
+        sb.append("Session: ").append(sessionId).append("\n");
+        sb.append("Target: ").append(source).append("\n\n");
 
         int succeeded = 0;
         int failed = 0;
@@ -207,11 +211,15 @@ public class TransitionViewerPlugin implements CallableByActionName, ActorSystem
     private String buildAggregatedOutput(long sessionId) throws Exception {
         // セッション内の全アクターを取得
         List<String> sources = queryDistinctSources(sessionId);
+        String workflowName = querySessionWorkflowName(sessionId);
 
         StringBuilder sb = new StringBuilder();
         sb.append("=== Transition History ===\n");
-        sb.append("Target: nodeGroup (with children)\n");
+        if (workflowName != null && !workflowName.isEmpty()) {
+            sb.append("Workflow: ").append(workflowName).append("\n");
+        }
         sb.append("Session: ").append(sessionId).append("\n");
+        sb.append("Target: nodeGroup (with children)\n");
 
         int totalTransitions = 0;
         int totalSucceeded = 0;
@@ -317,6 +325,25 @@ public class TransitionViewerPlugin implements CallableByActionName, ActorSystem
         }
 
         return sources;
+    }
+
+    /**
+     * セッションIDからワークフロー名を取得する。
+     */
+    private String querySessionWorkflowName(long sessionId) throws Exception {
+        String sql = "SELECT workflow_name FROM sessions WHERE id = ?";
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, sessionId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("workflow_name");
+                }
+            }
+        }
+
+        return null;
     }
 
     private long getSessionIdFromNodeGroup() {

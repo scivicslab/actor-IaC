@@ -376,23 +376,49 @@
 <span class="source-line-no">363</span><span id="line-363">        }</span>
 <span class="source-line-no">364</span><span id="line-364">        final String finalLabel = label;</span>
 <span class="source-line-no">365</span><span id="line-365"></span>
-<span class="source-line-no">366</span><span id="line-366">        String status = success ? "SUCCESS" : "FAILED";</span>
-<span class="source-line-no">367</span><span id="line-367">        String resultMsg = result != null ? result.getResult() : "";</span>
-<span class="source-line-no">368</span><span id="line-368">        // Truncate long result messages</span>
-<span class="source-line-no">369</span><span id="line-369">        if (resultMsg.length() &gt; 500) {</span>
-<span class="source-line-no">370</span><span id="line-370">            resultMsg = resultMsg.substring(0, 500) + "...";</span>
-<span class="source-line-no">371</span><span id="line-371">        }</span>
-<span class="source-line-no">372</span><span id="line-372">        final String message = "Transition " + status + ": " + finalLabel +</span>
-<span class="source-line-no">373</span><span id="line-373">                (resultMsg.isEmpty() ? "" : " - " + resultMsg);</span>
-<span class="source-line-no">374</span><span id="line-374"></span>
-<span class="source-line-no">375</span><span id="line-375">        LogLevel level = success ? LogLevel.INFO : LogLevel.WARN;</span>
-<span class="source-line-no">376</span><span id="line-376"></span>
-<span class="source-line-no">377</span><span id="line-377">        // Fire-and-forget: don't wait for DB write to complete</span>
-<span class="source-line-no">378</span><span id="line-378">        logStoreActor.tell(</span>
-<span class="source-line-no">379</span><span id="line-379">            store -&gt; store.log(sessionId, "nodeGroup", finalLabel, level, message),</span>
-<span class="source-line-no">380</span><span id="line-380">            dbExecutor);</span>
-<span class="source-line-no">381</span><span id="line-381">    }</span>
-<span class="source-line-no">382</span><span id="line-382">}</span>
+<span class="source-line-no">366</span><span id="line-366">        // noteを取得（60文字または最初の行まで）</span>
+<span class="source-line-no">367</span><span id="line-367">        String note = getTransitionNote(transition);</span>
+<span class="source-line-no">368</span><span id="line-368"></span>
+<span class="source-line-no">369</span><span id="line-369">        String status = success ? "SUCCESS" : "FAILED";</span>
+<span class="source-line-no">370</span><span id="line-370">        String resultMsg = result != null ? result.getResult() : "";</span>
+<span class="source-line-no">371</span><span id="line-371">        // Truncate long result messages</span>
+<span class="source-line-no">372</span><span id="line-372">        if (resultMsg.length() &gt; 500) {</span>
+<span class="source-line-no">373</span><span id="line-373">            resultMsg = resultMsg.substring(0, 500) + "...";</span>
+<span class="source-line-no">374</span><span id="line-374">        }</span>
+<span class="source-line-no">375</span><span id="line-375">        // noteがあればメッセージに含める</span>
+<span class="source-line-no">376</span><span id="line-376">        final String message = "Transition " + status + ": " + finalLabel +</span>
+<span class="source-line-no">377</span><span id="line-377">                (note.isEmpty() ? "" : " [" + note + "]") +</span>
+<span class="source-line-no">378</span><span id="line-378">                (resultMsg.isEmpty() ? "" : " - " + resultMsg);</span>
+<span class="source-line-no">379</span><span id="line-379"></span>
+<span class="source-line-no">380</span><span id="line-380">        LogLevel level = success ? LogLevel.INFO : LogLevel.WARN;</span>
+<span class="source-line-no">381</span><span id="line-381"></span>
+<span class="source-line-no">382</span><span id="line-382">        // Fire-and-forget: don't wait for DB write to complete</span>
+<span class="source-line-no">383</span><span id="line-383">        logStoreActor.tell(</span>
+<span class="source-line-no">384</span><span id="line-384">            store -&gt; store.log(sessionId, "nodeGroup", finalLabel, level, message),</span>
+<span class="source-line-no">385</span><span id="line-385">            dbExecutor);</span>
+<span class="source-line-no">386</span><span id="line-386">    }</span>
+<span class="source-line-no">387</span><span id="line-387"></span>
+<span class="source-line-no">388</span><span id="line-388">    /**</span>
+<span class="source-line-no">389</span><span id="line-389">     * transitionのnoteを取得する。60文字または最初の行までに制限。</span>
+<span class="source-line-no">390</span><span id="line-390">     * noteがない場合は空文字列を返す。</span>
+<span class="source-line-no">391</span><span id="line-391">     */</span>
+<span class="source-line-no">392</span><span id="line-392">    private String getTransitionNote(Transition transition) {</span>
+<span class="source-line-no">393</span><span id="line-393">        String note = transition.getNote();</span>
+<span class="source-line-no">394</span><span id="line-394">        if (note == null || note.isEmpty()) {</span>
+<span class="source-line-no">395</span><span id="line-395">            return "";</span>
+<span class="source-line-no">396</span><span id="line-396">        }</span>
+<span class="source-line-no">397</span><span id="line-397">        // 最初の行のみ</span>
+<span class="source-line-no">398</span><span id="line-398">        int newlineIdx = note.indexOf('\n');</span>
+<span class="source-line-no">399</span><span id="line-399">        if (newlineIdx &gt; 0) {</span>
+<span class="source-line-no">400</span><span id="line-400">            note = note.substring(0, newlineIdx);</span>
+<span class="source-line-no">401</span><span id="line-401">        }</span>
+<span class="source-line-no">402</span><span id="line-402">        // 60文字まで</span>
+<span class="source-line-no">403</span><span id="line-403">        if (note.length() &gt; 60) {</span>
+<span class="source-line-no">404</span><span id="line-404">            note = note.substring(0, 57) + "...";</span>
+<span class="source-line-no">405</span><span id="line-405">        }</span>
+<span class="source-line-no">406</span><span id="line-406">        return note.trim();</span>
+<span class="source-line-no">407</span><span id="line-407">    }</span>
+<span class="source-line-no">408</span><span id="line-408">}</span>
 
 
 

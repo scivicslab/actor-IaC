@@ -4,4 +4,5 @@ com.scivicslab.actoriac.cli
 com.scivicslab.actoriac.example
 com.scivicslab.actoriac.log
 com.scivicslab.actoriac.mixin
+com.scivicslab.actoriac.plugins.transitionviewer
 com.scivicslab.actoriac.report

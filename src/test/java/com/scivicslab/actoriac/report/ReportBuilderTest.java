@@ -163,58 +163,6 @@ class ReportBuilderTest {
     }
 
     // ========================================================================
-    // TransitionSection Tests
-    // ========================================================================
-
-    @Nested
-    @DisplayName("TransitionSection")
-    class TransitionSectionTests {
-
-        @Test
-        @DisplayName("遷移サマリーを出力")
-        void getContent_returnsTransitionSummary() {
-            TransitionSection section = new TransitionSection();
-            section.addTransition("0 -> 1", true, null);
-            section.addTransition("1 -> 2", true, null);
-            section.addTransition("2 -> 3", false, "action failed");
-
-            String content = section.getContent();
-
-            assertTrue(content.contains("[✓] 0 -> 1"));
-            assertTrue(content.contains("[✓] 1 -> 2"));
-            assertTrue(content.contains("[✗] 2 -> 3"));
-            assertTrue(content.contains("action failed"));
-            assertTrue(content.contains("Summary: 2 succeeded, 1 failed"));
-        }
-
-        @Test
-        @DisplayName("タイトルはTransitions")
-        void getTitle_returnsTransitions() {
-            TransitionSection section = new TransitionSection();
-
-            assertEquals("Transitions", section.getTitle());
-        }
-
-        @Test
-        @DisplayName("orderは300")
-        void getOrder_returns300() {
-            TransitionSection section = new TransitionSection();
-
-            assertEquals(300, section.getOrder());
-        }
-
-        @Test
-        @DisplayName("遷移がない場合は空")
-        void getContent_noTransitions_empty() {
-            TransitionSection section = new TransitionSection();
-
-            String content = section.getContent();
-
-            assertTrue(content.isEmpty() || content.isBlank());
-        }
-    }
-
-    // ========================================================================
     // JsonStateSection Tests
     // ========================================================================
 
@@ -270,12 +218,6 @@ class ReportBuilderTest {
                 "Collect Kubernetes cluster status."
             ));
 
-            // Transitions
-            TransitionSection transitions = new TransitionSection();
-            transitions.addTransition("0 -> 1", true, null);
-            transitions.addTransition("1 -> 2", true, null);
-            builder.addSection(transitions);
-
             // JsonState
             String yaml = "cluster:\n  cluster: https://192.168.5.23:16443\n  total: 2\n";
             builder.addSection(new JsonStateSection("node-localhost", yaml));
@@ -289,21 +231,15 @@ class ReportBuilderTest {
             assertTrue(report.contains("[Workflow Info]"));
             assertTrue(report.contains("main-cluster-status.yaml"));
 
-            // Transitions (order 300)
-            assertTrue(report.contains("--- Transitions ---"));
-            assertTrue(report.contains("[✓] 0 -> 1"));
-
             // JsonState (order 400)
             assertTrue(report.contains("node-localhost"));
             assertTrue(report.contains("cluster: https://192.168.5.23:16443"));
 
             // 順序確認
             int workflowInfoIdx = report.indexOf("[Workflow Info]");
-            int transitionsIdx = report.indexOf("--- Transitions ---");
             int jsonStateIdx = report.indexOf("node-localhost");
 
-            assertTrue(workflowInfoIdx < transitionsIdx);
-            assertTrue(transitionsIdx < jsonStateIdx);
+            assertTrue(workflowInfoIdx < jsonStateIdx);
         }
     }
 

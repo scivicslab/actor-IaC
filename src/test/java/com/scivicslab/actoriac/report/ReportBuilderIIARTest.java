@@ -27,9 +27,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -47,10 +44,9 @@ class ReportBuilderIIARTest {
     private IIActorSystem testSystem;
     private TestActorRef testNodeGroup;
     private TestActorRef testOutputMultiplexer;
-    private Connection connection;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         // Setup test system first
         testSystem = new IIActorSystem("test-system");
         testNodeGroup = new TestActorRef("nodeGroup");
@@ -62,21 +58,6 @@ class ReportBuilderIIARTest {
         // Create POJO and wrap it with actor, passing system to constructor
         ReportBuilder builder = new ReportBuilder();
         actor = new ReportBuilderIIAR("reportBuilder", builder, testSystem);
-
-        // Setup in-memory database
-        connection = DriverManager.getConnection(
-            "jdbc:h2:mem:test_reportbuilder_iiar_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1");
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute("CREATE TABLE IF NOT EXISTS sessions " +
-                "(id BIGINT PRIMARY KEY, workflow_name VARCHAR(255), started_at TIMESTAMP)");
-            stmt.execute("CREATE TABLE IF NOT EXISTS logs " +
-                "(id BIGINT AUTO_INCREMENT PRIMARY KEY, session_id BIGINT, " +
-                "label VARCHAR(255), level VARCHAR(50), message TEXT, timestamp TIMESTAMP)");
-            stmt.execute("INSERT INTO sessions (id, workflow_name, started_at) " +
-                "VALUES (1, 'test-workflow.yaml', CURRENT_TIMESTAMP)");
-        }
-
-        actor.setConnection(connection);
     }
 
     // ========================================================================
@@ -241,59 +222,6 @@ class ReportBuilderIIARTest {
     }
 
     // ========================================================================
-    // addTransitionSection Tests
-    // ========================================================================
-
-    @Nested
-    @DisplayName("addTransitionSection Action")
-    class AddTransitionSectionTests {
-
-        @Test
-        @DisplayName("addTransitionSection adds section from logs")
-        void addTransitionSection_addsSectionFromLogs() throws Exception {
-            // Insert transition logs
-            try (Statement stmt = connection.createStatement()) {
-                stmt.execute("INSERT INTO logs (session_id, label, level, message, timestamp) " +
-                    "VALUES (1, '0 -> 1', 'INFO', 'Transition SUCCESS', CURRENT_TIMESTAMP)");
-                stmt.execute("INSERT INTO logs (session_id, label, level, message, timestamp) " +
-                    "VALUES (1, '1 -> 2', 'INFO', 'Transition SUCCESS', CURRENT_TIMESTAMP)");
-            }
-
-            testNodeGroup.setActionResult("getSessionId", new ActionResult(true, "1"));
-
-            ActionResult result = actor.callByActionName("addTransitionSection", "");
-
-            assertTrue(result.isSuccess());
-
-            ActionResult reportResult = actor.callByActionName("report", "");
-            assertTrue(reportResult.getResult().contains("--- Transitions ---"));
-            assertTrue(reportResult.getResult().contains("[✓] 0 -> 1"));
-            assertTrue(reportResult.getResult().contains("[✓] 1 -> 2"));
-            assertTrue(reportResult.getResult().contains("2 succeeded, 0 failed"));
-        }
-
-        @Test
-        @DisplayName("addTransitionSection shows failures")
-        void addTransitionSection_showsFailures() throws Exception {
-            try (Statement stmt = connection.createStatement()) {
-                stmt.execute("INSERT INTO logs (session_id, label, level, message, timestamp) " +
-                    "VALUES (1, '0 -> 1', 'INFO', 'Transition SUCCESS', CURRENT_TIMESTAMP)");
-                stmt.execute("INSERT INTO logs (session_id, label, level, message, timestamp) " +
-                    "VALUES (1, '1 -> 2', 'ERROR', 'Transition FAILED - action failed', CURRENT_TIMESTAMP)");
-            }
-
-            testNodeGroup.setActionResult("getSessionId", new ActionResult(true, "1"));
-
-            actor.callByActionName("addTransitionSection", "");
-            ActionResult reportResult = actor.callByActionName("report", "");
-
-            assertTrue(reportResult.getResult().contains("[✓] 0 -> 1"));
-            assertTrue(reportResult.getResult().contains("[✗] 1 -> 2"));
-            assertTrue(reportResult.getResult().contains("1 succeeded, 1 failed"));
-        }
-    }
-
-    // ========================================================================
     // Integration Tests
     // ========================================================================
 
@@ -303,11 +231,10 @@ class ReportBuilderIIARTest {
 
         @Test
         @DisplayName("Full report with all sections")
-        void fullReport_allSections() throws Exception {
+        void fullReport_allSections() {
             // Setup workflow info
             testNodeGroup.setActionResult("getWorkflowPath",
                 new ActionResult(true, "/workflows/main-cluster-status.yaml"));
-            testNodeGroup.setActionResult("getSessionId", new ActionResult(true, "1"));
 
             // Setup target actor with JsonState
             TestActorRef targetActor = new TestActorRef("node-localhost");
@@ -315,17 +242,8 @@ class ReportBuilderIIARTest {
             targetActor.putJson("cluster.nodes", 5);
             testSystem.addIIActor(targetActor);
 
-            // Setup transition logs
-            try (Statement stmt = connection.createStatement()) {
-                stmt.execute("INSERT INTO logs (session_id, label, level, message, timestamp) " +
-                    "VALUES (1, '0 -> 1', 'INFO', 'Transition SUCCESS', CURRENT_TIMESTAMP)");
-                stmt.execute("INSERT INTO logs (session_id, label, level, message, timestamp) " +
-                    "VALUES (1, '1 -> 2', 'INFO', 'Transition SUCCESS', CURRENT_TIMESTAMP)");
-            }
-
             // Build report
             actor.callByActionName("addWorkflowInfo", "");
-            actor.callByActionName("addTransitionSection", "");
             actor.callByActionName("addJsonStateSection", "{\"actor\":\"node-localhost\"}");
             ActionResult result = actor.callByActionName("report", "");
 
@@ -333,19 +251,15 @@ class ReportBuilderIIARTest {
 
             String report = result.getResult();
 
-            // Verify order: WorkflowInfo (100) < Transitions (300) < JsonState (400)
+            // Verify order: WorkflowInfo (100) < JsonState (400)
             int workflowInfoIdx = report.indexOf("[Workflow Info]");
-            int transitionsIdx = report.indexOf("--- Transitions ---");
             int collectedDataIdx = report.indexOf("--- Collected Data");
 
-            assertTrue(workflowInfoIdx < transitionsIdx,
-                "WorkflowInfo should come before Transitions");
-            assertTrue(transitionsIdx < collectedDataIdx,
-                "Transitions should come before Collected Data");
+            assertTrue(workflowInfoIdx < collectedDataIdx,
+                "WorkflowInfo should come before Collected Data");
 
             // Verify content
             assertTrue(report.contains("main-cluster-status.yaml"));
-            assertTrue(report.contains("[✓] 0 -> 1"));
             assertTrue(report.contains("prod-cluster"));
         }
 

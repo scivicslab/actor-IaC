@@ -17,7 +17,6 @@
 
 package com.scivicslab.actoriac.report;
 
-import com.scivicslab.actoriac.log.DistributedLogStore;
 import com.scivicslab.pojoactor.core.Action;
 import com.scivicslab.pojoactor.core.ActionResult;
 import com.scivicslab.pojoactor.core.JsonState;
@@ -31,11 +30,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -49,9 +44,10 @@ import java.util.logging.Logger;
  * <ul>
  *   <li>{@code addWorkflowInfo} - Add workflow metadata section</li>
  *   <li>{@code addJsonStateSection} - Add actor's JsonState as YAML</li>
- *   <li>{@code addTransitionSection} - Add transition summary from logs</li>
  *   <li>{@code report} - Build and output the report</li>
  * </ul>
+ *
+ * <p>Transition履歴の詳細表示は{@code TransitionViewerPlugin}で行う。</p>
  *
  * @author devteam@scivicslab.com
  * @since 2.15.0
@@ -61,8 +57,6 @@ public class ReportBuilderIIAR extends IIActorRef<ReportBuilder> {
     private static final String CLASS_NAME = ReportBuilderIIAR.class.getName();
     private static final Logger logger = Logger.getLogger(CLASS_NAME);
 
-    private Connection connection;
-
     /**
      * Constructs a new ReportBuilderIIAR.
      *
@@ -71,7 +65,6 @@ public class ReportBuilderIIAR extends IIActorRef<ReportBuilder> {
      */
     public ReportBuilderIIAR(String name, ReportBuilder builder) {
         super(name, builder);
-        initConnection();
     }
 
     /**
@@ -83,27 +76,6 @@ public class ReportBuilderIIAR extends IIActorRef<ReportBuilder> {
      */
     public ReportBuilderIIAR(String name, ReportBuilder builder, IIActorSystem system) {
         super(name, builder, system);
-        initConnection();
-    }
-
-    /**
-     * Initialize database connection from DistributedLogStore.
-     */
-    private void initConnection() {
-        DistributedLogStore logStore = DistributedLogStore.getInstance();
-        if (logStore != null) {
-            this.connection = logStore.getConnection();
-            logger.fine("ReportBuilderIIAR: Initialized database connection");
-        }
-    }
-
-    /**
-     * Sets the database connection (for testing).
-     *
-     * @param connection the JDBC connection
-     */
-    public void setConnection(Connection connection) {
-        this.connection = connection;
     }
 
     // ========================================================================
@@ -205,68 +177,6 @@ public class ReportBuilderIIAR extends IIActorRef<ReportBuilder> {
     }
 
     /**
-     * Adds transition section from log database.
-     *
-     * @param args unused
-     * @return ActionResult indicating success or failure
-     */
-    @Action("addTransitionSection")
-    public ActionResult addTransitionSection(String args) {
-        logger.info("ReportBuilderIIAR.addTransitionSection");
-
-        if (connection == null) {
-            return new ActionResult(false, "Database connection not available");
-        }
-
-        long sessionId;
-        try {
-            sessionId = getSessionIdFromNodeGroup();
-        } catch (Exception e) {
-            return new ActionResult(false, "Could not get session ID: " + e.getMessage());
-        }
-
-        TransitionSection section = new TransitionSection();
-
-        try {
-            String sql = "SELECT label, level, message FROM logs " +
-                         "WHERE session_id = ? AND message LIKE 'Transition %' " +
-                         "ORDER BY timestamp";
-
-            try (PreparedStatement ps = connection.prepareStatement(sql)) {
-                ps.setLong(1, sessionId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        String label = rs.getString("label");
-                        String message = rs.getString("message");
-
-                        boolean success = message.contains("SUCCESS");
-                        String errorMessage = null;
-
-                        if (!success) {
-                            int dashIdx = message.indexOf(" - ");
-                            if (dashIdx > 0) {
-                                errorMessage = message.substring(dashIdx + 3);
-                            }
-                        }
-
-                        section.addTransition(
-                            label != null ? label : "unknown",
-                            success,
-                            errorMessage
-                        );
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.warning("ReportBuilderIIAR.addTransitionSection: DB error: " + e.getMessage());
-            return new ActionResult(false, "Database error: " + e.getMessage());
-        }
-
-        this.object.addSection(section);
-        return new ActionResult(true, "Transition section added");
-    }
-
-    /**
      * Builds and outputs the report.
      *
      * @param args unused
@@ -298,28 +208,6 @@ public class ReportBuilderIIAR extends IIActorRef<ReportBuilder> {
 
         ActionResult result = nodeGroup.callByActionName("getWorkflowPath", "");
         return result.isSuccess() ? result.getResult() : null;
-    }
-
-    /**
-     * Gets session ID from nodeGroup actor.
-     */
-    private long getSessionIdFromNodeGroup() {
-        if (system() == null) {
-            throw new RuntimeException("ActorSystem not set");
-        }
-        IIActorSystem iiSystem = (IIActorSystem) system();
-
-        IIActorRef<?> nodeGroup = iiSystem.getIIActor("nodeGroup");
-        if (nodeGroup == null) {
-            throw new RuntimeException("nodeGroup not found");
-        }
-
-        ActionResult result = nodeGroup.callByActionName("getSessionId", "");
-        if (!result.isSuccess()) {
-            throw new RuntimeException("Could not get session ID from nodeGroup");
-        }
-
-        return Long.parseLong(result.getResult());
     }
 
     /**
