@@ -6,3 +6,4 @@ com.scivicslab.actoriac.log
 com.scivicslab.actoriac.mixin
 com.scivicslab.actoriac.plugins.transitionviewer
 com.scivicslab.actoriac.report
+com.scivicslab.actoriac.report.sections.basic

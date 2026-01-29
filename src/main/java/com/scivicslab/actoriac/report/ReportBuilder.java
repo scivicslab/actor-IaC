@@ -23,6 +23,7 @@ import com.scivicslab.pojoactor.core.JsonState;
 import com.scivicslab.pojoactor.workflow.ActorSystemAware;
 import com.scivicslab.pojoactor.workflow.IIActorRef;
 import com.scivicslab.pojoactor.workflow.IIActorSystem;
+import com.scivicslab.pojoactor.workflow.IIActorRefAware;
 
 import org.json.JSONObject;
 import org.yaml.snakeyaml.Yaml;
@@ -35,63 +36,74 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
 /**
  * Section-based workflow report builder.
  *
- * <p>Assembles {@link ReportSection} instances into a unified report.
- * Can be used from workflows via {@code loader.createChild}.</p>
+ * <p>Assembles report sections from two sources:</p>
+ * <ol>
+ *   <li><strong>Legacy sections</strong> - Added via {@code addWorkflowInfo} and {@code addJsonStateSection}</li>
+ *   <li><strong>Child actor sections</strong> - {@link SectionBuilder} actors created as children</li>
+ * </ol>
  *
- * <h2>Usage in workflows:</h2>
+ * <h2>Usage with child actor sections (recommended):</h2>
  * <pre>{@code
  * steps:
  *   - states: ["0", "1"]
  *     actions:
  *       - actor: loader
  *         method: createChild
- *         arguments: ["ROOT", "reportBuilder", "com.scivicslab.actoriac.report.ReportBuilder"]
+ *         arguments: ["ROOT", "reportBuilder", "...ReportBuilder"]
+ *       - actor: loader
+ *         method: createChild
+ *         arguments: ["reportBuilder", "wfName", "...WorkflowNameSection"]
+ *       - actor: loader
+ *         method: createChild
+ *         arguments: ["reportBuilder", "wfDesc", "...WorkflowDescriptionSection"]
+ *
+ *   - states: ["1", "end"]
+ *     actions:
+ *       - actor: reportBuilder
+ *         method: report
+ * }</pre>
+ *
+ * <h2>Legacy usage:</h2>
+ * <pre>{@code
+ * steps:
+ *   - states: ["0", "1"]
+ *     actions:
+ *       - actor: loader
+ *         method: createChild
+ *         arguments: ["ROOT", "reportBuilder", "...ReportBuilder"]
  *       - actor: reportBuilder
  *         method: addWorkflowInfo
  *
- *   - states: ["1", "2"]
+ *   - states: ["1", "end"]
  *     actions:
- *       - actor: nodeGroup
- *         method: apply
- *         arguments:
- *           actor: "node-*"
- *           method: runWorkflow
- *           arguments: ["sub-workflow.yaml"]
- *
- *   - states: ["2", "end"]
- *     actions:
- *       - actor: reportBuilder
- *         method: addJsonStateSection
- *         arguments:
- *           actor: "node-localhost"
  *       - actor: reportBuilder
  *         method: report
  * }</pre>
  *
  * <h2>Actions:</h2>
  * <ul>
- *   <li>{@code addWorkflowInfo} - Add workflow metadata section</li>
- *   <li>{@code addJsonStateSection} - Add actor's JsonState as YAML (args: {"actor": "name", "path": "optional"})</li>
+ *   <li>{@code addWorkflowInfo} - Add workflow metadata section (legacy)</li>
+ *   <li>{@code addJsonStateSection} - Add actor's JsonState as YAML (legacy)</li>
  *   <li>{@code report} - Build and output the report to outputMultiplexer</li>
  * </ul>
- *
- * <p>Transition履歴の詳細表示は{@code TransitionViewerPlugin}で行う。</p>
  *
  * @author devteam@scivicslab.com
  * @since 2.15.0
  */
-public class ReportBuilder implements CallableByActionName, ActorSystemAware {
+public class ReportBuilder implements CallableByActionName, ActorSystemAware, IIActorRefAware {
 
     private static final String CLASS_NAME = ReportBuilder.class.getName();
     private static final Logger logger = Logger.getLogger(CLASS_NAME);
 
     private final List<ReportSection> sections = new ArrayList<>();
     private IIActorSystem system;
+    private IIActorRef<?> selfRef;
 
     /**
      * Default constructor for use with loader.createChild.
@@ -103,6 +115,12 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware {
     public void setActorSystem(IIActorSystem system) {
         this.system = system;
         logger.info("ReportBuilder: ActorSystem set");
+    }
+
+    @Override
+    public void setIIActorRef(IIActorRef<?> actorRef) {
+        this.selfRef = actorRef;
+        logger.info("ReportBuilder: IIActorRef set");
     }
 
     // ========================================================================
@@ -226,6 +244,12 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware {
     /**
      * Builds the report string.
      *
+     * <p>Collects sections from two sources:</p>
+     * <ol>
+     *   <li>Legacy sections added via {@code addWorkflowInfo} and {@code addJsonStateSection}</li>
+     *   <li>Child actor sections implementing {@link SectionBuilder}</li>
+     * </ol>
+     *
      * @return the formatted report string
      */
     public String build() {
@@ -234,13 +258,69 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware {
         // Header
         sb.append("=== Workflow Execution Report ===\n");
 
+        // Collect all sections (both legacy and child actors)
+        List<SectionEntry> allSections = new ArrayList<>();
+
+        // 1. Add legacy sections
+        for (ReportSection section : sections) {
+            allSections.add(new SectionEntry(
+                section.getOrder(),
+                section.getTitle(),
+                section.getContent()
+            ));
+        }
+
+        // 2. Add child actor sections via callByActionName
+        if (selfRef != null && system != null) {
+            Set<String> childNames = selfRef.getNamesOfChildren();
+            for (String childName : childNames) {
+                IIActorRef<?> childRef = system.getIIActor(childName);
+                if (childRef == null) continue;
+
+                // Call generate action on the child
+                ActionResult generateResult = childRef.callByActionName("generate", "");
+                if (!generateResult.isSuccess()) {
+                    // Child doesn't support generate action, skip it
+                    continue;
+                }
+
+                String content = generateResult.getResult();
+                if (content == null || content.isEmpty()) {
+                    continue;
+                }
+
+                // Get order (default 100 if not supported)
+                int order = 100;
+                ActionResult orderResult = childRef.callByActionName("getOrder", "");
+                if (orderResult.isSuccess()) {
+                    try {
+                        order = Integer.parseInt(orderResult.getResult());
+                    } catch (NumberFormatException e) {
+                        // Use default
+                    }
+                }
+
+                // Get title (may be empty)
+                String title = null;
+                ActionResult titleResult = childRef.callByActionName("getTitle", "");
+                if (titleResult.isSuccess()) {
+                    String t = titleResult.getResult();
+                    if (t != null && !t.isEmpty()) {
+                        title = t;
+                    }
+                }
+
+                allSections.add(new SectionEntry(order, title, content));
+            }
+        }
+
         // Sort sections by order and output
-        sections.stream()
-            .sorted(Comparator.comparingInt(ReportSection::getOrder))
-            .forEach(section -> {
-                String content = section.getContent();
+        allSections.stream()
+            .sorted(Comparator.comparingInt(SectionEntry::order))
+            .forEach(entry -> {
+                String content = entry.content();
                 if (content != null && !content.isEmpty()) {
-                    String title = section.getTitle();
+                    String title = entry.title();
                     if (title != null && !title.isEmpty()) {
                         sb.append("\n--- ").append(title).append(" ---\n");
                     }
@@ -250,6 +330,11 @@ public class ReportBuilder implements CallableByActionName, ActorSystemAware {
 
         return sb.toString();
     }
+
+    /**
+     * Internal record to hold section data for sorting.
+     */
+    private record SectionEntry(int order, String title, String content) {}
 
     // ========================================================================
     // Helper Methods
