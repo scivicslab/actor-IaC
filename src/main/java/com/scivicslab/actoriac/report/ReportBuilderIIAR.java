@@ -58,6 +58,21 @@ public class ReportBuilderIIAR extends IIActorRef<ReportBuilder> {
     private static final Logger logger = Logger.getLogger(CLASS_NAME);
 
     /**
+     * Constructs a new ReportBuilderIIAR with a new POJO instance.
+     *
+     * <p>Required by {@code loader.createChild} for dynamic instantiation.</p>
+     *
+     * @param actorName the actor name
+     * @param system the actor system
+     */
+    public ReportBuilderIIAR(String actorName, IIActorSystem system) {
+        super(actorName, new ReportBuilder(), system);
+        // POJOにsystemとselfRefを設定（ReportBuilder.build()が子アクターを取得するため）
+        this.object.setActorSystem(system);
+        this.object.setIIActorRef(this);
+    }
+
+    /**
      * Constructs a new ReportBuilderIIAR.
      *
      * @param name the actor name
