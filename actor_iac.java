@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
  */
 class actor_iac {
 
-    private static final String VERSION = "2.14.0-SNAPSHOT";
+    private static final String VERSION = "2.15.0";
 
     public static void main(String[] args) throws Exception {
         File jarFile = locateJar();
@@ -45,7 +45,7 @@ class actor_iac {
 
         candidates.add(Paths.get(System.getProperty("user.home"),
                                  ".m2", "repository", "com", "scivicslab", "actor-IaC",
-                                 VERSION, "actor-IaC-" + VERSION + ".jar"));
+                                 VERSION, "actor-IaC-" + VERSION + "-cli.jar"));
 
         for (Path candidate : candidates) {
             File file = candidate.toFile();
